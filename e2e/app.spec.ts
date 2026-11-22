@@ -231,3 +231,36 @@ test('analytics: breakdown by sport and odds range, and the combination that los
   const legRow = combos.getByRole('table', { name: 'Leg record by market' }).getByRole('row').filter({ hasText: `${tag} Mkt` });
   await expect(legRow.getByRole('cell')).toHaveText([`${tag} Mkt`, '0', '1', '0.0%']);
 });
+
+test('betting tool: dutching splits the stake so every selection returns the same, and remembers it', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('link', { name: 'Betting Tool' }).click();
+  await expect(page).toHaveURL(/\/betting-tool$/);
+  await expect(page.getByTestId('dutch-error')).toHaveText('Enter odds for at least two selections.');
+
+  await page.getByLabel('Total stake').fill('100');
+  await page.getByLabel('Selection 1 name').fill('Home');
+  await page.getByLabel('Selection 1 odds').fill('2');
+  await page.getByLabel('Selection 2 odds').fill('4,00'); // comma decimals; selection 3 left empty is ignored
+  await expect(page.getByTestId('dutch-stake')).toHaveText(['R$ 66,67', 'R$ 33,33']);
+  await expect(page.getByTestId('dutch-row').first()).toContainText('Home');
+  await expect(page.getByTestId('dutch-return-value')).toHaveText('R$ 133,32');
+  await expect(page.getByTestId('dutch-return')).toContainText('up to R$ 133,34');
+  await expect(page.getByTestId('dutch-profit-value')).toHaveText('+R$ 33,32');
+  await expect(page.getByTestId('dutch-profit')).toContainText('up to +R$ 33,34');
+  await expect(page.getByTestId('dutch-odds-value')).toHaveText('1.33');
+
+  await page.getByLabel('Round stakes to').selectOption({ label: 'R$ 1' });
+  await expect(page.getByTestId('dutch-stake')).toHaveText(['R$ 67,00', 'R$ 33,00']);
+
+  await page.getByLabel('Selection 3 odds').fill('1.5');
+  await expect(page.getByRole('alert').filter({ hasText: 'you lose money whichever selection wins' })).toContainText('141.7%');
+  await page.getByLabel('Selection 3 odds').fill('1');
+  await expect(page.getByTestId('dutch-error')).toHaveText('Every odds value must be above 1.00.');
+  await page.getByRole('button', { name: 'Remove selection 3' }).click();
+  await expect(page.getByTestId('dutch-input-row')).toHaveCount(2);
+
+  await page.reload();
+  await expect(page.getByLabel('Selection 1 name')).toHaveValue('Home');
+  await expect(page.getByTestId('dutch-stake')).toHaveText(['R$ 67,00', 'R$ 33,00']);
+});
