@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { buildIndex, lastUsed, stakePresets, suggest, type Field, type SuggestIndex } from '@/lib/autocomplete';
 import type { BetForm } from '@/lib/form';
+import { latestGate } from '@/lib/latest';
 import type { Bet, BetInput } from '@/lib/types';
 
 export type FormRequest = { mode: 'new'; prefill?: Partial<BetForm>; key: number } | { mode: 'edit'; bet: Bet; key: number };
@@ -54,6 +55,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [form, setForm] = useState<FormRequest | null>(null);
   const [toast, setToast] = useState<AppCtx['toast']>(null);
   const betsRef = useRef(bets);
+  const [updates] = useState(latestGate);
   useEffect(() => {
     betsRef.current = bets;
   }, [bets]);
@@ -87,17 +89,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const before = betsRef.current.find((b) => b.id === id);
       // optimistic: show the change at once, put it back if the server refuses
       if (before && !patch.legs) setBets((bs) => bs.map((b) => (b.id === id ? { ...b, ...patch } as Bet : b)));
+      const token = updates.begin(id);
       try {
         const bet = await api<Bet>(`/api/bets/${id}`, { method: 'PATCH', body: JSON.stringify(patch) });
-        setBets((bs) => bs.map((b) => (b.id === id ? bet : b)));
+        // a newer edit of this bet is in flight or done: its response (read after both writes) is the one to show
+        if (updates.isLatest(id, token)) setBets((bs) => bs.map((b) => (b.id === id ? bet : b)));
         return bet;
       } catch (e) {
-        if (before) setBets((bs) => bs.map((b) => (b.id === id ? before : b)));
+        if (before && updates.isLatest(id, token)) setBets((bs) => bs.map((b) => (b.id === id ? before : b)));
         notify((e as Error).message, 'error');
         throw e;
       }
     },
-    [notify],
+    [notify, updates],
   );
 
   const remove = useCallback(

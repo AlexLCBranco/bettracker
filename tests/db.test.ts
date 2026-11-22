@@ -28,6 +28,15 @@ const input = (over: Record<string, unknown> = {}) => {
 };
 
 describe('db', () => {
+  it('two updates made from the same snapshot keep both changes (quick inline edit, then Mark Won)', async () => {
+    const snap = await db.createBet(input({ book: 'Old Book' }));
+    // Both requests read the bet before either wrote: each must only write what it changed.
+    await db.updateBet(snap, input({ book: 'New Book', legs: snap.legs }));
+    const second = await db.updateBet(snap, input({ book: 'Old Book', result: 'won', legs: snap.legs }));
+    expect(await db.getBet(snap.id)).toMatchObject({ book: 'New Book', result: 'won' });
+    expect(second).toMatchObject({ book: 'New Book', result: 'won' }); // the response is the stored bet, not the stale merge
+  });
+
   it('creates, lists, updates and deletes a bet with its legs', async () => {
     const created = await db.createBet(input());
     expect(created.id).toBeTruthy();

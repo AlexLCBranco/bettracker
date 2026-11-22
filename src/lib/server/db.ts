@@ -147,10 +147,48 @@ export async function createBet(input: BetInput): Promise<Bet> {
   return bet;
 }
 
+const COLUMNS = {
+  book: 'book', placedDate: 'placed_date', gameDate: 'game_date', type: 'type', situation: 'situation', stake: 'stake',
+  odds: 'odds', result: 'result', cashout: 'cashout', preAnalysis: 'pre_analysis', postAnalysis: 'post_analysis', betText: 'bet_text',
+} as const satisfies Partial<Record<keyof Bet, string>>;
+
+const sameLegs = (a: BetInput['legs'], b: Leg[]) =>
+  a.length === b.length && a.every((l, i) => (['sport', 'game', 'market', 'selection', 'odds', 'result'] as const).every((k) => l[k] === b[i]![k]));
+
+/**
+ * Writes only what differs from `existing` (the bet as the caller read it), then returns the bet as stored.
+ * Two overlapping edits of different fields (inline edit, then Mark Won a moment later) both read the old bet;
+ * writing every column would let the second put the first one's field back.
+ */
 export async function updateBet(existing: Bet, input: BetInput): Promise<Bet> {
-  const bet: Bet = { ...input, id: existing.id, legs: withLegIds(input.legs, existing.legs), createdAt: existing.createdAt, updatedAt: new Date().toISOString() };
-  await (await db()).batch(writeStatements(bet), 'write');
-  return bet;
+  const sets: string[] = [];
+  const args: (string | number | null)[] = [];
+  for (const [key, col] of Object.entries(COLUMNS) as [keyof typeof COLUMNS, string][]) {
+    if (input[key] !== existing[key]) {
+      sets.push(`${col} = ?`);
+      args.push(input[key]);
+    }
+  }
+  const legsChanged = !sameLegs(input.legs, existing.legs);
+  if (sets.length || legsChanged) {
+    const legs = withLegIds(input.legs, existing.legs);
+    await (await db()).batch(
+      [
+        { sql: `UPDATE bets SET ${[...sets, 'updated_at = ?'].join(', ')} WHERE id = ?`, args: [...args, new Date().toISOString(), existing.id] },
+        ...(legsChanged
+          ? [
+              { sql: 'DELETE FROM legs WHERE bet_id = ?', args: [existing.id] },
+              ...legs.map((l, i) => ({
+                sql: 'INSERT INTO legs (id, bet_id, position, sport, game, market, selection, odds, result) VALUES (?,?,?,?,?,?,?,?,?)',
+                args: [l.id, existing.id, i, l.sport, l.game, l.market, l.selection, l.odds, l.result],
+              })),
+            ]
+          : []),
+      ],
+      'write',
+    );
+  }
+  return (await getBet(existing.id)) ?? { ...input, id: existing.id, legs: withLegIds(input.legs, existing.legs), createdAt: existing.createdAt, updatedAt: existing.updatedAt };
 }
 
 export async function deleteBet(id: string): Promise<boolean> {
