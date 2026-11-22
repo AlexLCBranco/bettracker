@@ -64,5 +64,5 @@ jobs:
         if: env.E2E_BASE_URL != '' && env.E2E_PASSWORD != ''
       - run: npx playwright test
         if: env.E2E_BASE_URL != '' && env.E2E_PASSWORD != ''
-      - run: echo "Live e2e skipped: set the E2E_BASE_URL variable and E2E_PASSWORD secret on the repo."
+      - run: 'echo "Live e2e skipped: set the E2E_BASE_URL variable and E2E_PASSWORD secret on the repo."'
         if: env.E2E_BASE_URL == '' || env.E2E_PASSWORD == ''
