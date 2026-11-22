@@ -3,7 +3,7 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-22
-- Phase 1: bet logging, dashboard, history and settle queue (v0.1.0)
+- Phase 1: bet logging, dashboard, history and settle queue (v0.1.0, v0.1.1)
   Log bets with a one-line quick-add or the full form, see stats and the profit chart on the dashboard, filter and edit every bet inline on History, and settle due bets by keyboard on the Settle page.
   - Data: bets with legs (solo = 1 leg, combination = none or 2+), 7 results, profit per result, BRL, local dates shown as dd/mm/yyyy, stored in Turso.
   - Autocomplete on every text field (book, sport, game, market, selection, bet text, quick-add): recent entries on focus, match-anywhere filtering ranked by recent and frequent use, arrows/Enter/Tab/Esc, sport narrows game, market and selection.
