@@ -187,3 +187,47 @@ test('empty database: stats show "-" and no NaN', async ({ page }) => {
     await expect(page.getByTestId('stat-roi-value')).toHaveText('-');
   }
 });
+
+test('analytics: breakdown by sport and odds range, and the combination that lost by one leg', async ({ page, request, tag }) => {
+  const sport = `${tag} Sport`;
+  const solo = (over: Record<string, unknown>) =>
+    createBet(request, { type: 'solo', stake: 100, odds: 2, betText: tag, legs: [{ sport, game: '', market: '', selection: '', odds: 2, result: 'pending' }], ...over });
+  await solo({ result: 'won' });
+  await solo({ stake: 50, result: 'lost', legs: [{ sport: sport.toUpperCase(), game: '', market: '', selection: '', odds: 2, result: 'lost' }] });
+  await solo({ stake: 20, result: 'pending' });
+  await createBet(request, {
+    type: 'combination',
+    stake: 10,
+    odds: 4,
+    result: 'lost',
+    betText: `${tag} combo`,
+    legs: [
+      { sport: `${tag} Combo`, game: 'A x B', market: 'Moneyline', selection: 'A', odds: 2, result: 'won' },
+      { sport: `${tag} Combo`, game: 'C x D', market: `${tag} Mkt`, selection: 'Over 2.5', odds: 2, result: 'lost' },
+    ],
+  });
+
+  await page.goto('/');
+  await page.getByRole('link', { name: 'Analytics' }).click();
+  await expect(page).toHaveURL(/\/analytics$/);
+  await expect(page.getByRole('tab', { name: 'Sport' })).toHaveAttribute('aria-selected', 'true');
+
+  // same sport typed in two cases is one row; pending counts in bets and wagered, not in profit
+  const row = page.getByTestId('analytics-row').filter({ hasText: sport });
+  await expect(row).toHaveCount(1);
+  await expect(row.getByTestId('cell-bets')).toContainText('3');
+  await expect(row.getByTestId('cell-wagered')).toHaveText('R$ 170,00');
+  await expect(row.getByTestId('cell-profit')).toHaveText('+R$ 50,00');
+  await expect(row.getByTestId('cell-roi')).toHaveText('+33.3%');
+  await expect(row.getByTestId('cell-winrate')).toContainText('50.0% 1W/1L');
+  await expect(page.locator('main')).not.toContainText('NaN');
+
+  await page.getByRole('tab', { name: 'Odds range' }).click();
+  await expect(page.getByRole('table', { name: 'By odds range' })).toBeVisible();
+  await expect(page.getByTestId('analytics-row').filter({ hasText: '2.00–2.99' })).toHaveCount(1);
+
+  const combos = page.getByTestId('combos');
+  await expect(combos.getByRole('list', { name: 'One leg away' }).getByRole('listitem').filter({ hasText: `${tag} combo` })).toContainText(`lost: C x D · ${tag} Mkt · Over 2.5`);
+  const legRow = combos.getByRole('table', { name: 'Leg record by market' }).getByRole('row').filter({ hasText: `${tag} Mkt` });
+  await expect(legRow.getByRole('cell')).toHaveText([`${tag} Mkt`, '0', '1', '0.0%']);
+});

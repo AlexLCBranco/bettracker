@@ -28,6 +28,7 @@ export function isTyping(e: KeyboardEvent): boolean {
 const LINKS = [
   { href: '/', label: 'Dashboard' },
   { href: '/history', label: 'History' },
+  { href: '/analytics', label: 'Analytics' },
   { href: '/settle', label: 'Settle' },
 ];
 

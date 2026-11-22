@@ -5,9 +5,6 @@ Item IDs are BT-1, BT-2, ... (never reused; BT is this repo's prefix, unique acr
 
 ## Ready
 
-### BT-1 — Analytics page
-**In short:** A new Analytics page shows profit, ROI, win rate and bet count broken down by sport, book, market, odds range, type and situation, and for combinations with legs, which leg lost.
-
 ### BT-2 — Betting Tool: dutching calculator
 **In short:** A new Betting Tool page splits a total stake across several selections so every one returns the same amount.
 
