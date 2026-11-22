@@ -3,6 +3,7 @@ import { createClient, type Client, type InStatement, type Row } from '@libsql/c
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { Bet, BetInput, Leg } from '../types';
+import type { ImportBet } from '../transfer';
 
 // Turso (libSQL) in production: TURSO_DATABASE_URL + TURSO_AUTH_TOKEN. Locally and in tests: a SQLite file,
 // data/local.db unless TURSO_DATABASE_URL says otherwise (e.g. file:data/e2e.db).
@@ -189,6 +190,29 @@ export async function updateBet(existing: Bet, input: BetInput): Promise<Bet> {
     );
   }
   return (await getBet(existing.id)) ?? { ...input, id: existing.id, legs: withLegIds(input.legs, existing.legs), createdAt: existing.createdAt, updatedAt: existing.updatedAt };
+}
+
+/**
+ * Adds imported bets with their original ids and timestamps. Bets whose id is already in the database are
+ * skipped, never overwritten. Everything is written in one batch: all of it lands or none of it.
+ */
+export async function importBets(items: ImportBet[]): Promise<{ added: number; skipped: number }> {
+  const c = await db();
+  const existing = new Set((await c.execute('SELECT id FROM bets')).rows.map((r) => s(r.id)));
+  const fresh = items.filter((b) => !existing.has(b.id));
+  if (fresh.length) {
+    const statements = fresh.flatMap((b) =>
+      writeStatements({
+        ...b.input,
+        id: b.id,
+        createdAt: b.createdAt,
+        updatedAt: b.updatedAt,
+        legs: b.input.legs.map((l, i) => ({ ...l, id: b.legIds[i] ?? crypto.randomUUID() })),
+      }),
+    );
+    await c.batch(statements, 'write');
+  }
+  return { added: fresh.length, skipped: items.length - fresh.length };
 }
 
 export async function deleteBet(id: string): Promise<boolean> {

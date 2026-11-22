@@ -5,6 +5,7 @@ import { useApp } from '@/components/AppProvider';
 import { Autocomplete } from '@/components/Autocomplete';
 import { BetTable } from '@/components/BetTable';
 import { DateField } from '@/components/BetFormModal';
+import { DataTransfer } from '@/components/DataTransfer';
 import { parseDateInput } from '@/lib/dates';
 import { filterBets, NO_FILTERS, type Filters } from '@/lib/filters';
 import { formatBRL } from '@/lib/money';
@@ -25,7 +26,10 @@ export default function HistoryPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">History</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold">History</h1>
+        <DataTransfer />
+      </div>
       <div className="card grid grid-cols-2 gap-3 p-4 md:grid-cols-4 xl:grid-cols-9">
         <F label="From (bet date)">
           <DateField value={fromText} onChange={setFromText} aria-label="From date" />

@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-22
+- BT-3 — Export and import (v0.4.0)
+  History has Export JSON (everything, as a backup), Export CSV (one row per bet) and Import JSON, which adds the bets from an export that are not already there and never changes existing ones.
 - BT-2 — Betting Tool: dutching calculator (v0.3.0)
   A new Betting Tool page splits a total stake across selections so each returns the same, shows the profit and combined odds, warns when the odds cannot pay off, and remembers the last calculation.
 - BT-1 — Analytics page (v0.2.0)

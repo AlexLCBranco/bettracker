@@ -5,6 +5,4 @@ Item IDs are BT-1, BT-2, ... (never reused; BT is this repo's prefix, unique acr
 
 ## Ready
 
-### BT-3 — Export and import
-**In short:** Buttons to download all data as JSON and bets as CSV, and to load a JSON export back in.
-- Automated round-trip test: export, import into an empty database, compare.
+_Nothing planned right now._

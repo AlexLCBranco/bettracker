@@ -264,3 +264,46 @@ test('betting tool: dutching splits the stake so every selection returns the sam
   await expect(page.getByLabel('Selection 1 name')).toHaveValue('Home');
   await expect(page.getByTestId('dutch-stake')).toHaveText(['R$ 67,00', 'R$ 33,00']);
 });
+
+test('export JSON and CSV, then import: restores a deleted bet exactly, leaves existing ones, rejects other files', async ({ page, request, tag }) => {
+  const combo = await createBet(request, {
+    type: 'combination',
+    odds: 5,
+    result: 'lost',
+    betText: `${tag} combo, "quoted"`,
+    legs: [
+      { sport: 'Football', game: 'A x B', market: 'Moneyline', selection: 'A', odds: 2, result: 'won' },
+      { sport: 'Football', game: 'C x D', market: 'Goals', selection: 'Over 2.5', odds: 2.5, result: 'lost' },
+    ],
+  });
+  const solo = await createBet(request, { betText: `${tag} solo`, stake: 25 });
+
+  await page.goto('/history');
+  const [json] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Export JSON' }).click()]);
+  expect(json.suggestedFilename()).toMatch(/^bettracker-\d{4}-\d{2}-\d{2}\.json$/);
+  const exported = JSON.parse(readFileSync(await json.path(), 'utf8')) as { format: string; bets: { id: string }[] };
+  expect(exported.format).toBe('bettracker-export');
+  const mine = exported.bets.filter((b) => b.id === combo.id || b.id === solo.id);
+  expect(mine).toEqual(expect.arrayContaining([expect.objectContaining({ id: combo.id, legs: combo.legs })]));
+  expect(mine).toHaveLength(2);
+
+  const [csv] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Export CSV' }).click()]);
+  const csvText = readFileSync(await csv.path(), 'utf8');
+  expect(csvText).toContain(`"${tag} combo, ""quoted"""`);
+  expect(csvText).toContain(`${tag} solo`);
+
+  // delete one, import a file holding just this test's two bets
+  await request.delete(`/api/bets/${combo.id}`);
+  const file = { ...exported, bets: mine };
+  await page.getByLabel('Import file').setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(file)) });
+  await expect(page.getByRole('status')).toHaveText('Imported 1 bet; 1 already here, left as they are');
+  const after = await betsTagged(request, tag);
+  expect(after.find((b) => b.id === combo.id)).toEqual(combo);
+  expect(after.find((b) => b.id === solo.id)).toEqual(solo);
+  await page.getByLabel('Search bets').fill(tag);
+  await expect(page.getByTestId('bet-row')).toHaveCount(2);
+
+  await page.getByLabel('Import file').setInputFiles({ name: 'other.json', mimeType: 'application/json', buffer: Buffer.from('{"hello":1}') });
+  await expect(page.getByRole('status')).toHaveText('Import failed: This is not a BetTracker export file');
+  expect(await betsTagged(request, tag)).toHaveLength(2);
+});

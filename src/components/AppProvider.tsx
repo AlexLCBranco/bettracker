@@ -15,6 +15,8 @@ interface AppCtx {
   create(input: BetInput): Promise<Bet>;
   update(id: string, patch: Partial<BetInput>): Promise<Bet>;
   remove(id: string): Promise<void>;
+  /** Sends a JSON export to the server (adds missing bets only), then reloads all bets. */
+  importExport(json: unknown): Promise<{ added: number; skipped: number }>;
   index: SuggestIndex;
   suggestFor(field: Field, query: string, sport?: string): string[];
   defaults: ReturnType<typeof lastUsed>;
@@ -68,6 +70,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setLoaded(true);
       })
       .catch((e: Error) => setLoadError(e.message));
+  }, []);
+
+  const importExport = useCallback(async (json: unknown) => {
+    const r = await api<{ added: number; skipped: number }>('/api/import', { method: 'POST', body: JSON.stringify(json) });
+    setBets(await api<Bet[]>('/api/bets'));
+    return r;
   }, []);
 
   const notify = useCallback((text: string, kind: 'ok' | 'error' = 'ok') => setToast({ text, kind, id: Date.now() }), []);
@@ -130,6 +138,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     create,
     update,
     remove,
+    importExport,
     index,
     suggestFor,
     defaults,
