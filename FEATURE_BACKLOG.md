@@ -33,6 +33,14 @@ Approach: no new bet type. A dutch is several ordinary solo bets that share a gr
   and neither at exactly 0; it is pending while any of its bets is pending. Update the win-rate rule in CLAUDE.md
   to say so.
 - Analytics "by type" gets a third value, Dutch (derived from `dutchId`, not stored in `type`).
+- American odds in the Betting Tool: each odds box accepts decimal or American, mixed freely in one dutch
+  (e.g. two selections at +220 and one at 1,3). Rule: a leading + or - means American (+220 = 1 + 220/100 =
+  3.20; -150 = 1 + 100/150 = 1.667); no sign means decimal, comma or dot, as today. American needs an absolute
+  value of 100 or more; anything else unreadable marks the row invalid, as bad odds do now. A row typed as
+  American shows its decimal value next to the box. The dutch maths and the logged bets always use the
+  unrounded decimal value (bets store decimal odds only). One shared parser in `src/lib/money.ts`, unit-tested
+  (+220, -150, +100, -100, 1,3, 1.3, "220" stays decimal 220, +50 invalid). Scope: Betting Tool only;
+  quick-add and the full form stay decimal.
 - Tests: unit for the group win/loss rule and counts (incl. net profit exactly 0 and partly pending), the settle
   group actions and undo, export/import round trip with `dutchId`; db integration for the new column on an
   existing database; e2e: calculate, log as bets, see one group row, settle with a number key, check the stats.
