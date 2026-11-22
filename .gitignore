@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local database and test output
+/data/
+/test-results/
+/playwright-report/
+/e2e/.auth/

@@ -1,0 +1,68 @@
+# Tests on every push and pull request: version/list check, lint, types, unit tests (dates in 3 time zones), build,
+# and the e2e suite against a local production build on a fresh SQLite file. On main, once Vercel has deployed the
+# push, the same e2e suite runs against the live site with throwaway bets it deletes itself
+# (needs the repo variable E2E_BASE_URL and the secret E2E_PASSWORD; skipped until they exist).
+name: CI
+
+on:
+  push:
+    branches: [main, 'claude/**']
+  pull_request: {}
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 2 # check-version compares HEAD with its parent
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check-version
+        if: github.event_name == 'push'
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test
+
+  live:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [unit]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      E2E_BASE_URL: ${{ vars.E2E_BASE_URL }}
+      E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        if: env.E2E_BASE_URL != '' && env.E2E_PASSWORD != ''
+      - run: npx playwright install --with-deps chromium
+        if: env.E2E_BASE_URL != '' && env.E2E_PASSWORD != ''
+      - run: npx tsx scripts/wait-live.ts ${{ github.sha }}
+        if: env.E2E_BASE_URL != '' && env.E2E_PASSWORD != ''
+      - run: npx playwright test
+        if: env.E2E_BASE_URL != '' && env.E2E_PASSWORD != ''
+      - run: echo "Live e2e skipped: set the E2E_BASE_URL variable and E2E_PASSWORD secret on the repo."
+        if: env.E2E_BASE_URL == '' || env.E2E_PASSWORD == ''
