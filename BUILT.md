@@ -16,4 +16,5 @@ Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never 
   - Password login (one password), version in the bottom-right corner and at /version.json.
 
 ### Internal
+- CI live tests now run: the wait-for-deploy script no longer uses top-level await, which tsx refused to compile (v0.1.2).
 - Tests: unit (profit maths, win rate/ROI incl. zero bets, dates in 3 time zones, quick-add parsing, autocomplete ranking/filtering, settle actions and undo, form, filters, auth), database integration, Playwright e2e locally and against the live site; CI on GitHub Actions.
