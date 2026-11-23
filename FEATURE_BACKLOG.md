@@ -5,10 +5,8 @@ Item IDs are BT-1, BT-2, ... (never reused; BT is this repo's prefix, unique acr
 
 ## Ready
 
-## Waiting on the owner (do not build yet)
-
-BT-30 to BT-32 are one feature, the "PP system", written up from a conversation on 2026-11-23. They move to
-"Ready" once the owner answers the two questions under BT-30. Build order: BT-30, BT-31, BT-32.
+BT-30 to BT-32 are one feature, the "PP system", written up from a conversation on 2026-11-23.
+Build order: BT-30, BT-31, BT-32.
 
 Words the owner uses (keep them in the UI):
 - **PP**: one combination ticket aiming at total odds of about 20, placed with bonus money. (What the letters stand
@@ -25,12 +23,11 @@ Words the owner uses (keep them in the UI):
 ### BT-30 — PP batches: leg pool, tickets, leg-first settling, archive
 **In short:** A new "PP" page where a batch is a pool of legs plus the tickets made from them, you settle each leg once and every ticket updates itself, and every batch stays saved to reopen later.
 
-**Owner to answer before this is Ready:**
-1. Bonus money: when a PP placed with bonus loses, does it count as R$ 0 lost or as the stake lost? When it wins,
-   does the payout include the stake or only the winnings? (Decides the profit maths; `src/lib/money.ts` only knows
-   Real and Hypothetical today.)
-2. Proposed default: PPs live only on the PP page and stay OUT of the Bets page and of the Bets / Analytics totals
-   (100 tickets per batch would bury everything else). Confirm, or say how they should show there.
+Decided by the owner (2026-11-23):
+- PPs live only on the PP page. They never show on the Bets page and never count in the Bets or Analytics totals
+  (bet count, wagered, profit, ROI, win rate, pending). The PP page has its own totals.
+- PPs are mainly placed with bonus money. Until BT-33 (bonus wallet) is built, a batch's money type is Real or
+  Hypothetical, as for bets (BT-14); BT-33 adds Bonus.
 
 Data (new tables, same `CREATE TABLE IF NOT EXISTS` pattern as `src/lib/server/db.ts`; loaded into the client like bets):
 - Batch: id, name (default "Batch dd/mm"), placed date, book, stake per ticket, target odds (default 20), money
@@ -116,3 +113,31 @@ Needs BT-30.
 - The owner has not said which other stats he wants: build these, and expect more to be added after he uses it.
 
 Tests: unit tests for every figure, including empty and all-void batches.
+
+## Waiting on the owner (do not build yet)
+
+### BT-33 — Bonus money: a wallet per book and a third money type
+**In short:** Log a bonus once per book, see at all times how much bonus you have on hand, and have bets and PP batches placed with bonus spend it and pay their winnings into real money.
+
+Proposed by Claude on 2026-11-23 after the owner asked for "a clever way of inserting bonus money" and to see
+"the full value I have on me". He has NOT confirmed this design yet. Open points:
+1. On a won bonus bet, is the payout winnings only (stake 10 @ 20 pays 190) or stake included (pays 200)?
+   Written below as a setting on each grant because it may differ by book.
+2. Does "the full value I have on me" mean bonus on hand (as written below) or his whole bankroll, real included?
+
+- Money gets a third value, Bonus, next to Real (R$) and Hypothetical (H$) (BT-14), with its own colour and symbol.
+- Grant: book, amount, date received, optional expiry date, "stake returned on a win: yes / no" (remembered per
+  book), optional note. Added from one small form; the book field autocompletes.
+- Balance per book = grants - stakes of bonus bets and bonus PP tickets placed at that book. The top bar shows the
+  total bonus on hand; hover or click lists each book with its balance and nearest expiry. An expired grant's
+  unspent part drops out of the balance and is listed as "expired unused".
+- A bet or PP batch marked Bonus spends from its book's balance; the form shows the balance and what will be left,
+  and warns (does not block) when the stake is more than the balance.
+- Maths (`src/lib/money.ts`): a lost bonus bet is R$ 0 profit and counts R$ 0 in real "wagered"; a won bonus bet
+  adds its payout (per the grant's stake-returned setting) to REAL profit. Real ROI therefore ignores bonus
+  stakes. A separate figure, "bonus converted" = real money won from bonus / bonus spent, shows per book, per PP
+  batch and overall.
+- The Real / Hypothetical / Both switch gains Bonus. Export / Import (BT-3) include grants.
+
+Tests: unit tests for balance, expiry and both payout settings; db integration; Playwright for grant → bonus bet
+→ balance drops → win pays into real profit.
