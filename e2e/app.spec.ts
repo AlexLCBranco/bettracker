@@ -228,7 +228,7 @@ test('analytics: breakdown by sport and odds range, and the combination that los
   await expect(page.getByTestId('analytics-row').filter({ hasText: '2.00–2.99' })).toHaveCount(1);
 
   const combos = page.getByTestId('combos');
-  await expect(combos.getByRole('list', { name: 'One leg away' }).getByRole('listitem').filter({ hasText: `${tag} combo` })).toContainText(`lost: C x D · ${tag} Mkt · Over 2.5`);
+  await expect(combos.getByRole('list', { name: 'One leg away' }).getByRole('listitem').filter({ hasText: `${tag} combo` })).toContainText(`lost: C vs D · ${tag} Mkt · Over 2.5`);
   const legRow = combos.getByRole('table', { name: 'Leg record by market' }).getByRole('row').filter({ hasText: `${tag} Mkt` });
   await expect(legRow.getByRole('cell')).toHaveText([`${tag} Mkt`, '0', '1', '0.0%']);
 });
@@ -545,14 +545,16 @@ test('dutch hit count: the owner example settled three ways shows 0/2 · 1 miss,
   await page.getByLabel('Search bets').fill(tag);
   const row = (n: number) => page.getByTestId('dutch-row').filter({ hasText: `${tag} Book${n}` });
   await expect(page.getByTestId('dutch-row')).toHaveCount(3);
-  await expect(row(1).getByTestId('hit-count')).toHaveText('0/2');
-  await expect(row(1).getByTestId('hit-count')).toHaveClass(/red/);
-  await expect(row(1).getByTestId('hit-misses')).toHaveText('1 miss');
-  await expect(row(1).getByTestId('hit-badge')).toHaveAttribute('title', '0/2 hit · Missed: Celtics W (shared)');
-  await expect(row(2).getByTestId('hit-count')).toHaveText('0/2');
-  await expect(row(2).getByTestId('hit-misses')).toHaveText('2 misses');
+  // BT-19: a lost dutch where nothing hit says it once ("Lost"); what missed is in its tooltip
+  await expect(row(1).getByTestId('result')).toHaveText('Lost');
+  await expect(row(1).getByTestId('hit-badge')).toHaveCount(0);
+  await expect(row(1).getByTestId('result')).toHaveAttribute('title', /^0\/2 hit · Missed: Celtics W \(shared\)/);
+  await expect(row(2).getByTestId('hit-badge')).toHaveCount(0);
+  await expect(row(2).getByTestId('result')).toHaveAttribute('title', /Missed: McCain 25 pts, Mitchell 30 pts/);
+  // a dutch that won with one split hit: green, not the amber warning look
   await expect(row(3).getByTestId('hit-count')).toHaveText('1/2');
-  await expect(row(3).getByTestId('hit-count')).toHaveClass(/amber/);
+  await expect(row(3).getByTestId('hit-count')).toHaveClass(/emerald/);
+  await expect(row(3).getByTestId('hit-count')).not.toHaveClass(/amber/);
   await expect(row(3).getByTestId('hit-misses')).toHaveText('1 miss');
 
   // expanded: a mark per split, the lost leg in red
@@ -662,12 +664,12 @@ test('log dutch: Game(s) and Market(s) as chips, picked per leg (owner example),
   const logged = (await betsTagged(request, tag)).sort((a, b) => a.betText.localeCompare(b.betText));
   expect(logged.map((b) => b.legs.map((l) => [l.selection, l.game, l.market]))).toEqual([
     [
-      ['McCain 25 pts', `${tag} CLE x BOS`, 'PTS'],
-      ['Celtics W', `${tag} CLE x BOS`, 'ML'],
+      ['McCain 25 pts', `${tag} CLE vs BOS`, 'pts'],
+      ['Celtics W', `${tag} CLE vs BOS`, 'ML'],
     ],
     [
-      ['Mitchell 30 pts', `${tag} NYK x MIA`, 'PTS'],
-      ['Celtics W', `${tag} CLE x BOS`, 'ML'],
+      ['Mitchell 30 pts', `${tag} NYK vs MIA`, 'pts'],
+      ['Celtics W', `${tag} CLE vs BOS`, 'ML'],
     ],
   ]);
 
@@ -675,7 +677,7 @@ test('log dutch: Game(s) and Market(s) as chips, picked per leg (owner example),
   await page.getByLabel('Search bets').fill(tag);
   const group = page.getByTestId('dutch-row');
   await expect(group.getByTestId('several-games')).toHaveText('2 games');
-  await expect(group.getByTestId('several-games')).toHaveAttribute('title', `${tag} CLE x BOS, ${tag} NYK x MIA`);
+  await expect(group.getByTestId('several-games')).toHaveAttribute('title', `${tag} CLE vs BOS, ${tag} NYK vs MIA`);
   await expect(group.getByTestId('several-markets')).toHaveText('2 markets');
   await group.getByRole('button', { name: 'Show bets' }).click();
   // each bet: one game, two markets
@@ -719,8 +721,9 @@ test('dutch row: one-click settle buttons in History (Pick W… one split, Undo,
 
   await row.getByRole('button', { name: 'Dutch: shared leg lost' }).click();
   await expect.poll(state).toEqual({ 'McCain 25 pts + Celtics W': 'lost pending lost', 'Mitchell 30 pts + Celtics W': 'lost pending lost' });
-  await expect(badge).toHaveText('0/2');
-  await expect(row.getByTestId('hit-misses')).toHaveText('1 miss');
+  // BT-19: nothing hit on a lost dutch: the Lost badge alone, the miss in its tooltip
+  await expect(badge).toHaveCount(0);
+  await expect(row.getByTestId('result')).toHaveAttribute('title', /Missed: Celtics W \(shared\)/);
 
   // Z on the page undoes too (not while typing in the search box)
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
@@ -870,10 +873,10 @@ test('BT-13: wins green ✓, losses red ✕, half amber ½, pending grey; a lost
   await page.locator(`[data-bet-id="${combo.id}"]`).getByRole('button', { name: 'Show legs' }).click();
   await expect(page.getByTestId('leg-row').filter({ hasText: 'Celtics' })).toHaveAttribute('data-tone', 'loss');
   await expect(page.getByTestId('leg-row').filter({ hasText: 'Lakers' })).toHaveAttribute('data-tone', 'win');
-  // dutch: 10 @3 won, 10 @3 lost = +10 net: a green row, the profit big
+  // dutch: 10 @3 won, 10 @3 lost = +10 net: a green row; its profit the same size as any row's (BT-18)
   const dutch = page.locator(`[data-dutch-id="${d}"]`);
   await expect(dutch).toHaveAttribute('data-tone', 'win');
-  await expect(dutch.getByTestId('profit').locator('span')).toHaveClass(/font-bold/);
+  await expect(dutch.getByTestId('profit').locator('span')).toHaveClass(/font-semibold/);
   await expect(dutch.getByTestId('profit')).toHaveText('+R$ 10,00');
   await dutch.getByRole('button', { name: 'Show bets' }).click();
   await expect(page.getByTestId('split-mark')).toHaveText(['✓ hit', '✕ miss']);
@@ -918,8 +921,8 @@ test('BT-12: edit a logged dutch: change odds and stake, add a split, remove a s
         .sort();
     })
     .toEqual([
-      ['home', 'Home', 2.5, 60, 'won', `${tag} A x B`],
-      ['new', 'Away', 3.5, 20, 'pending', `${tag} A x B`],
+      ['home', 'Home', 2.5, 60, 'won', `${tag} A vs B`],
+      ['new', 'Away', 3.5, 20, 'pending', `${tag} A vs B`],
     ]);
   // History: still one dutch row, new total, Home still won
   await expect(row.getByTestId('dutch-stake')).toHaveText('R$ 80,00');
@@ -993,4 +996,80 @@ test('BT-14: hypothetical money (H$): quick-add and full form, never in Real tot
   await expect(page.getByTestId('cell-wagered').first()).toContainText('H$');
   await page.getByRole('radio', { name: 'Real R$' }).click();
   await expect(page.getByTestId('cell-wagered').first()).not.toContainText('H$');
+});
+
+test('BT-17–22: combo rows with legs and counts, same styling on every row, tidy text, no repeated date, team twice warned', async ({ page, request, tag }) => {
+  const d = tag.replace(/[^A-Za-z0-9_-]/g, '');
+  // a settled combination with legs in two games (one written "@"), stat units in capitals, unrounded odds
+  const combo = await createBet(request, {
+    betText: `${tag} combo`,
+    type: 'combination',
+    odds: 4,
+    result: 'lost',
+    money: 'hypothetical',
+    legs: [
+      { sport: 'NBA', game: `${tag}Celtics @ ${tag}Warriors`, selection: 'McCain 25 PTS', odds: 2, result: 'won' },
+      { sport: 'NBA', game: `${tag}Lakers vs ${tag}Nets`, selection: 'Lakers W', odds: 2, result: 'lost' },
+    ],
+  });
+  const solo = await createBet(request, { betText: `${tag} solo mccain 20 pts`, stake: 100, odds: 1.9924, result: 'won', money: 'hypothetical', placedDate: '2000-01-01', gameDate: '2000-01-02' });
+  await createBet(request, { betText: '', dutchId: d, odds: 3, result: 'won', money: 'hypothetical', legs: [{ game: `${tag} g`, selection: 'Home' }] });
+  await createBet(request, { betText: '', dutchId: d, odds: 3, result: 'lost', money: 'hypothetical', legs: [{ game: `${tag} g`, selection: 'Away' }] });
+  // BT-17: an API combination with one leg is saved as a solo
+  const one = await createBet(request, { betText: `${tag} one`, type: 'combination', legs: [{ selection: 'Only leg' }] });
+  expect(one.type).toBe('solo');
+
+  await page.goto('/history');
+  await page.getByLabel('Search bets').fill(tag);
+  const c = page.locator(`[data-bet-id="${combo.id}"]`);
+  const s = page.locator(`[data-bet-id="${solo.id}"]`);
+  const dutch = page.locator(`[data-dutch-id="${d}"]`);
+
+  // BT-17: Combo · 2, the legs' games and league, ▸, a 1/2 leg count; one-leg bet is a Solo
+  await expect(c.getByRole('button', { name: 'Edit Type' })).toHaveText('Combo · 2');
+  await expect(c.getByTestId('combo-games')).toHaveText(`${tag}Celtics vs ${tag}Warriors · ${tag}Lakers vs ${tag}Nets`);
+  await expect(c).toContainText('NBA');
+  await expect(c.getByTestId('leg-hit-count')).toHaveText('1/2');
+  await expect(page.locator(`[data-bet-id="${one.id}"]`).getByRole('button', { name: 'Edit Type' })).toHaveText('Solo');
+
+  // BT-18: same profit weight, same stake colour (H$ violet), same won-row tint; W/L/V only on unsettled rows
+  for (const row of [c, s, dutch]) await expect(row.getByTestId('profit').locator('span')).toHaveClass(/font-semibold/);
+  await expect(c.getByRole('button', { name: 'Edit Stake' })).toHaveCSS('color', await dutch.getByTestId('dutch-stake').locator('span').evaluate((e) => getComputedStyle(e).color));
+  const bg = (l: typeof c) => l.evaluate((e) => getComputedStyle(e).backgroundColor);
+  expect(await bg(s)).toBe(await bg(dutch));
+  for (const row of [c, s]) await expect(row.getByRole('button', { name: 'Mark Won' })).toHaveCount(0);
+  await expect(page.locator(`[data-bet-id="${one.id}"]`).getByRole('button', { name: 'Mark Won' })).toBeVisible();
+
+  // BT-19: no "Dutch" chip in the Bet column; won with 1/2 hit is green
+  await expect(dutch.locator('td').nth(3)).toHaveText('Home / Away');
+  await expect(dutch.getByTestId('hit-count')).toHaveClass(/emerald/);
+
+  // BT-20: units and games tidy, proper names, odds as paid, full text on hover
+  await c.getByRole('button', { name: 'Show legs' }).click();
+  await expect(page.getByTestId('leg-row').first()).toContainText('McCain 25 pts');
+  await expect(s.getByRole('button', { name: 'Edit Bet', exact: true })).toHaveText(`${tag} solo McCain 20 pts`);
+  await expect(s.getByRole('button', { name: 'Edit Odds' })).toHaveText('1.9924');
+  await expect(s.getByTestId('profit')).toHaveText('+H$ 99,24');
+  await expect(c.getByTestId('combo-games')).toHaveAttribute('title', new RegExp(`${tag}Lakers vs ${tag}Nets`));
+
+  // BT-21: game date only when it differs from the bet date
+  await expect(s.getByTestId('game-date')).toHaveText('game 02/01');
+  await expect(c.getByTestId('game-date')).toHaveCount(0);
+  await expect(dutch.getByTestId('game-date')).toHaveCount(0);
+
+  // BT-22: a new bet putting Celtics in a second game on the same date warns (saving still works)
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await page.keyboard.press('n');
+  const dialog = page.getByRole('dialog', { name: 'New bet' });
+  await dialog.getByLabel('Type').selectOption('solo');
+  await dialog.getByLabel('Game date').fill('01/01/2000');
+  await dialog.getByLabel('Game', { exact: true }).fill(`${tag}Celtics x ${tag}Knicks`);
+  await expect(dialog.getByTestId('team-clash')).toContainText(`${tag}Celtics play twice on 01/01/2000`);
+  await dialog.getByLabel('Game', { exact: true }).fill(`${tag}Heat x ${tag}Knicks`);
+  await expect(dialog.getByTestId('team-clash')).toHaveCount(0);
+  // BT-17: one leg in a combination is flagged in the form
+  await dialog.getByLabel('Type').selectOption('combination');
+  await dialog.getByRole('button', { name: '+ Add leg' }).click();
+  await expect(dialog.getByTestId('one-leg')).toBeVisible();
+  await page.keyboard.press('Escape');
 });

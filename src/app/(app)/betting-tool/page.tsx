@@ -313,7 +313,7 @@ function Tool() {
                   <span className={ok.minProfit > 0 ? 'text-emerald-400' : ok.minProfit < 0 ? 'text-red-400' : ''}>{formatBRL(ok.minProfit, true)}</span>
                 </Tile>
                 <Tile label="Combined odds" testId="dutch-odds" sub={`book ${formatPercent(ok.book)}`}>
-                  {formatOdds(ok.combinedOdds)}
+                  {formatOdds(ok.combinedOdds, 2)}
                 </Tile>
               </div>
               {ok.book >= 1 && (

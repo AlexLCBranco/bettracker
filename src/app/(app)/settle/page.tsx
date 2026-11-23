@@ -333,7 +333,7 @@ function DutchLine(props: { it: Extract<QueueItem, { kind: 'dutch' }>; btn: stri
         <span className="truncate text-zinc-400">{[...new Set(it.bets.map((b) => b.book).filter(Boolean))].join(', ')}</span>
         <span className="text-right tabular-nums">{formatMoney(s.stake, it.bets[0]!.money)}</span>
         <span className="text-right tabular-nums" title="Combined odds">
-          @{formatOdds(s.combinedOdds)}
+          @{formatOdds(s.combinedOdds, 2)}
         </span>
         <span className="text-right">{settled.length > 0 && <HitBadge bets={it.bets} />}</span>
         <span className="flex gap-1">

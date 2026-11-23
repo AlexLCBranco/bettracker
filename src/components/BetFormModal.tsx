@@ -5,6 +5,7 @@ import { formatDate, parseDateInput } from '@/lib/dates';
 import { emptyLeg, formFromBet, formToBet, newForm, nextForm, type BetForm, type LegForm } from '@/lib/form';
 import { formatMoney, MONEY_SYMBOL, oddsFromText, parseNumber, potentialReturn } from '@/lib/money';
 import { BET_TYPES, RESULT_LABEL, RESULTS, SITUATIONS, type Bet } from '@/lib/types';
+import { clashText, teamClashes } from '@/lib/clash';
 import { useApp } from './AppProvider';
 import { Autocomplete } from './Autocomplete';
 import { MoneySelect } from './Money';
@@ -18,7 +19,7 @@ export function BetFormModal() {
 }
 
 function FormBody() {
-  const { form: req, defaults, presets, suggestFor, create, update, closeForm, notify } = useApp();
+  const { form: req, bets, defaults, presets, suggestFor, create, update, closeForm, notify } = useApp();
   const editing: Bet | null = req?.mode === 'edit' ? req.bet : null;
   const [f, setF] = useState<BetForm>(() => (editing ? formFromBet(editing) : { ...newForm(defaults), ...(req?.mode === 'new' ? req.prefill : {}) }));
   const [error, setError] = useState('');
@@ -71,6 +72,9 @@ function FormBody() {
   const stake = parseNumber(f.stake);
   const odds = oddsFromText(f.odds);
   const potential = stake && odds ? potentialReturn(stake, odds) : 0;
+  // BT-22: a team in two games on the game date (this bet's games and every other bet's)
+  const gameDateISO = (f.gameDate.trim() ? parseDateInput(f.gameDate) : null) ?? (f.placedDate.trim() ? parseDateInput(f.placedDate) : null);
+  const clashes = gameDateISO ? teamClashes(f.type === 'solo' ? [f.game] : f.legs.map((l) => l.game), gameDateISO, bets.filter((b) => b.id !== editing?.id)) : [];
   const lastSport = f.type === 'solo' ? f.sport : (f.legs.at(-1)?.sport ?? defaults.sport);
 
   return (
@@ -220,6 +224,11 @@ function FormBody() {
               </div>
             ))}
             {f.legs.length === 0 && <p className="text-xs text-zinc-500">No legs: total odds only. Add 2 or more legs to track each one.</p>}
+            {f.legs.length === 1 && (
+              <p className="text-xs text-amber-300" data-testid="one-leg">
+                One leg is a Solo bet: add another leg, or it is saved as a Solo.
+              </p>
+            )}
           </div>
         )}
 
@@ -235,6 +244,12 @@ function FormBody() {
             <textarea className="field min-h-20" value={f.postAnalysis} onChange={(e) => set('postAnalysis', e.target.value)} aria-label="Post-bet analysis" />
           </L>
         </div>
+
+        {clashes.map((c) => (
+          <p key={c.team} className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-300" data-testid="team-clash">
+            ⚠ {clashText(c)}
+          </p>
+        ))}
 
         {error && (
           <p role="alert" className="text-sm text-red-400">

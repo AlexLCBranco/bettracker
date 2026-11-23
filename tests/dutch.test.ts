@@ -102,12 +102,12 @@ describe('log as bets', () => {
   });
 
   it('one pending solo bet per selection, all with the same dutch id, unrounded odds kept', () => {
-    const d = { ...newDutchDraft([{ ...rows[0]!, odds: 1 + 100 / 150 }, rows[1]!], { sport: 'Football', situation: 'live' }, '2026-11-22'), games: ['A x B'], markets: ['1X2'] };
+    const d = { ...newDutchDraft([{ ...rows[0]!, odds: 1 + 100 / 150 }, rows[1]!], { sport: 'Football', situation: 'live' }, '2026-11-22'), games: ['A vs B'], markets: ['1X2'] };
     const r = draftToBets(d, 'Betano', 'dutch-1', '2026-11-22');
     if (!r.ok) throw new Error(r.error);
     expect(r.value).toHaveLength(2);
     expect(r.value[0]).toMatchObject({ type: 'solo', result: 'pending', book: 'Betano', stake: 40, odds: 1 + 100 / 150, dutchId: 'dutch-1', situation: 'live', placedDate: '2026-11-22', gameDate: '2026-11-22' });
-    expect(r.value[0]!.legs).toEqual([{ sport: 'Football', game: 'A x B', market: '1X2', selection: 'Home', odds: 1 + 100 / 150, result: 'pending' }]);
+    expect(r.value[0]!.legs).toEqual([{ sport: 'Football', game: 'A vs B', market: '1X2', selection: 'Home', odds: 1 + 100 / 150, result: 'pending' }]);
     expect(r.value[1]!.dutchId).toBe('dutch-1');
   });
 

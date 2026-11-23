@@ -47,3 +47,12 @@ export function splitQuickAddText(line: string): { prefix: string; text: string 
   while (i < tokens.length && new RegExp(String.raw`^(?:[RH]\$)?${NUM}\s*$|^@\s*(?:${ODDS})?\s*$`, 'i').test(tokens[i]!)) i++;
   return { prefix: tokens.slice(0, i).join(''), text: tokens.slice(i).join('') };
 }
+
+/**
+ * BT-17: a quick-add line is a solo bet, unless its text joins two or more selections with " + " ("lakers ml +
+ * celtics -5"): then a combination with those legs. Never a combination without legs.
+ */
+export function quickAddLegs(betText: string): string[] | null {
+  const parts = betText.split(/\s+\+\s+/).map((s) => s.trim()).filter(Boolean);
+  return parts.length >= 2 ? parts : null;
+}

@@ -116,3 +116,18 @@ export function dutchHitReport(bets: Bet[]): DutchHitReport {
   }
   return r;
 }
+
+/**
+ * A combination's legs as a hit count (BT-17), like a dutch's splits: "2/3" legs won, the lost legs as misses.
+ * Null when it has fewer than 2 legs.
+ */
+export function comboHits(b: Bet): DutchHits | null {
+  if (b.type !== 'combination' || b.legs.length < 2) return null;
+  const won = (r: Result) => r === 'won' || r === 'half-won';
+  const hits = b.legs.filter((l) => won(l.result)).length;
+  const splits = b.legs.filter((l) => won(l.result) || legLost(l.result)).length;
+  const pending = b.legs.filter((l) => l.result === 'pending').length;
+  const misses = b.legs.filter((l) => legLost(l.result)).map((l) => ({ name: l.selection.trim() || l.game || 'leg', shared: false, legNotSet: false }));
+  const tone: HitTone = pending ? 'pending' : splits === 0 ? 'void' : hits === splits ? 'all' : hits > 0 ? 'some' : 'none';
+  return { hits, splits, pending, misses, tone };
+}

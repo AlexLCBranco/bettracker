@@ -10,8 +10,9 @@ import type { Field } from '@/lib/autocomplete';
 import { useApp } from './AppProvider';
 import { Autocomplete } from './Autocomplete';
 import { OddsInput } from './OddsInput';
-import { HitBadge, SplitMarkTag } from './HitBadge';
-import { splitMark } from '@/lib/hits';
+import { ComboHitBadge, HitBadge, lostTitle, SplitMarkTag } from './HitBadge';
+import { comboHits, dutchHits, splitMark } from '@/lib/hits';
+import { tidyGame, tidyNames, tidyText, type NameCasing } from '@/lib/tidy';
 import { settleDutchRow, undoLast, type DutchRowAction, type SettleChange, type SettleState } from '@/lib/settle';
 import { DutchSettleButtons } from './DutchSettle';
 import { isTyping } from './Shell';
@@ -24,10 +25,17 @@ const QUICK_RESULTS: { r: Result; key: string; cls: string }[] = [
   { r: 'void', key: 'V', cls: 'hover:bg-zinc-600/40 text-zinc-300' },
 ];
 
-export function ProfitText({ value, pending, big, money = 'real' }: { value: number; pending?: boolean; big?: boolean; money?: MoneyScope }) {
+/** BT-18: one size and weight on every row (bet, combination, dutch). */
+export function ProfitText({ value, pending, money = 'real' }: { value: number; pending?: boolean; money?: MoneyScope }) {
   if (pending) return <span className="text-zinc-500">-</span>;
-  return <span className={`${value > 0 ? 'text-emerald-400' : value < 0 ? 'text-red-400' : 'text-zinc-400'} ${big ? 'text-base font-bold' : ''}`}>{formatMoney(value, money, true)}</span>;
+  return <span className={`font-semibold ${value > 0 ? 'text-emerald-400' : value < 0 ? 'text-red-400' : 'text-zinc-400'}`}>{formatMoney(value, money, true)}</span>;
 }
+
+/** BT-18: every row's background by its tone only (won rows all alike, pending rows plain), nested or not. */
+const rowClass = (tone: Tone, nested?: boolean) => `border-b border-zinc-900 hover:bg-zinc-900/60 ${TONE_TINT[tone] || (nested ? 'bg-zinc-950' : '')}`;
+
+/** BT-21: the game date under the bet date only when it is another day. */
+const gameDateDiffers = (placed: string, game: string) => placed !== game;
 
 /** ✓ / ✕ / ½ / – / … next to a result, so it reads without colour (BT-13). */
 function Sign({ tone, className = '' }: { tone: Tone; className?: string }) {
@@ -47,14 +55,14 @@ function legSports(b: Bet) {
  * The Game cell of a combination or a dutch: the one game its legs share, or "2 games" when they differ, followed by
  * "· 2 markets" when the legs' markets differ (there is no Market column).
  */
-function gamesAndMarkets(legs: Bet['legs']) {
-  const distinctOf = (k: 'game' | 'market') => [...new Set(legs.map((l) => l[k]).filter(Boolean))];
+function gamesAndMarkets(legs: Bet['legs'], names: NameCasing, listGames = false) {
+  const distinctOf = (k: 'game' | 'market') => [...new Set(legs.map((l) => (k === 'game' ? tidyNames(tidyGame(l.game), names) : l[k])).filter(Boolean))];
   const games = distinctOf('game');
   const markets = distinctOf('market');
   if (games.length <= 1 && markets.length <= 1) return games[0] ?? '';
   return (
     <>
-      {games.length > 1 ? <Several vals={games} noun="games" /> : games[0]}
+      {games.length > 1 ? listGames ? games.join(' · ') : <Several vals={games} noun="games" /> : games[0]}
       {markets.length > 1 && (
         <>
           {games.length ? <span className="text-zinc-600"> · </span> : null}
@@ -72,6 +80,14 @@ function Several({ vals, noun }: { vals: string[]; noun: string }) {
       {vals.length} {noun}
     </span>
   );
+}
+
+/** BT-20: the Game cell's full text on hover (every game, then every market). */
+function gameTitle(legs: Bet['legs'], names: NameCasing) {
+  const distinct = (xs: string[]) => [...new Set(xs.filter(Boolean))];
+  const games = distinct(legs.map((l) => tidyNames(tidyGame(l.game), names)));
+  const markets = distinct(legs.map((l) => l.market));
+  return [games.join(' · '), markets.join(', ')].filter(Boolean).join(' — ') || undefined;
 }
 
 
@@ -209,17 +225,18 @@ function useDutchRowSettle() {
 }
 
 function DutchRow({ bets, dutchId, expanded, toggle, settle }: { bets: Bet[]; dutchId: string; expanded: boolean; toggle(): void; settle: RowSettle }) {
-  const { removeDutch, openDutch } = useApp();
+  const { removeDutch, openDutch, names: nameCasing } = useApp();
   const s = dutchSummary(bets);
   const tone = groupTone(s.outcome);
   const money = bets[0]!.money;
-  const names = bets.map(betLabel).join(' / ');
+  const names = bets.map((b) => tidyText(betLabel(b), nameCasing)).join(' / ');
   const books = [...new Set(bets.map((b) => b.book).filter(Boolean))].join(', ');
   const placed = bets.map((b) => b.placedDate).sort()[0]!;
   const game = bets.map((b) => b.gameDate).sort()[0]!;
+  const legs = bets.flatMap((b) => b.legs);
   const cell = 'px-1.5 py-1.5 text-zinc-200';
   return (
-    <tr className={`border-b border-zinc-900 hover:bg-zinc-900/60 ${TONE_TINT[tone] || 'bg-indigo-500/5'}`} data-testid="dutch-row" data-dutch-id={dutchId} data-tone={tone} data-money={money}>
+    <tr className={rowClass(tone)} data-testid="dutch-row" data-dutch-id={dutchId} data-tone={tone} data-money={money}>
       <td className={`px-1 ${TONE_EDGE[tone]}`}>
         <button className="text-zinc-400 hover:text-white" aria-label={expanded ? 'Hide bets' : 'Show bets'} aria-expanded={expanded} onClick={toggle}>
           {expanded ? '▾' : '▸'}
@@ -227,16 +244,22 @@ function DutchRow({ bets, dutchId, expanded, toggle, settle }: { bets: Bet[]; du
       </td>
       <td className={`${cell} whitespace-nowrap`}>
         {formatDate(placed)}
-        <div className={SUB}>game {shortDate(game)}</div>
+        {gameDateDiffers(placed, game) && (
+          <div className={SUB} data-testid="game-date">
+            game {shortDate(game)}
+          </div>
+        )}
       </td>
       <td className={cell}>
-        <div className="max-w-36 truncate">{gamesAndMarkets(bets.flatMap((b) => b.legs))}</div>
+        <div className="max-w-36 truncate" title={gameTitle(legs, nameCasing)}>
+          {gamesAndMarkets(legs, nameCasing)}
+        </div>
         <div className={SUB}>{shared(bets, (b) => b.legs[0]?.sport ?? '')}</div>
       </td>
       <td className={cell}>
-        <div className="flex max-w-44 items-center" title={names}>
-          <span className="mr-1.5 shrink-0 rounded bg-indigo-500/20 px-1.5 py-0.5 text-xs font-semibold text-indigo-300">Dutch</span>
-          <span className="truncate">{names}</span>
+        {/* BT-19: no "Dutch" chip, the Type column says it */}
+        <div className="max-w-44 truncate" title={names}>
+          {names}
         </div>
       </td>
       <td className={cell}>
@@ -248,24 +271,24 @@ function DutchRow({ bets, dutchId, expanded, toggle, settle }: { bets: Bet[]; du
         <span className={money === 'hypothetical' ? HYPO : ''}>{formatMoney(s.stake, money)}</span>
       </td>
       <td className={`${cell} whitespace-nowrap text-right tabular-nums`} data-testid="dutch-odds" title="Combined odds: 1 / Σ(1/odds)">
-        {formatOdds(s.combinedOdds)}
+        {formatOdds(s.combinedOdds, 2)}
       </td>
       <td className={`${cell} whitespace-nowrap`}>
         Dutch · {bets.length}
         <div className={SUB}>{capitalize(shared(bets, (b) => b.situation))}</div>
       </td>
       <td className="whitespace-nowrap px-1.5 py-1.5 text-right tabular-nums" data-testid="profit">
-        <ProfitText value={s.profit} pending={s.outcome === 'pending'} big money={money} />
+        <ProfitText value={s.profit} pending={s.outcome === 'pending'} money={money} />
       </td>
       <td className="whitespace-nowrap px-1.5 py-1.5">
         <span className="inline-flex flex-col items-start gap-0.5">
           <span className="inline-flex items-center gap-1">
             <Sign tone={tone} />
-            <span className={`rounded px-2 py-0.5 text-xs font-medium ${TONE_BADGE[tone]}`} data-testid="result">
+            <span className={`rounded px-2 py-0.5 text-xs font-medium ${TONE_BADGE[tone]}`} title={lostTitle(dutchHits(bets))} data-testid="result">
               {OUTCOME_LABEL[s.outcome]}
             </span>
           </span>
-          <HitBadge bets={bets} />
+          <HitBadge bets={bets} row />
         </span>
       </td>
       <td className={`${STICKY} whitespace-nowrap px-1.5 py-1.5 text-right`}>
@@ -301,7 +324,7 @@ function DutchRow({ bets, dutchId, expanded, toggle, settle }: { bets: Bet[]; du
 }
 
 function BetRow({ b, expanded, toggle, nested }: { b: Bet; expanded: boolean; toggle(): void; nested?: boolean }) {
-  const { update, remove, openEdit, openNew } = useApp();
+  const { update, remove, openEdit, openNew, names } = useApp();
   const save = (patch: Partial<BetInput>) => update(b.id, patch).catch(() => undefined);
   const saveLeg = (i: number, patch: Partial<Leg>) => save({ legs: b.legs.map((l, j) => (j === i ? { ...l, ...patch } : l)) });
 
@@ -318,12 +341,20 @@ function BetRow({ b, expanded, toggle, nested }: { b: Bet; expanded: boolean; to
   const tone = betTone(b);
   const killers = b.result === 'lost' || b.result === 'half-lost' ? losingLegs(b) : [];
   // a dutch's bets are logged without bet text: show the selection instead
-  const betDisplay = b.betText || (nested ? b.legs[0]?.selection : undefined);
+  const rawDisplay = b.betText || (nested ? b.legs[0]?.selection : undefined);
+  const betDisplay = rawDisplay && tidyText(rawDisplay, names);
+  const combo = b.type === 'combination';
+  const hits = comboHits(b);
+  // BT-17: switching a bet with one leg (or none) to Combo opens the form, where its legs are added
+  const setType = (v: string) => {
+    if (v === 'combination' && b.legs.filter((l) => l.selection || l.game).length < 2) openEdit({ ...b, type: 'combination', legs: b.legs.filter((l) => l.selection || l.game || l.market) });
+    else void save({ type: v as Bet['type'] });
+  };
   return (
     <>
-      <tr className={`border-b border-zinc-900 hover:bg-zinc-900/60 ${TONE_TINT[tone] || (nested ? 'bg-zinc-950' : '')}`} data-testid="bet-row" data-bet-id={b.id} data-nested={nested || undefined} data-tone={tone} data-money={b.money}>
+      <tr className={`group ${rowClass(tone, nested)}`} data-testid="bet-row" data-bet-id={b.id} data-nested={nested || undefined} data-tone={tone} data-money={b.money}>
         <td className={`px-1 ${TONE_EDGE[tone]} ${nested ? 'pl-3' : ''}`}>
-          {!solo && b.legs.length > 0 && (
+          {combo && (
             <button className="text-zinc-400 hover:text-white" aria-label={expanded ? 'Hide legs' : 'Show legs'} aria-expanded={expanded} onClick={toggle}>
               {expanded ? '▾' : '▸'}
             </button>
@@ -331,21 +362,26 @@ function BetRow({ b, expanded, toggle, nested }: { b: Bet; expanded: boolean; to
         </td>
         <td className="whitespace-nowrap px-1.5 py-1.5">
           <Cell bare kind="date" value={formatDate(b.placedDate)} label="Bet date" onSave={(v) => save({ placedDate: parseDateInput(v) ?? b.placedDate })} />
-          <div className={SUB}>
+          <div className={gameDateDiffers(b.placedDate, b.gameDate) ? SUB : `${SUB} invisible group-hover:visible`} data-testid={gameDateDiffers(b.placedDate, b.gameDate) ? 'game-date' : undefined}>
             <Cell bare kind="date" value={formatDate(b.gameDate)} display={`game ${shortDate(b.gameDate)}`} label="Game date" onSave={(v) => save({ gameDate: parseDateInput(v) ?? b.gameDate })} />
           </div>
         </td>
         {solo ? (
           <td className="px-1.5 py-1.5">
-            <Cell bare truncate="max-w-36" kind="text" field="game" sport={b.legs[0]?.sport} value={b.legs[0]?.game ?? ''} label="Game" onSave={(v) => saveLeg(0, { game: v })} />
+            <Cell bare truncate="max-w-36" kind="text" field="game" sport={b.legs[0]?.sport} value={b.legs[0]?.game ?? ''} display={tidyNames(tidyGame(b.legs[0]?.game ?? ''), names)} label="Game" onSave={(v) => saveLeg(0, { game: v })} />
             <div className={SUB}>
               <Cell bare truncate="max-w-36" kind="text" field="sport" value={b.legs[0]?.sport ?? ''} label="Sport" onSave={(v) => saveLeg(0, { sport: v })} />
             </div>
           </td>
         ) : (
           <td className="px-1.5 py-1.5 text-zinc-300">
-            <div className="max-w-36 truncate">{gamesAndMarkets(b.legs) || <span className="text-zinc-600">Combination</span>}</div>
-            <div className={`${SUB} max-w-36 truncate`}>{legSports(b)}</div>
+            {/* BT-17: the legs' games (all of them) and their sport / league */}
+            <div className="max-w-36 truncate" title={gameTitle(b.legs, names) ?? 'No legs entered: ✎ Edit to add them'} data-testid="combo-games">
+              {gamesAndMarkets(b.legs, names, true) || <span className="text-zinc-600">-</span>}
+            </div>
+            <div className={`${SUB} max-w-36 truncate`} title={legSports(b) || undefined}>
+              {legSports(b)}
+            </div>
           </td>
         )}
         <td className="px-1.5 py-1.5">
@@ -360,7 +396,7 @@ function BetRow({ b, expanded, toggle, nested }: { b: Bet; expanded: boolean; to
         <Cell kind="number" value={String(b.stake)} display={formatMoney(b.stake, b.money)} extraClass={b.money === 'hypothetical' ? HYPO : undefined} title={b.money === 'hypothetical' ? HYPO_TITLE : undefined} label="Stake" onSave={(v) => save({ stake: parseNumber(v) ?? b.stake })} right />
         <Cell kind="odds" value={formatOdds(b.odds)} label="Odds" onSave={(v) => save({ odds: oddsFromText(v) ?? b.odds })} right />
         <td className="whitespace-nowrap px-1.5 py-1.5">
-          <Cell bare kind="select" options={['solo', 'combination']} labels={{ solo: 'Solo', combination: 'Combo' }} value={b.type} label="Type" onSave={(v) => save({ type: v as Bet['type'] })} />
+          <Cell bare kind="select" options={['solo', 'combination']} labels={{ solo: 'Solo', combination: 'Combo' }} display={combo && b.legs.length ? `Combo · ${b.legs.length}` : undefined} value={b.type} label="Type" onSave={setType} />
           <div className={SUB}>
             <Cell bare kind="select" options={['pregame', 'live']} value={b.situation} label="Situation" onSave={(v) => save({ situation: v as Bet['situation'] })} />
           </div>
@@ -371,14 +407,19 @@ function BetRow({ b, expanded, toggle, nested }: { b: Bet; expanded: boolean; to
         <td className="whitespace-nowrap px-1.5 py-1.5">
           <span className="inline-flex items-center gap-1.5">
             <Sign tone={tone} />
-            <ResultCell bet={b} onPick={(r) => settle(r)} />
+            <span className="inline-flex flex-col items-start gap-0.5">
+              <ResultCell bet={b} title={lostTitle(hits)} onPick={(r) => settle(r)} />
+              <ComboHitBadge bet={b} />
+            </span>
             {nested && <SplitMarkTag mark={splitMark(b)} />}
           </span>
         </td>
         <td className={`${STICKY} whitespace-nowrap px-1.5 py-1.5 text-right`}>
           <span className="inline-flex gap-0.5">
-            {QUICK_RESULTS.map(({ r, key, cls }) => (
-              <button key={r} className={`rounded px-1.5 py-0.5 text-xs font-semibold ${cls} ${b.result === r ? 'ring-1 ring-current' : ''}`} title={RESULT_LABEL[r]} aria-label={`Mark ${RESULT_LABEL[r]}`} onClick={() => settle(r)}>
+            {/* BT-18: one rule for every row: W / L / V only on unsettled bets (a settled one changes from its result badge) */}
+            {b.result === 'pending' &&
+              QUICK_RESULTS.map(({ r, key, cls }) => (
+              <button key={r} className={`rounded px-1.5 py-0.5 text-xs font-semibold ${cls}`} title={RESULT_LABEL[r]} aria-label={`Mark ${RESULT_LABEL[r]}`} onClick={() => settle(r)}>
                 {key}
               </button>
             ))}
@@ -402,21 +443,33 @@ function BetRow({ b, expanded, toggle, nested }: { b: Bet; expanded: boolean; to
           </span>
         </td>
       </tr>
+      {expanded && combo && b.legs.length === 0 && (
+        <tr className="border-b border-zinc-900 bg-zinc-950 text-xs" data-testid="no-legs">
+          <td />
+          <td colSpan={9} className="px-1.5 py-1.5 text-zinc-500">
+            No legs entered.{' '}
+            <button className="text-emerald-400 hover:underline" onClick={() => openEdit(b)}>
+              ✎ Add legs
+            </button>
+          </td>
+          <td className={STICKY} />
+        </tr>
+      )}
       {expanded &&
         b.legs.map((l, i) => (
-          <tr key={l.id} className={`border-b border-zinc-900 text-xs ${l.result === 'lost' || l.result === 'half-lost' ? 'bg-red-950/60 text-red-300' : l.result === 'won' || l.result === 'half-won' ? 'bg-emerald-950/40' : 'bg-zinc-950'}`} data-testid="leg-row" data-lost={l.result === 'lost' || l.result === 'half-lost' || undefined} data-tone={resultTone(l.result)}>
+          <tr key={l.id} className={`border-b border-zinc-900 text-xs ${TONE_TINT[resultTone(l.result)] || 'bg-zinc-950'} ${l.result === 'lost' || l.result === 'half-lost' ? 'text-red-300' : ''}`} data-testid="leg-row" data-lost={l.result === 'lost' || l.result === 'half-lost' || undefined} data-tone={resultTone(l.result)}>
             <td />
             <td className="whitespace-nowrap px-1.5 py-1 text-zinc-500">
               <Sign tone={resultTone(l.result)} className="mr-1" />
               Leg {i + 1}
             </td>
             <td className="px-1.5 py-1">
-              <Cell bare truncate="max-w-36" kind="text" field="game" sport={l.sport} value={l.game} label={`Leg ${i + 1} game`} onSave={(v) => saveLeg(i, { game: v })} />
+              <Cell bare truncate="max-w-36" kind="text" field="game" sport={l.sport} value={l.game} display={tidyNames(tidyGame(l.game), names)} label={`Leg ${i + 1} game`} onSave={(v) => saveLeg(i, { game: v })} />
               <div className={SUB}>
                 <Cell bare truncate="max-w-36" kind="text" field="sport" value={l.sport} label={`Leg ${i + 1} sport`} onSave={(v) => saveLeg(i, { sport: v })} />
               </div>
             </td>
-            <Cell kind="text" truncate="max-w-44" field="selection" sport={l.sport} value={l.selection} label={`Leg ${i + 1} selection`} onSave={(v) => saveLeg(i, { selection: v })} />
+            <Cell kind="text" truncate="max-w-44" field="selection" sport={l.sport} value={l.selection} display={tidyText(l.selection, names)} label={`Leg ${i + 1} selection`} onSave={(v) => saveLeg(i, { selection: v })} />
             <Cell kind="text" truncate="max-w-24" field="market" sport={l.sport} value={l.market} label={`Leg ${i + 1} market`} onSave={(v) => saveLeg(i, { market: v })} />
             <td />
             <Cell kind="odds" value={formatOdds(l.odds)} label={`Leg ${i + 1} odds`} onSave={(v) => saveLeg(i, { odds: v.trim() ? (oddsFromText(v) ?? l.odds) : null })} right />
@@ -437,7 +490,7 @@ function IconButton({ label, onClick, children }: { label: string; onClick(): vo
   );
 }
 
-function ResultCell({ bet, onPick }: { bet: Bet; onPick(r: Result): void }) {
+function ResultCell({ bet, onPick, title }: { bet: Bet; onPick(r: Result): void; title?: string }) {
   const [editing, setEditing] = useState(false);
   if (editing)
     return (
@@ -461,7 +514,7 @@ function ResultCell({ bet, onPick }: { bet: Bet; onPick(r: Result): void }) {
       </select>
     );
   return (
-    <button className={`rounded px-2 py-0.5 text-xs font-medium ${TONE_BADGE[betTone(bet)]}`} onClick={() => setEditing(true)} title="Change result" data-testid="result">
+    <button className={`rounded px-2 py-0.5 text-xs font-medium ${TONE_BADGE[betTone(bet)]}`} onClick={() => setEditing(true)} title={title ? `${title} · click to change` : 'Change result'} data-testid="result">
       {RESULT_LABEL[bet.result]}
       {bet.result === 'cash-out' && bet.cashout != null ? ` ${formatMoney(bet.cashout, bet.money)}` : ''}
     </button>
@@ -526,7 +579,7 @@ function Cell(props: CellProps) {
         tabIndex={0}
         aria-label={`Edit ${props.label}`}
         title={props.title ?? (props.truncate && shown ? shown : undefined)}
-        className={`-mx-1 block min-h-4 cursor-text rounded px-1 hover:bg-zinc-800 ${props.bare ? '' : 'text-zinc-200'} ${props.truncate ? `${props.truncate} truncate` : ''} ${props.extraClass ?? ''}`}
+        className={`-mx-1 block min-h-4 cursor-text rounded px-1 hover:bg-zinc-800 ${props.bare || props.extraClass ? '' : 'text-zinc-200'} ${props.truncate ? `${props.truncate} truncate` : ''} ${props.extraClass ?? ''}`}
         onClick={start}
         onKeyDown={(e) => e.key === 'Enter' && start()}
       >

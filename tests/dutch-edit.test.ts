@@ -8,24 +8,24 @@ const TODAY = '2026-11-22';
 describe('editDutchDraft', () => {
   it('prefills the saved dutch: selections, odds, stakes, books, games, markets, dates, and ties rows to bets', () => {
     const bets = dutchBets('d1', [
-      { odds: 2.5, stake: 40, book: 'Betano', placedDate: '2026-11-20', gameDate: '2026-11-21', legs: [leg({ selection: 'Home', game: 'A x B', market: '1X2', sport: 'Football' })] },
-      { odds: 3.2, stake: 31.25, book: 'Bet365', placedDate: '2026-11-20', gameDate: '2026-11-21', legs: [leg({ selection: 'Draw', game: 'A x B', market: '1X2', sport: 'Football' })] },
+      { odds: 2.5, stake: 40, book: 'Betano', placedDate: '2026-11-20', gameDate: '2026-11-21', legs: [leg({ selection: 'Home', game: 'A vs B', market: '1X2', sport: 'Football' })] },
+      { odds: 3.2, stake: 31.25, book: 'Bet365', placedDate: '2026-11-20', gameDate: '2026-11-21', legs: [leg({ selection: 'Draw', game: 'A vs B', market: '1X2', sport: 'Football' })] },
     ]);
     const d = editDutchDraft(bets);
     expect(d.rows.map((r) => [r.selection, r.odds, r.stake, r.book, r.betId])).toEqual([
       ['Home', 2.5, 40, 'Betano', bets[0]!.id],
       ['Draw', 3.2, 31.25, 'Bet365', bets[1]!.id],
     ]);
-    expect(d).toMatchObject({ sport: 'Football', games: ['A x B'], markets: ['1X2'], placedDate: '20/11/2026', gameDate: '21/11/2026' });
+    expect(d).toMatchObject({ sport: 'Football', games: ['A vs B'], markets: ['1X2'], placedDate: '20/11/2026', gameDate: '21/11/2026' });
   });
 });
 
 describe('planDutchEdit', () => {
   const bets = () =>
     dutchBets('d1', [
-      { odds: 2, stake: 50, result: 'won', postAnalysis: 'nice', legs: [leg({ selection: 'Home', game: 'A x B', market: '1X2' })] },
-      { odds: 4, stake: 25, result: 'lost', legs: [leg({ selection: 'Draw', game: 'A x B', market: '1X2' })] },
-      { odds: 4, stake: 25, result: 'lost', legs: [leg({ selection: 'Away', game: 'A x B', market: '1X2' })] },
+      { odds: 2, stake: 50, result: 'won', postAnalysis: 'nice', legs: [leg({ selection: 'Home', game: 'A vs B', market: '1X2' })] },
+      { odds: 4, stake: 25, result: 'lost', legs: [leg({ selection: 'Draw', game: 'A vs B', market: '1X2' })] },
+      { odds: 4, stake: 25, result: 'lost', legs: [leg({ selection: 'Away', game: 'A vs B', market: '1X2' })] },
     ]);
 
   it('changed odds and stake update the bet in place, result and analysis kept, same dutch id', () => {
@@ -39,7 +39,7 @@ describe('planDutchEdit', () => {
     expect(v.plan.deletes).toEqual([]);
     expect(v.plan.updates).toHaveLength(3);
     expect(v.plan.updates[0]).toMatchObject({ id: b[0]!.id, patch: { odds: 2.1, stake: 60, result: 'won', postAnalysis: 'nice', dutchId: 'd1' } });
-    expect(v.plan.updates[0]!.patch.legs[0]).toMatchObject({ selection: 'Home', odds: 2.1, result: 'won', game: 'A x B' });
+    expect(v.plan.updates[0]!.patch.legs[0]).toMatchObject({ selection: 'Home', odds: 2.1, result: 'won', game: 'A vs B' });
     expect(v.plan.updates[1]).toMatchObject({ id: b[1]!.id, patch: { result: 'lost' } });
   });
 
@@ -51,7 +51,7 @@ describe('planDutchEdit', () => {
     const v = planDutchEdit(d, b, 'Bet365', 'd1', TODAY);
     expect(v.ok && v.plan.deletes).toEqual([b[2]!.id]);
     expect(v.ok && v.plan.creates).toHaveLength(1);
-    expect(v.ok && v.plan.creates[0]).toMatchObject({ dutchId: 'd1', result: 'pending', odds: 1.9, stake: 10, legs: [{ selection: 'Over 2.5', game: 'A x B', market: '1X2' }] });
+    expect(v.ok && v.plan.creates[0]).toMatchObject({ dutchId: 'd1', result: 'pending', odds: 1.9, stake: 10, legs: [{ selection: 'Over 2.5', game: 'A vs B', market: '1X2' }] });
     expect(v.ok && v.plan.updates.map((u) => u.id)).toEqual([b[0]!.id, b[1]!.id]);
   });
 

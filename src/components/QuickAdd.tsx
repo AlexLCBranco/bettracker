@@ -2,9 +2,9 @@
 
 import { useMemo, useRef, useState } from 'react';
 import { normalize } from '@/lib/autocomplete';
-import { formToBet, newForm } from '@/lib/form';
+import { emptyLeg, formToBet, newForm } from '@/lib/form';
 import { formatMoney, formatOdds } from '@/lib/money';
-import { parseQuickAdd, splitQuickAddText } from '@/lib/quickadd';
+import { parseQuickAdd, quickAddLegs, splitQuickAddText } from '@/lib/quickadd';
 import { useApp } from './AppProvider';
 import { Autocomplete } from './Autocomplete';
 
@@ -34,16 +34,23 @@ export function QuickAdd() {
     const text = line.trim();
     if (!text || busy) return;
     const p = parseQuickAdd(text);
-    const base = { ...newForm(defaults), ...(p.money ? { money: p.money } : {}) };
+    const legs = quickAddLegs(p.betText);
+    const base = {
+      ...newForm(defaults),
+      ...(p.money ? { money: p.money } : {}),
+      // BT-17: a solo, or a combination with its legs; never a combination without legs (the last-used type)
+      type: legs ? ('combination' as const) : ('solo' as const),
+      legs: legs ? legs.map((selection) => ({ ...emptyLeg(defaults.sport), selection })) : [],
+    };
     if (!p.ok) {
-      openNew({ stake: p.stake != null ? String(p.stake) : '', odds: p.odds != null ? String(p.odds) : '', betText: p.betText, ...(p.money ? { money: p.money } : {}) });
+      openNew({ type: base.type, legs: base.legs, stake: p.stake != null ? String(p.stake) : '', odds: p.odds != null ? String(p.odds) : '', betText: p.betText, ...(p.money ? { money: p.money } : {}) });
       notify(`${p.reason}: finish the bet in the form`);
       setLine('');
       return;
     }
     const v = formToBet({ ...base, stake: String(p.stake), odds: String(p.odds), betText: p.betText });
     if (!v.ok) {
-      openNew({ stake: String(p.stake), odds: String(p.odds), betText: p.betText, money: base.money });
+      openNew({ type: base.type, legs: base.legs, stake: String(p.stake), odds: String(p.odds), betText: p.betText, money: base.money });
       notify(v.error, 'error');
       return;
     }

@@ -3,6 +3,18 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-22
+- BT-17 — Combo rows: legs, games and a leg count (v0.15.0)
+  A Combo row shows its legs' games and league, a ▸ to open its legs (or "Add legs" when none were entered), "Combo · 2" in Type and a "1/2" legs-hit count; a combination with one leg is saved as a Solo, the form says so, and quick-add makes a Solo (or a Combo with legs for "a + b").
+- BT-18 — Same styling on every row (v0.15.0)
+  Profit has one size and weight on every row, H$ stakes are violet on every row, won rows all share one tint, and W / L / V show only on unsettled bets.
+- BT-19 — Dutch result badges: no warning look, no repeats (v0.15.0)
+  A dutch that won with some splits hit shows a green "1/2", a lost dutch where nothing hit shows only "Lost" (what missed is in its tooltip), and the purple "Dutch" chip is gone.
+- BT-20 — Consistent text: names, units, games, odds (v0.15.0)
+  Games are saved and shown as "A vs B" (from "@", "v", "x"), stat units in lower case ("pts"), names in their proper spelling ("McCain") in saves and suggestions, odds with the decimals they pay (1.9924), and cut game text shows in full on hover.
+- BT-21 — Date column: no repeated date (v0.15.0)
+  "game dd/mm" under the bet date shows only when the game is on another day (hover the row to edit it otherwise).
+- BT-22 — Warn when a team plays twice on one day (v0.15.0)
+  The bet and dutch forms show a warning when a game puts a team in a second game on the same date, from this bet or any other.
 - BT-14 — Hypothetical money (H$ paper bets) (v0.14.0)
   A bet or dutch can be logged in hypothetical dollars (Money: Hypothetical in the full form and the dutch log, or "H$150 @2.10 …" in quick-add; last-used is remembered), shown as H$ in violet everywhere; the dashboard and Analytics count Real only by default with a Real / Hypothetical / Both switch, History has a Money filter, and export/import keep it.
 - BT-12 — Edit a logged dutch as a whole (v0.13.0)

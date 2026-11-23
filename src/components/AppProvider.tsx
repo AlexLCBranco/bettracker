@@ -1,12 +1,20 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { buildIndex, lastUsed, stakePresets, suggest, type Field, type SuggestIndex } from '@/lib/autocomplete';
+import { betNames, buildIndex, lastUsed, stakePresets, suggest, type Field, type SuggestIndex } from '@/lib/autocomplete';
 import type { DutchDraft } from '@/lib/dutch';
 import type { BetForm } from '@/lib/form';
 import { latestGate } from '@/lib/latest';
 import { REFRESH_MIN_MS, refreshGate } from '@/lib/refresh';
+import { tidyBet, type NameCasing } from '@/lib/tidy';
 import type { Bet, BetInput } from '@/lib/types';
+
+/** BT-20: names typed "Mccain" saved as "McCain" once that spelling is known (the server tidies games and units). */
+function tidyPatch<T extends Partial<BetInput>>(p: T, names: NameCasing): T {
+  if (p.betText == null && !p.legs) return p;
+  const t = tidyBet({ betText: p.betText ?? '', legs: p.legs ?? [] }, names);
+  return { ...p, ...(p.betText != null ? { betText: t.betText } : {}), ...(p.legs ? { legs: t.legs } : {}) };
+}
 
 export type FormRequest = { mode: 'new'; prefill?: Partial<BetForm>; key: number } | { mode: 'edit'; bet: Bet; key: number };
 
@@ -30,6 +38,8 @@ interface AppCtx {
   /** Sends a JSON export to the server (adds missing bets only), then reloads all bets. */
   importExport(json: unknown): Promise<{ added: number; skipped: number }>;
   index: SuggestIndex;
+  /** Proper name spellings seen in the bets (BT-20), for showing old text the same way. */
+  names: NameCasing;
   suggestFor(field: Field, query: string, sport?: string): string[];
   defaults: ReturnType<typeof lastUsed>;
   presets: number[];
@@ -70,10 +80,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [dutchForm, setDutchForm] = useState<AppCtx['dutchForm']>(null);
   const [toast, setToast] = useState<AppCtx['toast']>(null);
   const betsRef = useRef(bets);
+  const names = useMemo(() => betNames(bets), [bets]);
+  const namesRef = useRef(names);
   const [updates] = useState(latestGate);
   useEffect(() => {
     betsRef.current = bets;
-  }, [bets]);
+    namesRef.current = names;
+  }, [bets, names]);
   const formKey = useRef(0);
 
   useEffect(() => {
@@ -126,13 +139,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const create = useCallback(async (input: BetInput) => {
+  const create = useCallback(async (raw: BetInput) => {
+    const input = tidyPatch(raw, namesRef.current);
     const bet = await write<Bet>('/api/bets', { method: 'POST', body: JSON.stringify(input) });
     setBets((bs) => [bet, ...bs]);
     return bet;
   }, [write]);
 
-  const createMany = useCallback(async (inputs: BetInput[]) => {
+  const createMany = useCallback(async (raw: BetInput[]) => {
+    const inputs = raw.map((i) => tidyPatch(i, namesRef.current));
     const made = await write<Bet[]>('/api/bets', { method: 'POST', body: JSON.stringify(inputs) });
     setBets((bs) => [...[...made].reverse(), ...bs]);
     return made;
@@ -153,7 +168,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const update = useCallback(
-    async (id: string, patch: Partial<BetInput>) => {
+    async (id: string, raw: Partial<BetInput>) => {
+      const patch = tidyPatch(raw, namesRef.current);
       const before = betsRef.current.find((b) => b.id === id);
       // optimistic: show the change at once, put it back if the server refuses
       // (legs patched from the settle queue get the bet's existing leg ids until the server answers)
@@ -206,6 +222,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     remove,
     importExport,
     index,
+    names,
     suggestFor,
     defaults,
     presets,

@@ -21,8 +21,8 @@ describe('bet form', () => {
   });
 
   it('solo: one leg that mirrors the bet odds and result', () => {
-    const v = formToBet({ ...newForm(D, TODAY), stake: '10', odds: '1.8', result: 'won', game: 'Fla x Pal' }, TODAY);
-    expect(v.ok && v.value.legs).toEqual([{ sport: 'Football', game: 'Fla x Pal', market: '', selection: '', odds: 1.8, result: 'won' }]);
+    const v = formToBet({ ...newForm(D, TODAY), stake: '10', odds: '1.8', result: 'won', game: 'Fla vs Pal' }, TODAY);
+    expect(v.ok && v.value.legs).toEqual([{ sport: 'Football', game: 'Fla vs Pal', market: '', selection: '', odds: 1.8, result: 'won' }]);
   });
 
   it('combination: total odds as entered, never the product of the legs', () => {
@@ -33,10 +33,13 @@ describe('bet form', () => {
     expect(v.ok && v.value.legs.map((l) => l.result)).toEqual(['won', 'lost']);
   });
 
-  it('combination: legs optional, but not exactly one', () => {
+  it('combination: legs optional; one leg is saved as a solo bet (BT-17)', () => {
     const f = { ...newForm({ ...D, type: 'combination' as const }, TODAY), stake: '10', odds: '3.2' };
-    expect(formToBet(f, TODAY).ok).toBe(true);
-    expect(formToBet({ ...f, legs: [{ ...emptyLeg(), selection: 'A' }] }, TODAY)).toMatchObject({ ok: false });
+    expect(formToBet(f, TODAY)).toMatchObject({ ok: true, value: { type: 'combination', legs: [] } });
+    const one = formToBet({ ...f, legs: [{ ...emptyLeg('NBA'), game: 'A vs B', selection: 'A', odds: '1.5', result: 'won' }] }, TODAY);
+    expect(one).toMatchObject({ ok: true, value: { type: 'solo', result: 'pending', legs: [{ sport: 'NBA', game: 'A vs B', selection: 'A', odds: 3.2, result: 'pending' }] } });
+    const two = formToBet({ ...f, legs: [{ ...emptyLeg(), selection: 'A' }, { ...emptyLeg(), selection: 'B' }] }, TODAY);
+    expect(two).toMatchObject({ ok: true, value: { type: 'combination' } });
   });
 
   it('cash-out needs the amount', () => {

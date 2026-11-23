@@ -36,15 +36,15 @@ const solos = (): DutchDraft =>
 
 describe('draftToBets: game and market per leg', () => {
   it('one game and one market: every leg (own and shared) gets them', () => {
-    const bets = ok({ ...owner(), games: ['CLE x BOS'], markets: ['PTS'] });
+    const bets = ok({ ...owner(), games: ['CLE vs BOS'], markets: ['pts'] });
     expect(bets.map(gm)).toEqual([
       [
-        ['McCain 25 pts', 'CLE x BOS', 'PTS'],
-        ['Celtics W', 'CLE x BOS', 'PTS'],
+        ['McCain 25 pts', 'CLE vs BOS', 'pts'],
+        ['Celtics W', 'CLE vs BOS', 'pts'],
       ],
       [
-        ['Mitchell 30 pts', 'CLE x BOS', 'PTS'],
-        ['Celtics W', 'CLE x BOS', 'PTS'],
+        ['Mitchell 30 pts', 'CLE vs BOS', 'pts'],
+        ['Celtics W', 'CLE vs BOS', 'pts'],
       ],
     ]);
   });
@@ -54,35 +54,35 @@ describe('draftToBets: game and market per leg', () => {
   });
 
   it('two of each: every leg gets its own; the shared leg is set once and copied to every bet', () => {
-    const d = { ...owner(), games: ['CLE x BOS', 'NYK x MIA'], markets: ['ML', 'PTS'] };
-    d.rows[0]!.legs[0] = { ...d.rows[0]!.legs[0]!, game: 'CLE x BOS', market: 'PTS' };
-    d.rows[1]!.legs[0] = { ...d.rows[1]!.legs[0]!, game: 'NYK x MIA', market: 'PTS' };
-    d.shared[0] = { ...d.shared[0]!, game: 'CLE x BOS', market: 'ML' };
+    const d = { ...owner(), games: ['CLE vs BOS', 'NYK vs MIA'], markets: ['ML', 'pts'] };
+    d.rows[0]!.legs[0] = { ...d.rows[0]!.legs[0]!, game: 'CLE vs BOS', market: 'pts' };
+    d.rows[1]!.legs[0] = { ...d.rows[1]!.legs[0]!, game: 'NYK vs MIA', market: 'pts' };
+    d.shared[0] = { ...d.shared[0]!, game: 'CLE vs BOS', market: 'ML' };
     const bets = ok(d);
     expect(bets.map(gm)).toEqual([
       [
-        ['McCain 25 pts', 'CLE x BOS', 'PTS'],
-        ['Celtics W', 'CLE x BOS', 'ML'],
+        ['McCain 25 pts', 'CLE vs BOS', 'pts'],
+        ['Celtics W', 'CLE vs BOS', 'ML'],
       ],
       [
-        ['Mitchell 30 pts', 'NYK x MIA', 'PTS'],
-        ['Celtics W', 'CLE x BOS', 'ML'],
+        ['Mitchell 30 pts', 'NYK vs MIA', 'pts'],
+        ['Celtics W', 'CLE vs BOS', 'ML'],
       ],
     ]);
     expect(bets.every((b) => b.type === 'combination')).toBe(true);
   });
 
   it('a solo split uses its leg’s game and market', () => {
-    const d = { ...solos(), games: ['A x B', 'C x D'], markets: ['1X2'] };
-    d.rows[0]!.legs[0]!.game = 'A x B';
-    d.rows[2]!.legs[0]!.game = 'C x D';
-    expect(ok(d).map(gm)).toEqual([[['Home', 'A x B', '1X2']], [['Draw', 'A x B', '1X2']], [['Away', 'C x D', '1X2']]]);
+    const d = { ...solos(), games: ['A vs B', 'C vs D'], markets: ['1X2'] };
+    d.rows[0]!.legs[0]!.game = 'A vs B';
+    d.rows[2]!.legs[0]!.game = 'C vs D';
+    expect(ok(d).map(gm)).toEqual([[['Home', 'A vs B', '1X2']], [['Draw', 'A vs B', '1X2']], [['Away', 'C vs D', '1X2']]]);
   });
 
   it('several chips and nothing picked on a leg: invalid', () => {
-    expect(draftToBets({ ...owner(), games: ['G1', 'G2'], markets: ['PTS'] }, '', 'x', TODAY)).toEqual({ ok: false, error: 'Pick the game for each leg' });
-    const d = { ...owner(), games: ['G1'], markets: ['ML', 'PTS'] };
-    d.rows[0]!.legs[0]!.market = 'PTS'; // fills Mitchell below, but the shared leg has nothing
+    expect(draftToBets({ ...owner(), games: ['G1', 'G2'], markets: ['pts'] }, '', 'x', TODAY)).toEqual({ ok: false, error: 'Pick the game for each leg' });
+    const d = { ...owner(), games: ['G1'], markets: ['ML', 'pts'] };
+    d.rows[0]!.legs[0]!.market = 'pts'; // fills Mitchell below, but the shared leg has nothing
     expect(draftToBets(d, '', 'x', TODAY)).toEqual({ ok: false, error: 'Pick the market for each leg' });
     d.shared[0]!.market = 'ML';
     expect(draftToBets(d, '', 'x', TODAY).ok).toBe(true);
@@ -105,18 +105,18 @@ describe('draftToBets: game and market per leg', () => {
   });
 
   it('Duplicate: shared legs split out, each leg keeps its game and market, chips are the distinct values', () => {
-    const d = { ...owner(), games: ['CLE x BOS', 'NYK x MIA'], markets: ['ML', 'PTS'] };
-    d.rows[0]!.legs[0] = { ...d.rows[0]!.legs[0]!, game: 'CLE x BOS', market: 'PTS' };
-    d.rows[1]!.legs[0] = { ...d.rows[1]!.legs[0]!, game: 'NYK x MIA', market: 'PTS' };
-    d.shared[0] = { ...d.shared[0]!, game: 'CLE x BOS', market: 'ML' };
+    const d = { ...owner(), games: ['CLE vs BOS', 'NYK vs MIA'], markets: ['ML', 'pts'] };
+    d.rows[0]!.legs[0] = { ...d.rows[0]!.legs[0]!, game: 'CLE vs BOS', market: 'pts' };
+    d.rows[1]!.legs[0] = { ...d.rows[1]!.legs[0]!, game: 'NYK vs MIA', market: 'pts' };
+    d.shared[0] = { ...d.shared[0]!, game: 'CLE vs BOS', market: 'ML' };
     const bets = ok(d).map((b, i) => ({ ...b, id: `b${i}`, createdAt: `2026-11-22T00:00:0${i}Z`, updatedAt: '', legs: b.legs.map((l, j) => ({ ...l, id: `l${i}${j}` })) }) as Bet);
     const dup = duplicateDutchDraft(bets, '2026-11-23');
-    expect(dup.games).toEqual(['CLE x BOS', 'NYK x MIA']);
-    expect(dup.markets).toEqual(['PTS', 'ML']);
-    expect(dup.shared).toEqual([{ selection: 'Celtics W', odds: 1.3, game: 'CLE x BOS', market: 'ML' }]);
+    expect(dup.games).toEqual(['CLE vs BOS', 'NYK vs MIA']);
+    expect(dup.markets).toEqual(['pts', 'ML']);
+    expect(dup.shared).toEqual([{ selection: 'Celtics W', odds: 1.3, game: 'CLE vs BOS', market: 'ML' }]);
     expect(dup.rows.map((r) => r.legs)).toEqual([
-      [{ selection: 'McCain 25 pts', odds: 3.2, game: 'CLE x BOS', market: 'PTS' }],
-      [{ selection: 'Mitchell 30 pts', odds: 3.2, game: 'NYK x MIA', market: 'PTS' }],
+      [{ selection: 'McCain 25 pts', odds: 3.2, game: 'CLE vs BOS', market: 'pts' }],
+      [{ selection: 'Mitchell 30 pts', odds: 3.2, game: 'NYK vs MIA', market: 'pts' }],
     ]);
     // logging the duplicate gives the same legs again
     expect(ok({ ...dup, placedDate: '22/11/2026', gameDate: '22/11/2026' }).map(gm)).toEqual(ok(d).map(gm));

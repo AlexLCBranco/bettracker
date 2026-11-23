@@ -45,7 +45,15 @@ export function formatBRL(n: number, signed = false): string {
   return n > 0 ? `+${s}` : n < 0 ? `-${s}` : s;
 }
 
-export const formatOdds = (n: number | null | undefined) => (n == null || !Number.isFinite(n) ? '' : n.toFixed(2));
+/**
+ * Odds as shown: 2 decimals, more (up to 4) when the stored odds have them, so the odds shown match the payout
+ * (BT-20: 1.9924 pays +99,24 on 100, so it is not shown as 1.99). `decimals` caps it (combined odds: 2).
+ */
+export const formatOdds = (n: number | null | undefined, decimals = 4) => {
+  if (n == null || !Number.isFinite(n)) return '';
+  const s = n.toFixed(Math.max(2, decimals));
+  return s.replace(/(\.\d\d\d*?)0+$/, '$1');
+};
 
 /** Parses "150", "2.10", "2,10", "R$ 150". Returns null for anything else. */
 export function parseNumber(s: string): number | null {

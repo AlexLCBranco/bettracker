@@ -3,6 +3,7 @@
 // "frecency" — each past use counts, recent uses count more (half-life 30 days).
 // Leg fields (game, market, selection) narrow to the chosen sport, falling back to all sports when that finds nothing.
 
+import { bestSpelling, nameCasing, tidyGame, tidyNames, tidyUnits, type NameCasing } from './tidy';
 import type { Bet } from './types';
 
 export const FIELDS = ['book', 'sport', 'game', 'market', 'selection', 'betText'] as const;
@@ -28,10 +29,22 @@ export const normalize = (s: string) =>
     .toLowerCase()
     .trim();
 
+/** Every proper name spelling ("McCain") in the bets' texts (BT-20). */
+export function betNames(bets: Bet[]): NameCasing {
+  return nameCasing(bets.flatMap((b) => [b.betText, ...b.legs.flatMap((l) => [l.game, l.selection, l.market])]));
+}
+
+/** A value as suggested (BT-20): one game format, stat units in one form, known names cased properly. */
+function tidyValue(field: Field, value: string, names: NameCasing): string {
+  const v = field === 'game' ? tidyGame(value) : field === 'selection' || field === 'market' || field === 'betText' ? tidyUnits(value.trim()) : value.trim();
+  return field === 'book' || field === 'sport' ? v : tidyNames(v, names);
+}
+
 export function buildIndex(bets: Bet[]): SuggestIndex {
   const index = Object.fromEntries(FIELDS.map((f) => [f, new Map<string, Entry>()])) as SuggestIndex;
+  const names = betNames(bets);
   const add = (field: Field, value: string, t: number, sport = '') => {
-    const v = value.trim();
+    const v = tidyValue(field, value, names);
     if (!v) return;
     const key = normalize(v);
     const map = index[field];
@@ -39,7 +52,8 @@ export function buildIndex(bets: Bet[]): SuggestIndex {
     if (!e) map.set(key, { value: v, uses: [{ t, sport }] });
     else {
       const latest = Math.max(...e.uses.map((u) => u.t));
-      if (t >= latest) e.value = v; // keep the most recent spelling
+      // the proper spelling ("McCain" over "Mccain"), else the most recent one
+      e.value = bestSpelling([e.value, v], t >= latest ? v : e.value);
       e.uses.push({ t, sport });
     }
   };

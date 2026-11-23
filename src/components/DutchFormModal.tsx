@@ -6,6 +6,8 @@ import { logDraft, planDutchEdit, resolvedBooks, resolvedPicks, type DraftLeg, t
 import { outcomeTable } from '@/lib/dutching';
 import { formatMoney, formatOdds, oddsFromText, parseNumber } from '@/lib/money';
 import { SITUATIONS, type Bet } from '@/lib/types';
+import { clashText, teamClashes } from '@/lib/clash';
+import { parseDateInput } from '@/lib/dates';
 import { useApp } from './AppProvider';
 import { Autocomplete } from './Autocomplete';
 import { DateField } from './BetFormModal';
@@ -23,7 +25,7 @@ export function DutchFormModal() {
 const CHIPS: Record<PickField, 'games' | 'markets'> = { game: 'games', market: 'markets' };
 
 function Body() {
-  const { dutchForm, defaults, suggestFor, createMany, update, remove, closeDutch, notify } = useApp();
+  const { dutchForm, bets, defaults, suggestFor, createMany, update, remove, closeDutch, notify } = useApp();
   /** BT-12: editing a logged dutch: selections, odds and stakes become editable, splits can be added and removed. */
   const edit = dutchForm!.edit;
   const [d, setD] = useState<DutchDraft>(() => dutchForm!.draft);
@@ -57,6 +59,10 @@ function Body() {
     d.rows.map((r) => r.odds),
     d.shared.length > 0,
   );
+  // BT-22: a team in two games on the game date (this dutch's games and every other bet's)
+  const gameDateISO = (d.gameDate.trim() ? parseDateInput(d.gameDate) : null) ?? (d.placedDate.trim() ? parseDateInput(d.placedDate) : null);
+  const editIds = new Set(edit?.bets.map((b) => b.id));
+  const clashes = gameDateISO ? teamClashes([...d.games, ...[...picks.game.rows.flat(), ...picks.game.shared].map((p) => p.value ?? '')], gameDateISO, bets.filter((b) => !editIds.has(b.id))) : [];
   const isCombo = (i: number) => d.rows[i]!.legs.length + d.shared.length >= 2;
 
   const saveEdit = async (e: NonNullable<typeof edit>) => {
@@ -297,7 +303,7 @@ function Body() {
                 )}
               </td>
               <td className="px-3 py-2 text-right tabular-nums" data-testid="dutch-form-odds">
-                {numbersOk ? formatOdds(combined) : '-'}
+                {numbersOk ? formatOdds(combined, 2) : '-'}
               </td>
               <td className="px-3 py-2 text-right tabular-nums" data-testid="dutch-form-total">
                 {numbersOk ? formatMoney(total, d.money) : '-'}
@@ -315,6 +321,12 @@ function Body() {
         <div className="rounded-md border border-zinc-800 p-3">
           <OutcomeTable rows={outcomes} compact />
         </div>
+
+        {clashes.map((c) => (
+          <p key={c.team} className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-300" data-testid="team-clash">
+            ⚠ {clashText(c)}
+          </p>
+        ))}
 
         {error && (
           <p role="alert" className="text-sm text-red-400">
