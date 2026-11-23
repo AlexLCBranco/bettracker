@@ -15,6 +15,8 @@ import { splitMark } from '@/lib/hits';
 import { settleDutchRow, undoLast, type DutchRowAction, type SettleChange, type SettleState } from '@/lib/settle';
 import { DutchSettleButtons } from './DutchSettle';
 import { isTyping } from './Shell';
+import { betTone, groupTone, losingLegs, resultTone, TONE_SIGN, type Tone } from '@/lib/tone';
+import { TONE_BADGE, TONE_EDGE, TONE_TEXT, TONE_TINT } from './tone';
 
 const QUICK_RESULTS: { r: Result; key: string; cls: string }[] = [
   { r: 'won', key: 'W', cls: 'hover:bg-emerald-600/40 text-emerald-400' },
@@ -22,17 +24,18 @@ const QUICK_RESULTS: { r: Result; key: string; cls: string }[] = [
   { r: 'void', key: 'V', cls: 'hover:bg-zinc-600/40 text-zinc-300' },
 ];
 
-export function resultClass(r: Result) {
-  if (r === 'won' || r === 'half-won') return 'bg-emerald-500/15 text-emerald-400';
-  if (r === 'lost' || r === 'half-lost') return 'bg-red-500/15 text-red-400';
-  if (r === 'cash-out') return 'bg-sky-500/15 text-sky-400';
-  if (r === 'pending') return 'bg-amber-500/15 text-amber-400';
-  return 'bg-zinc-500/15 text-zinc-300';
+export function ProfitText({ value, pending, big }: { value: number; pending?: boolean; big?: boolean }) {
+  if (pending) return <span className="text-zinc-500">-</span>;
+  return <span className={`${value > 0 ? 'text-emerald-400' : value < 0 ? 'text-red-400' : 'text-zinc-400'} ${big ? 'text-base font-bold' : ''}`}>{formatBRL(value, true)}</span>;
 }
 
-export function ProfitText({ value, pending }: { value: number; pending?: boolean }) {
-  if (pending) return <span className="text-zinc-500">-</span>;
-  return <span className={value > 0 ? 'text-emerald-400' : value < 0 ? 'text-red-400' : 'text-zinc-400'}>{formatBRL(value, true)}</span>;
+/** ✓ / ✕ / ½ / – / … next to a result, so it reads without colour (BT-13). */
+function Sign({ tone, className = '' }: { tone: Tone; className?: string }) {
+  return (
+    <span aria-hidden className={`inline-block w-3 text-center text-xs font-bold ${TONE_TEXT[tone]} ${className}`} data-testid="result-sign" data-tone={tone}>
+      {TONE_SIGN[tone]}
+    </span>
+  );
 }
 
 /** Sport shown for a combination: its legs' sports joined. */
@@ -140,12 +143,7 @@ const STICKY = 'sticky right-0 z-[1] bg-zinc-950 shadow-[-8px_0_8px_-8px_rgba(0,
 const SUB = 'text-[11px] leading-tight text-zinc-500';
 const shortDate = (iso: string) => formatDate(iso).slice(0, 5);
 
-const OUTCOME: Record<GroupOutcome, { label: string; cls: string }> = {
-  pending: { label: 'Pending', cls: resultClass('pending') },
-  won: { label: 'Won', cls: resultClass('won') },
-  lost: { label: 'Lost', cls: resultClass('lost') },
-  even: { label: 'Even', cls: resultClass('void') },
-};
+const OUTCOME_LABEL: Record<GroupOutcome, string> = { pending: 'Pending', won: 'Won', lost: 'Lost', even: 'Even' };
 
 /** The dutch's bets' shared value for a field, "Mixed" when they differ, "" when none is set. */
 function shared(bets: Bet[], pick: (b: Bet) => string) {
@@ -209,15 +207,15 @@ function useDutchRowSettle() {
 function DutchRow({ bets, dutchId, expanded, toggle, settle }: { bets: Bet[]; dutchId: string; expanded: boolean; toggle(): void; settle: RowSettle }) {
   const { removeDutch, openDutch } = useApp();
   const s = dutchSummary(bets);
-  const o = OUTCOME[s.outcome];
+  const tone = groupTone(s.outcome);
   const names = bets.map(betLabel).join(' / ');
   const books = [...new Set(bets.map((b) => b.book).filter(Boolean))].join(', ');
   const placed = bets.map((b) => b.placedDate).sort()[0]!;
   const game = bets.map((b) => b.gameDate).sort()[0]!;
   const cell = 'px-1.5 py-1.5 text-zinc-200';
   return (
-    <tr className="border-b border-zinc-900 bg-indigo-500/5 hover:bg-zinc-900/60" data-testid="dutch-row" data-dutch-id={dutchId}>
-      <td className="px-1">
+    <tr className={`border-b border-zinc-900 hover:bg-zinc-900/60 ${TONE_TINT[tone] || 'bg-indigo-500/5'}`} data-testid="dutch-row" data-dutch-id={dutchId} data-tone={tone}>
+      <td className={`px-1 ${TONE_EDGE[tone]}`}>
         <button className="text-zinc-400 hover:text-white" aria-label={expanded ? 'Hide bets' : 'Show bets'} aria-expanded={expanded} onClick={toggle}>
           {expanded ? '▾' : '▸'}
         </button>
@@ -252,13 +250,14 @@ function DutchRow({ bets, dutchId, expanded, toggle, settle }: { bets: Bet[]; du
         <div className={SUB}>{capitalize(shared(bets, (b) => b.situation))}</div>
       </td>
       <td className="whitespace-nowrap px-1.5 py-1.5 text-right tabular-nums" data-testid="profit">
-        <ProfitText value={s.profit} pending={s.outcome === 'pending'} />
+        <ProfitText value={s.profit} pending={s.outcome === 'pending'} big />
       </td>
       <td className="whitespace-nowrap px-1.5 py-1.5">
         <span className="inline-flex flex-col items-start gap-0.5">
-          <span className="inline-flex items-center gap-1.5">
-            <span className={`rounded px-2 py-0.5 text-xs font-medium ${o.cls}`} data-testid="result">
-              {o.label}
+          <span className="inline-flex items-center gap-1">
+            <Sign tone={tone} />
+            <span className={`rounded px-2 py-0.5 text-xs font-medium ${TONE_BADGE[tone]}`} data-testid="result">
+              {OUTCOME_LABEL[s.outcome]}
             </span>
           </span>
           <HitBadge bets={bets} />
@@ -308,12 +307,14 @@ function BetRow({ b, expanded, toggle, nested }: { b: Bet; expanded: boolean; to
   };
 
   const solo = b.type === 'solo';
+  const tone = betTone(b);
+  const killers = b.result === 'lost' || b.result === 'half-lost' ? losingLegs(b) : [];
   // a dutch's bets are logged without bet text: show the selection instead
   const betDisplay = b.betText || (nested ? b.legs[0]?.selection : undefined);
   return (
     <>
-      <tr className={`border-b border-zinc-900 hover:bg-zinc-900/60 ${nested ? 'bg-zinc-950' : ''}`} data-testid="bet-row" data-bet-id={b.id} data-nested={nested || undefined}>
-        <td className={`px-1 ${nested ? 'border-l-2 border-indigo-500/40' : ''}`}>
+      <tr className={`border-b border-zinc-900 hover:bg-zinc-900/60 ${TONE_TINT[tone] || (nested ? 'bg-zinc-950' : '')}`} data-testid="bet-row" data-bet-id={b.id} data-nested={nested || undefined} data-tone={tone}>
+        <td className={`px-1 ${TONE_EDGE[tone]} ${nested ? 'pl-3' : ''}`}>
           {!solo && b.legs.length > 0 && (
             <button className="text-zinc-400 hover:text-white" aria-label={expanded ? 'Hide legs' : 'Show legs'} aria-expanded={expanded} onClick={toggle}>
               {expanded ? '▾' : '▸'}
@@ -339,7 +340,14 @@ function BetRow({ b, expanded, toggle, nested }: { b: Bet; expanded: boolean; to
             <div className={`${SUB} max-w-36 truncate`}>{legSports(b)}</div>
           </td>
         )}
-        <Cell kind="text" truncate="max-w-44" field="betText" value={b.betText} display={betDisplay} label="Bet" onSave={(v) => save({ betText: v })} />
+        <td className="px-1.5 py-1.5">
+          <Cell bare truncate="max-w-44" kind="text" field="betText" value={b.betText} display={betDisplay} label="Bet" onSave={(v) => save({ betText: v })} />
+          {killers.length > 0 && (
+            <div className="max-w-44 truncate text-[11px] font-medium text-red-400" title={`Lost by: ${killers.join(', ')}`} data-testid="lost-by">
+              ✕ lost by {killers.join(', ')}
+            </div>
+          )}
+        </td>
         <Cell kind="text" truncate="max-w-24" field="book" value={b.book} label="Book" onSave={(v) => save({ book: v })} />
         <Cell kind="number" value={String(b.stake)} display={formatBRL(b.stake)} label="Stake" onSave={(v) => save({ stake: parseNumber(v) ?? b.stake })} right />
         <Cell kind="odds" value={formatOdds(b.odds)} label="Odds" onSave={(v) => save({ odds: oddsFromText(v) ?? b.odds })} right />
@@ -354,6 +362,7 @@ function BetRow({ b, expanded, toggle, nested }: { b: Bet; expanded: boolean; to
         </td>
         <td className="whitespace-nowrap px-1.5 py-1.5">
           <span className="inline-flex items-center gap-1.5">
+            <Sign tone={tone} />
             <ResultCell bet={b} onPick={(r) => settle(r)} />
             {nested && <SplitMarkTag mark={splitMark(b)} />}
           </span>
@@ -387,9 +396,12 @@ function BetRow({ b, expanded, toggle, nested }: { b: Bet; expanded: boolean; to
       </tr>
       {expanded &&
         b.legs.map((l, i) => (
-          <tr key={l.id} className={`border-b border-zinc-900 text-xs ${l.result === 'lost' || l.result === 'half-lost' ? 'bg-red-950/60 text-red-300' : 'bg-zinc-950'}`} data-testid="leg-row" data-lost={l.result === 'lost' || l.result === 'half-lost' || undefined}>
+          <tr key={l.id} className={`border-b border-zinc-900 text-xs ${l.result === 'lost' || l.result === 'half-lost' ? 'bg-red-950/60 text-red-300' : l.result === 'won' || l.result === 'half-won' ? 'bg-emerald-950/40' : 'bg-zinc-950'}`} data-testid="leg-row" data-lost={l.result === 'lost' || l.result === 'half-lost' || undefined} data-tone={resultTone(l.result)}>
             <td />
-            <td className="whitespace-nowrap px-1.5 py-1 text-zinc-500">Leg {i + 1}</td>
+            <td className="whitespace-nowrap px-1.5 py-1 text-zinc-500">
+              <Sign tone={resultTone(l.result)} className="mr-1" />
+              Leg {i + 1}
+            </td>
             <td className="px-1.5 py-1">
               <Cell bare truncate="max-w-36" kind="text" field="game" sport={l.sport} value={l.game} label={`Leg ${i + 1} game`} onSave={(v) => saveLeg(i, { game: v })} />
               <div className={SUB}>
@@ -441,7 +453,7 @@ function ResultCell({ bet, onPick }: { bet: Bet; onPick(r: Result): void }) {
       </select>
     );
   return (
-    <button className={`rounded px-2 py-0.5 text-xs font-medium ${resultClass(bet.result)}`} onClick={() => setEditing(true)} title="Change result" data-testid="result">
+    <button className={`rounded px-2 py-0.5 text-xs font-medium ${TONE_BADGE[betTone(bet)]}`} onClick={() => setEditing(true)} title="Change result" data-testid="result">
       {RESULT_LABEL[bet.result]}
       {bet.result === 'cash-out' && bet.cashout != null ? ` ${formatBRL(bet.cashout)}` : ''}
     </button>

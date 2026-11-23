@@ -189,7 +189,7 @@ function BreakdownRow({ r, maxAbsProfit }: { r: Row; maxAbsProfit: number }) {
       <td className="py-2 pr-3 text-zinc-100">{r.label}</td>
       <td className="px-3 py-2 text-right tabular-nums" data-testid="cell-bets">
         {r.bets}
-        {r.pending > 0 && <span className="ml-1 text-xs text-amber-400/80" title={`${r.pending} pending`}>({r.pending}p)</span>}
+        {r.pending > 0 && <span className="ml-1 text-xs text-zinc-500" title={`${r.pending} pending`}>({r.pending}p)</span>}
       </td>
       <td className="px-3 py-2 text-right tabular-nums" data-testid="cell-wagered">{formatBRL(r.wagered)}</td>
       <td className="px-3 py-2 text-right tabular-nums" data-testid="cell-profit">

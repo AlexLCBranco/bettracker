@@ -13,15 +13,6 @@ Single bets already have Edit (pencil + inline cells), but a dutch row only has 
 - Every field of every logged bet (solo, combination, dutch split, legs) must be editable somewhere; audit and close any gaps found.
 - Tests: edit a dutch (change odds, stake, add a split, remove a split) and check History, dashboard and Analytics totals.
 
-### BT-13 — Clearer wins and losses (red/green), especially dutches
-**In short:** Wins show green and losses red everywhere, so a dutch or combination reads at a glance.
-The UI is not clear enough at a glance. Make results readable without reading text:
-- Green for won / profit, red for lost / loss, consistent everywhere (rows, Plus/Minus, badges, legs, charts); grey/neutral for pending and void, amber for partial (half-won, half-lost, some splits hit).
-- Dutch rows: tint or left border of the whole row by outcome; when expanded, each split and each leg marked green/red, the lost leg (or lost shared leg) clearly the one in red; net profit of the dutch big and coloured.
-- Combinations: show which leg killed it at a glance.
-- Do not rely on colour alone (icons ✓/✕ or signs) so it still reads in screenshots/greyscale.
-- General pass on dutch display clarity (owner: "the whole system has to be clearer"); propose the layout in the PR description.
-
 ### BT-14 — Hypothetical money (paper bets)
 **In short:** Bets can be logged with hypothetical money (H$) that never mixes into real totals.
 Option to log bets with hypothetical money instead of real money, so he can track picks he didn't actually place.

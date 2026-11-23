@@ -557,7 +557,7 @@ test('dutch hit count: the owner example settled three ways shows 0/2 · 1 miss,
 
   // expanded: a mark per split, the lost leg in red
   await row(3).getByRole('button', { name: 'Show bets' }).click();
-  await expect(page.getByTestId('split-mark')).toHaveText(['miss', 'hit']);
+  await expect(page.getByTestId('split-mark')).toHaveText(['✕ miss', '✓ hit']);
   await page.locator('[data-testid=bet-row][data-nested]').first().getByRole('button', { name: 'Show legs' }).click();
   await expect(page.locator('[data-testid=leg-row][data-lost]')).toHaveCount(1);
   await expect(page.locator('[data-testid=leg-row][data-lost]')).toContainText('McCain 25 pts');
@@ -832,3 +832,49 @@ for (const width of [1366, 1920]) {
     }
   });
 }
+
+test('BT-13: wins green ✓, losses red ✕, half amber ½, pending grey; a lost combination names the leg that killed it; a dutch row by its net', async ({ page, request, tag }) => {
+  const won = await createBet(request, { betText: `${tag} won`, result: 'won' });
+  const lost = await createBet(request, { betText: `${tag} lost`, result: 'lost' });
+  const half = await createBet(request, { betText: `${tag} half`, result: 'half-won' });
+  const pend = await createBet(request, { betText: `${tag} pending` });
+  const combo = await createBet(request, {
+    betText: `${tag} combo`,
+    type: 'combination',
+    odds: 4,
+    result: 'lost',
+    legs: [{ selection: 'Lakers', odds: 2, result: 'won' }, { selection: 'Celtics', odds: 2, result: 'lost' }],
+  });
+  const d = tag.replace(/[^A-Za-z0-9_-]/g, '');
+  await createBet(request, { betText: '', dutchId: d, odds: 3, result: 'won', legs: [{ game: `${tag} g`, selection: 'Home' }] });
+  await createBet(request, { betText: '', dutchId: d, odds: 3, result: 'lost', legs: [{ game: `${tag} g`, selection: 'Away' }] });
+  await page.goto('/history');
+  await page.getByLabel('Search bets').fill(tag);
+  const tones: [typeof won, string, string][] = [
+    [won, 'win', '✓'],
+    [lost, 'loss', '✕'],
+    [half, 'partial', '½'],
+    [pend, 'pending', '…'],
+    [combo, 'loss', '✕'],
+  ];
+  for (const [b, tone, sign] of tones) {
+    const row = page.locator(`[data-bet-id="${b.id}"]`);
+    await expect(row).toHaveAttribute('data-tone', tone);
+    await expect(row.getByTestId('result-sign')).toHaveText(sign);
+  }
+  await expect(page.locator(`[data-bet-id="${won.id}"] [data-testid="result"]`)).toHaveClass(/emerald/);
+  await expect(page.locator(`[data-bet-id="${lost.id}"] [data-testid="result"]`)).toHaveClass(/red/);
+  await expect(page.locator(`[data-bet-id="${pend.id}"] [data-testid="result"]`)).toHaveClass(/zinc/);
+  await expect(page.locator(`[data-bet-id="${combo.id}"] [data-testid="lost-by"]`)).toHaveText('✕ lost by Celtics');
+  // the expanded combination: the lost leg red ✕, the won leg green ✓
+  await page.locator(`[data-bet-id="${combo.id}"]`).getByRole('button', { name: 'Show legs' }).click();
+  await expect(page.getByTestId('leg-row').filter({ hasText: 'Celtics' })).toHaveAttribute('data-tone', 'loss');
+  await expect(page.getByTestId('leg-row').filter({ hasText: 'Lakers' })).toHaveAttribute('data-tone', 'win');
+  // dutch: 10 @3 won, 10 @3 lost = +10 net: a green row, the profit big
+  const dutch = page.locator(`[data-dutch-id="${d}"]`);
+  await expect(dutch).toHaveAttribute('data-tone', 'win');
+  await expect(dutch.getByTestId('profit').locator('span')).toHaveClass(/font-bold/);
+  await expect(dutch.getByTestId('profit')).toHaveText('+R$ 10,00');
+  await dutch.getByRole('button', { name: 'Show bets' }).click();
+  await expect(page.getByTestId('split-mark')).toHaveText(['✓ hit', '✕ miss']);
+});

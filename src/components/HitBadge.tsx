@@ -28,10 +28,10 @@ export function HitBadge({ bets }: { bets: Bet[] }) {
 }
 
 const MARK: Record<SplitMark, { text: string; cls: string }> = {
-  hit: { text: 'hit', cls: 'text-emerald-400' },
-  miss: { text: 'miss', cls: 'text-red-400' },
-  void: { text: 'void', cls: 'text-zinc-400' },
-  pending: { text: 'pending', cls: 'text-zinc-500' },
+  hit: { text: '✓ hit', cls: 'text-emerald-400' },
+  miss: { text: '✕ miss', cls: 'text-red-400' },
+  void: { text: '– void', cls: 'text-zinc-400' },
+  pending: { text: '… pending', cls: 'text-zinc-500' },
 };
 
 /** Small hit / miss / void / pending mark on a split of an expanded dutch. */

@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-22
+- BT-13 — Clearer wins and losses (v0.12.0)
+  Every bet, dutch and leg row has a coloured left edge and a sign (green ✓ won, red ✕ lost, amber ½ half, grey … pending, – void), a lost combination says "✕ lost by Celtics", a dutch row is coloured by its net with the net profit in large type, and its splits show ✓ hit / ✕ miss.
 - BT-15 — History table fits the screen (v0.11.0)
   History and the dashboard fit a 1366px screen without scrolling sideways: bet and game dates, game and sport, and type and situation share a column, long text is cut with the full text on hover, Duplicate and Delete moved into a "⋯" menu, and the actions column stays pinned on the right.
 - BT-16 — Every odds box accepts any odds format (v0.10.0)
