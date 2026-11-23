@@ -6,7 +6,9 @@ import { ProfitText } from '@/components/BetTable';
 import { breakdown, comboReport, DIMENSION_LABEL, DIMENSIONS, type Dimension, type Row } from '@/lib/analytics';
 import { formatDate } from '@/lib/dates';
 import { dutchHitReport } from '@/lib/hits';
-import { formatBRL, formatOdds } from '@/lib/money';
+import { formatMoney, formatOdds, type MoneyScope } from '@/lib/money';
+import { byMoney } from '@/lib/scope';
+import { MoneyScopeSwitch, useMoneyScope } from '@/components/Money';
 import { formatPercent } from '@/lib/stats';
 
 type SortKey = 'natural' | 'bets' | 'wagered' | 'profit' | 'roi' | 'winRate';
@@ -22,7 +24,10 @@ const COLUMNS: { key: SortKey; label: string; title?: string }[] = [
 const tone = (n: number | null) => (n == null || n === 0 ? 'text-zinc-400' : n > 0 ? 'text-emerald-400' : 'text-red-400');
 
 export default function AnalyticsPage() {
-  const { bets, loaded } = useApp();
+  const { bets: all, loaded } = useApp();
+  // BT-14: real and hypothetical money never mix unless "Both" is picked
+  const [scope, setScope] = useMoneyScope();
+  const bets = useMemo(() => byMoney(all, scope), [all, scope]);
   const [dim, setDim] = useState<Dimension>('sport');
   const [sort, setSort] = useState<SortKey>('natural');
 
@@ -40,9 +45,12 @@ export default function AnalyticsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Analytics</h1>
-        <p className="text-sm text-zinc-400">Where your profit comes from. Profit, ROI and win rate count settled bets only.</p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Analytics</h1>
+          <p className="text-sm text-zinc-400">Where your profit comes from. Profit, ROI and win rate count settled bets only.</p>
+        </div>
+        <MoneyScopeSwitch scope={scope} onChange={setScope} />
       </div>
 
       <section className="card p-5">
@@ -87,7 +95,7 @@ export default function AnalyticsPage() {
               </thead>
               <tbody>
                 {sorted.map((r) => (
-                  <BreakdownRow key={r.key} r={r} maxAbsProfit={maxAbsProfit} />
+                  <BreakdownRow key={r.key} r={r} maxAbsProfit={maxAbsProfit} scope={scope} />
                 ))}
               </tbody>
             </table>
@@ -125,7 +133,7 @@ export default function AnalyticsPage() {
               <Tile
                 label="Lost by one leg"
                 value={String(combos.lostByOne)}
-                sub={`${formatBRL(combos.lostByOneStake)} staked${combos.lostUnknown ? ` · ${combos.lostUnknown} lost without leg results` : ''}`}
+                sub={`${formatMoney(combos.lostByOneStake, scope)} staked${combos.lostUnknown ? ` · ${combos.lostUnknown} lost without leg results` : ''}`}
                 testId="combo-lost-by-one"
               />
             </div>
@@ -165,7 +173,7 @@ export default function AnalyticsPage() {
                       <span className="tabular-nums text-zinc-500">{formatDate(bet.gameDate || bet.placedDate)}</span>
                       <span className="text-zinc-200">{bet.betText || `${bet.legs.length} legs`}</span>
                       <span className="text-zinc-500">
-                        @{formatOdds(bet.odds)} · {formatBRL(bet.stake)}
+                        @{formatOdds(bet.odds)} · {formatMoney(bet.stake, bet.money)}
                       </span>
                       <span className="ml-auto text-red-400">
                         lost: {[leg.game, leg.market, leg.selection].filter(Boolean).join(' · ') || 'leg'}
@@ -182,7 +190,7 @@ export default function AnalyticsPage() {
   );
 }
 
-function BreakdownRow({ r, maxAbsProfit }: { r: Row; maxAbsProfit: number }) {
+function BreakdownRow({ r, maxAbsProfit, scope }: { r: Row; maxAbsProfit: number; scope: MoneyScope }) {
   const width = maxAbsProfit > 0 ? (Math.abs(r.profit) / maxAbsProfit) * 100 : 0;
   return (
     <tr className="border-b border-zinc-900" data-testid="analytics-row">
@@ -191,9 +199,9 @@ function BreakdownRow({ r, maxAbsProfit }: { r: Row; maxAbsProfit: number }) {
         {r.bets}
         {r.pending > 0 && <span className="ml-1 text-xs text-zinc-500" title={`${r.pending} pending`}>({r.pending}p)</span>}
       </td>
-      <td className="px-3 py-2 text-right tabular-nums" data-testid="cell-wagered">{formatBRL(r.wagered)}</td>
+      <td className="px-3 py-2 text-right tabular-nums" data-testid="cell-wagered">{formatMoney(r.wagered, scope)}</td>
       <td className="px-3 py-2 text-right tabular-nums" data-testid="cell-profit">
-        <ProfitText value={r.profit} />
+        <ProfitText value={r.profit} money={scope} />
       </td>
       <td className={`px-3 py-2 text-right tabular-nums ${tone(r.roi)}`} data-testid="cell-roi">{formatPercent(r.roi, true)}</td>
       <td className="px-3 py-2 text-right tabular-nums" data-testid="cell-winrate">

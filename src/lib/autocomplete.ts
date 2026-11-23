@@ -121,5 +121,6 @@ export function lastUsed(bets: Bet[]) {
     sport: latest?.legs.find((l) => l.sport)?.sport ?? '',
     situation: latest?.situation ?? 'pregame',
     type: latest?.type ?? 'solo',
+    money: latest?.money ?? 'real',
   } as const;
 }

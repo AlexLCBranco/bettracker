@@ -4,11 +4,12 @@ import { Fragment, useEffect, useRef, useState, type KeyboardEvent, type ReactNo
 import type { Field } from '@/lib/autocomplete';
 import { logDraft, planDutchEdit, resolvedBooks, resolvedPicks, type DraftLeg, type DutchDraft, type DutchDraftRow, type PickField, type ResolvedPick } from '@/lib/dutch';
 import { outcomeTable } from '@/lib/dutching';
-import { formatBRL, formatOdds, oddsFromText, parseNumber } from '@/lib/money';
+import { formatMoney, formatOdds, oddsFromText, parseNumber } from '@/lib/money';
 import { SITUATIONS, type Bet } from '@/lib/types';
 import { useApp } from './AppProvider';
 import { Autocomplete } from './Autocomplete';
 import { DateField } from './BetFormModal';
+import { MoneySelect } from './Money';
 import { OddsInput } from './OddsInput';
 import { OutcomeTable } from './OutcomeTable';
 
@@ -149,6 +150,9 @@ function Body() {
           <L label="Game date">
             <DateField value={d.gameDate} onChange={(v) => set('gameDate', v)} aria-label="Game date" />
           </L>
+          <L label="Money">
+            <MoneySelect value={d.money} onChange={(m) => set('money', m)} />
+          </L>
           <L label="Situation">
             <select className="field" value={d.situation} onChange={(e) => set('situation', e.target.value as DutchDraft['situation'])} aria-label="Situation">
               {SITUATIONS.map((s) => (
@@ -204,7 +208,7 @@ function Body() {
                       <>
                         <td className="py-2 pr-3 text-zinc-100">{r.selection || `Selection ${i + 1}`}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{formatOdds(r.odds)}</td>
-                        <td className="px-3 py-2 text-right font-semibold tabular-nums">{formatBRL(r.stake)}</td>
+                        <td className="px-3 py-2 text-right font-semibold tabular-nums">{formatMoney(r.stake, d.money)}</td>
                       </>
                     )}
                     <td className="py-1.5 pl-3">
@@ -296,7 +300,7 @@ function Body() {
                 {numbersOk ? formatOdds(combined) : '-'}
               </td>
               <td className="px-3 py-2 text-right tabular-nums" data-testid="dutch-form-total">
-                {numbersOk ? formatBRL(total) : '-'}
+                {numbersOk ? formatMoney(total, d.money) : '-'}
               </td>
               <td colSpan={edit ? 4 : 3} />
             </tr>

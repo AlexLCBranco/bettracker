@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-22
+- BT-14 — Hypothetical money (H$ paper bets) (v0.14.0)
+  A bet or dutch can be logged in hypothetical dollars (Money: Hypothetical in the full form and the dutch log, or "H$150 @2.10 …" in quick-add; last-used is remembered), shown as H$ in violet everywhere; the dashboard and Analytics count Real only by default with a Real / Hypothetical / Both switch, History has a Money filter, and export/import keep it.
 - BT-12 — Edit a logged dutch as a whole (v0.13.0)
   A dutch row has ✎ Edit, which opens the log form with the saved dutch (selections, legs, shared legs, odds in any format, stakes, books, games, markets, dates); saving updates its bets in place and keeps results already set, a removed split deletes its bet and "+ Add split" adds one.
 - BT-13 — Clearer wins and losses (v0.12.0)

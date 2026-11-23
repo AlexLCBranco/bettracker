@@ -1,6 +1,6 @@
 import { normalize } from './autocomplete';
 import { withWholeGroups } from './dutch';
-import type { Bet, BetType, Result, Situation } from './types';
+import type { Bet, BetType, Money, Result, Situation } from './types';
 
 /** "dutch" = bets logged as a dutch; "solo" = solo bets that are not part of one. */
 export type TypeFilter = BetType | 'dutch' | '';
@@ -16,9 +16,11 @@ export interface Filters {
   result: Result | '';
   /** Free text over bet text, game, market, selection. */
   text: string;
+  /** Real or hypothetical money only (BT-14); "" = both. */
+  money: Money | '';
 }
 
-export const NO_FILTERS: Filters = { from: '', to: '', book: '', sport: '', type: '', situation: '', result: '', text: '' };
+export const NO_FILTERS: Filters = { from: '', to: '', book: '', sport: '', type: '', situation: '', result: '', text: '', money: '' };
 
 const typeOf = (b: Bet): TypeFilter => (b.dutchId ? 'dutch' : b.type);
 
@@ -36,6 +38,7 @@ export function filterBets(bets: Bet[], f: Filters): Bet[] {
       (!f.type || typeOf(b) === f.type) &&
       (!f.situation || b.situation === f.situation) &&
       (!f.result || b.result === f.result) &&
+      (!f.money || b.money === f.money) &&
       (!text || [b.betText, ...b.legs.flatMap((l) => [l.game, l.market, l.selection])].some((s) => normalize(s).includes(text))),
   );
   return withWholeGroups(bets, matched);

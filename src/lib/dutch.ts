@@ -3,7 +3,7 @@
 
 import { formatDate, parseDateInput, todayISO } from './dates';
 import { profit } from './money';
-import type { Bet, BetInput, Leg, Result, Situation } from './types';
+import type { Bet, BetInput, Leg, Money, Result, Situation } from './types';
 import { validateBet } from './validate';
 
 export type BetRow = { kind: 'bet'; bet: Bet } | { kind: 'dutch'; dutchId: string; bets: Bet[] };
@@ -169,6 +169,8 @@ export interface DutchDraft {
   games: string[];
   markets: string[];
   situation: Situation;
+  /** Real (R$) or hypothetical (H$) money, for every bet of the dutch (BT-14). */
+  money: Money;
   /** dd/mm/yyyy as typed */
   placedDate: string;
   gameDate: string;
@@ -176,7 +178,7 @@ export interface DutchDraft {
 
 type DraftRowIn = { selection: string; odds: number; stake: number; legs?: DraftLeg[] };
 
-export function newDutchDraft(rows: DraftRowIn[], defaults: { sport: string; situation: Situation }, today = todayISO(), shared: DraftLeg[] = []): DutchDraft {
+export function newDutchDraft(rows: DraftRowIn[], defaults: { sport: string; situation: Situation; money?: Money }, today = todayISO(), shared: DraftLeg[] = []): DutchDraft {
   return {
     rows: rows.map((r) => ({ ...r, legs: r.legs?.length ? r.legs : [{ selection: r.selection, odds: r.odds }], book: null })),
     shared,
@@ -184,6 +186,7 @@ export function newDutchDraft(rows: DraftRowIn[], defaults: { sport: string; sit
     games: [],
     markets: [],
     situation: defaults.situation,
+    money: defaults.money ?? 'real',
     placedDate: formatDate(today),
     gameDate: formatDate(today),
   };
@@ -225,6 +228,7 @@ function draftOf(bets: Bet[]): Omit<DutchDraft, 'placedDate' | 'gameDate'> {
     games: distinct(allLegs.map((l) => l.game)),
     markets: distinct(allLegs.map((l) => l.market)),
     situation: bets[0]!.situation,
+    money: bets[0]!.money,
   };
 }
 
@@ -306,6 +310,7 @@ export function draftToBets(d: DutchDraft, lastBook: string, dutchId: string, to
       postAnalysis: '',
       betText: combo ? legs.map((x) => x.l.selection.trim()).join(' + ') : '',
       dutchId,
+      money: d.money,
       legs: combo ? legs.map((x) => leg(x, x.l.selection, x.l.odds)) : [leg(legs[0]!, legs[0]!.l.selection || r.selection, r.odds)],
     });
     if (!v.ok)

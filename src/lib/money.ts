@@ -1,4 +1,4 @@
-import type { Bet, Result } from './types';
+import type { Bet, Money, Result } from './types';
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -27,6 +27,16 @@ export const profit = (b: Pick<Bet, 'stake' | 'odds' | 'result' | 'cashout'>) =>
 export const potentialReturn = (stake: number, odds: number) => (stake > 0 && odds > 0 ? round2(stake * odds) : 0);
 
 const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+
+/** What totals are shown in (BT-14): one kind of money, or both added up. */
+export type MoneyScope = Money | 'both';
+export const MONEY_SYMBOL: Record<MoneyScope, string> = { real: 'R$', hypothetical: 'H$', both: 'R$+H$' };
+
+/** Like formatBRL, in the bet's money: "H$ 50,00" for hypothetical dollars, "R$+H$ 50,00" for both added up. */
+export function formatMoney(n: number, money: MoneyScope = 'real', signed = false): string {
+  const s = formatBRL(n, signed);
+  return money === 'real' ? s : s.replace('R$', () => MONEY_SYMBOL[money]);
+}
 
 /** "R$ 1.234,50"; with sign, "+R$ 10,00" / "-R$ 10,00". */
 export function formatBRL(n: number, signed = false): string {

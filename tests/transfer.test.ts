@@ -56,11 +56,11 @@ describe('dutch id in export and import', () => {
     expect(parseImport(file([{ ...bet(), dutchId: 'no spaces allowed' }]))).toEqual({ ok: false, error: 'Bet 1: Dutch id is not valid' });
   });
 
-  it('CSV has a dutch_id column at the end', () => {
+  it('CSV has dutch_id and money columns at the end', () => {
     const csv = toCSV([bet({ id: 'b1', dutchId: 'grp-1' }), bet({ id: 'b2' })]);
     const lines = csv.slice(1).split('\r\n');
-    expect(lines[0]!.endsWith(',id,dutch_id')).toBe(true);
-    expect(lines[1]!.endsWith(',b1,grp-1')).toBe(true);
-    expect(lines[2]!.endsWith(',b2,')).toBe(true);
+    expect(lines[0]!.endsWith(',id,dutch_id,money')).toBe(true);
+    expect(lines[1]!.endsWith(',b1,grp-1,real')).toBe(true);
+    expect(lines[2]!.endsWith(',b2,,real')).toBe(true);
   });
 });

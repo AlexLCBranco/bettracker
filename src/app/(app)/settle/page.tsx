@@ -6,7 +6,7 @@ import { HitBadge } from '@/components/HitBadge';
 import { isTyping } from '@/components/Shell';
 import { formatDate, todayISO } from '@/lib/dates';
 import { betLabel, dutchSummary } from '@/lib/dutch';
-import { formatBRL, formatOdds, parseNumber, potentialReturn } from '@/lib/money';
+import { formatMoney, formatOdds, parseNumber, potentialReturn } from '@/lib/money';
 import { moveCursor, settleAt, settleDutchAt, settleQueue, settleSharedLostAt, SETTLE_KEYS, sharedLegOf, undoLast, type QueueItem, type SettleState, type SettleStep } from '@/lib/settle';
 import { RESULT_LABEL, type Bet } from '@/lib/types';
 
@@ -261,10 +261,10 @@ function BetLine(props: {
         </span>
       </span>
       <span className="truncate text-zinc-400">{b.book}</span>
-      <span className="text-right tabular-nums">{formatBRL(b.stake)}</span>
+      <span className="text-right tabular-nums">{formatMoney(b.stake, b.money)}</span>
       <span className="text-right tabular-nums">@{formatOdds(b.odds)}</span>
       <span className="text-right tabular-nums text-zinc-400" title="Potential return">
-        {formatBRL(potentialReturn(b.stake, b.odds))}
+        {formatMoney(potentialReturn(b.stake, b.odds), b.money)}
       </span>
       <span className="flex gap-1">
         {props.cashout ? (
@@ -331,7 +331,7 @@ function DutchLine(props: { it: Extract<QueueItem, { kind: 'dutch' }>; btn: stri
           <span className="block truncate text-xs text-zinc-500">{[leg?.sport, leg?.game, leg?.market].filter(Boolean).join(' · ')}</span>
         </span>
         <span className="truncate text-zinc-400">{[...new Set(it.bets.map((b) => b.book).filter(Boolean))].join(', ')}</span>
-        <span className="text-right tabular-nums">{formatBRL(s.stake)}</span>
+        <span className="text-right tabular-nums">{formatMoney(s.stake, it.bets[0]!.money)}</span>
         <span className="text-right tabular-nums" title="Combined odds">
           @{formatOdds(s.combinedOdds)}
         </span>
@@ -382,10 +382,10 @@ function DutchLine(props: { it: Extract<QueueItem, { kind: 'dutch' }>; btn: stri
                 {selectionOf(b)}
               </span>
               <span className="w-24 truncate text-zinc-500">{b.book}</span>
-              <span className="w-20 text-right tabular-nums">{formatBRL(b.stake)}</span>
+              <span className="w-20 text-right tabular-nums">{formatMoney(b.stake, b.money)}</span>
               <span className="w-14 text-right tabular-nums">@{formatOdds(b.odds)}</span>
               <span className="w-24 text-right tabular-nums text-zinc-500" title="Returns if it wins">
-                {formatBRL(potentialReturn(b.stake, b.odds))}
+                {formatMoney(potentialReturn(b.stake, b.odds), b.money)}
               </span>
             </li>
           );

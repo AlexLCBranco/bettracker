@@ -73,7 +73,7 @@ describe('stake presets and last-used defaults', () => {
       bet({ book: 'Old', createdAt: at(5) }),
       bet({ book: 'Betano', situation: 'live', type: 'combination', legs: [leg({ sport: 'Football' })], createdAt: at(1) }),
     ]);
-    expect(d).toEqual({ book: 'Betano', sport: 'Football', situation: 'live', type: 'combination' });
+    expect(d).toEqual({ book: 'Betano', sport: 'Football', situation: 'live', type: 'combination', money: 'real' });
   });
-  it('no bets: empty defaults', () => expect(lastUsed([])).toEqual({ book: '', sport: '', situation: 'pregame', type: 'solo' }));
+  it('no bets: empty defaults', () => expect(lastUsed([])).toEqual({ book: '', sport: '', situation: 'pregame', type: 'solo', money: 'real' }));
 });

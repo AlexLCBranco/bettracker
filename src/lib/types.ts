@@ -7,6 +7,11 @@ export const BET_TYPES = ['solo', 'combination'] as const;
 export type BetType = (typeof BET_TYPES)[number];
 
 export const SITUATIONS = ['pregame', 'live'] as const;
+
+/** BT-14: real money (R$) or hypothetical money (H$, "hypothetical dollars"): picks tracked but not placed. */
+export const MONEY = ['real', 'hypothetical'] as const;
+export type Money = (typeof MONEY)[number];
+
 export type Situation = (typeof SITUATIONS)[number];
 
 export interface Leg {
@@ -38,6 +43,8 @@ export interface Bet {
   betText: string;
   /** Solo: exactly 1. Combination: 0 (not entered) or 2+. */
   legs: Leg[];
+  /** Real (R$) or hypothetical (H$) money; hypothetical bets never mix into real totals (BT-14). */
+  money: Money;
   /** Bets logged together as one dutch share this id (see src/lib/dutch.ts); null = not part of a dutch. */
   dutchId: string | null;
   /** ISO timestamps, used for "most recent" ordering. */

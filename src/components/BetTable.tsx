@@ -4,7 +4,7 @@ import { Fragment, useEffect, useRef, useState, type KeyboardEvent, type ReactNo
 import { formatDate, parseDateInput } from '@/lib/dates';
 import { betLabel, duplicateDutchDraft, dutchSummary, editDutchDraft, groupRows, type GroupOutcome } from '@/lib/dutch';
 import { duplicateForm } from '@/lib/form';
-import { formatBRL, formatOdds, oddsFromText, parseNumber, profit } from '@/lib/money';
+import { formatMoney, formatOdds, MONEY_SYMBOL, oddsFromText, parseNumber, profit, type MoneyScope } from '@/lib/money';
 import { RESULT_LABEL, RESULTS, type Bet, type BetInput, type Leg, type Result } from '@/lib/types';
 import type { Field } from '@/lib/autocomplete';
 import { useApp } from './AppProvider';
@@ -24,9 +24,9 @@ const QUICK_RESULTS: { r: Result; key: string; cls: string }[] = [
   { r: 'void', key: 'V', cls: 'hover:bg-zinc-600/40 text-zinc-300' },
 ];
 
-export function ProfitText({ value, pending, big }: { value: number; pending?: boolean; big?: boolean }) {
+export function ProfitText({ value, pending, big, money = 'real' }: { value: number; pending?: boolean; big?: boolean; money?: MoneyScope }) {
   if (pending) return <span className="text-zinc-500">-</span>;
-  return <span className={`${value > 0 ? 'text-emerald-400' : value < 0 ? 'text-red-400' : 'text-zinc-400'} ${big ? 'text-base font-bold' : ''}`}>{formatBRL(value, true)}</span>;
+  return <span className={`${value > 0 ? 'text-emerald-400' : value < 0 ? 'text-red-400' : 'text-zinc-400'} ${big ? 'text-base font-bold' : ''}`}>{formatMoney(value, money, true)}</span>;
 }
 
 /** ✓ / ✕ / ½ / – / … next to a result, so it reads without colour (BT-13). */
@@ -137,6 +137,10 @@ export function BetTable({ bets, limit, empty = 'No bets yet. Type one in the qu
   );
 }
 
+/** Hypothetical money (H$): violet, so it never reads as real money (BT-14). */
+const HYPO = 'text-violet-300';
+const HYPO_TITLE = 'Hypothetical dollars: not real money, never counted with R$';
+
 /** The actions column: pinned to the right edge with the card's background. */
 const STICKY = 'sticky right-0 z-[1] bg-zinc-950 shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.8)]';
 /** Second line of a merged cell (game date, sport, situation). */
@@ -208,13 +212,14 @@ function DutchRow({ bets, dutchId, expanded, toggle, settle }: { bets: Bet[]; du
   const { removeDutch, openDutch } = useApp();
   const s = dutchSummary(bets);
   const tone = groupTone(s.outcome);
+  const money = bets[0]!.money;
   const names = bets.map(betLabel).join(' / ');
   const books = [...new Set(bets.map((b) => b.book).filter(Boolean))].join(', ');
   const placed = bets.map((b) => b.placedDate).sort()[0]!;
   const game = bets.map((b) => b.gameDate).sort()[0]!;
   const cell = 'px-1.5 py-1.5 text-zinc-200';
   return (
-    <tr className={`border-b border-zinc-900 hover:bg-zinc-900/60 ${TONE_TINT[tone] || 'bg-indigo-500/5'}`} data-testid="dutch-row" data-dutch-id={dutchId} data-tone={tone}>
+    <tr className={`border-b border-zinc-900 hover:bg-zinc-900/60 ${TONE_TINT[tone] || 'bg-indigo-500/5'}`} data-testid="dutch-row" data-dutch-id={dutchId} data-tone={tone} data-money={money}>
       <td className={`px-1 ${TONE_EDGE[tone]}`}>
         <button className="text-zinc-400 hover:text-white" aria-label={expanded ? 'Hide bets' : 'Show bets'} aria-expanded={expanded} onClick={toggle}>
           {expanded ? '▾' : '▸'}
@@ -240,7 +245,7 @@ function DutchRow({ bets, dutchId, expanded, toggle, settle }: { bets: Bet[]; du
         </div>
       </td>
       <td className={`${cell} whitespace-nowrap text-right tabular-nums`} data-testid="dutch-stake">
-        {formatBRL(s.stake)}
+        <span className={money === 'hypothetical' ? HYPO : ''}>{formatMoney(s.stake, money)}</span>
       </td>
       <td className={`${cell} whitespace-nowrap text-right tabular-nums`} data-testid="dutch-odds" title="Combined odds: 1 / Σ(1/odds)">
         {formatOdds(s.combinedOdds)}
@@ -250,7 +255,7 @@ function DutchRow({ bets, dutchId, expanded, toggle, settle }: { bets: Bet[]; du
         <div className={SUB}>{capitalize(shared(bets, (b) => b.situation))}</div>
       </td>
       <td className="whitespace-nowrap px-1.5 py-1.5 text-right tabular-nums" data-testid="profit">
-        <ProfitText value={s.profit} pending={s.outcome === 'pending'} big />
+        <ProfitText value={s.profit} pending={s.outcome === 'pending'} big money={money} />
       </td>
       <td className="whitespace-nowrap px-1.5 py-1.5">
         <span className="inline-flex flex-col items-start gap-0.5">
@@ -284,7 +289,7 @@ function DutchRow({ bets, dutchId, expanded, toggle, settle }: { bets: Bet[]; du
                 icon: '🗑',
                 danger: true,
                 onClick: () => {
-                  if (window.confirm(`Delete this dutch and its ${bets.length} bets (${formatBRL(s.stake)} in all: ${names})? This cannot be undone.`)) void removeDutch(dutchId);
+                  if (window.confirm(`Delete this dutch and its ${bets.length} bets (${formatMoney(s.stake, money)} in all: ${names})? This cannot be undone.`)) void removeDutch(dutchId);
                 },
               },
             ]}
@@ -302,7 +307,7 @@ function BetRow({ b, expanded, toggle, nested }: { b: Bet; expanded: boolean; to
 
   const settle = (r: Result) => {
     if (r === 'cash-out') {
-      const a = window.prompt('Cash-out amount returned (R$):');
+      const a = window.prompt(`Cash-out amount returned (${MONEY_SYMBOL[b.money]}):`);
       const amount = a == null ? null : parseNumber(a);
       if (amount == null) return;
       void save({ result: r, cashout: amount });
@@ -316,7 +321,7 @@ function BetRow({ b, expanded, toggle, nested }: { b: Bet; expanded: boolean; to
   const betDisplay = b.betText || (nested ? b.legs[0]?.selection : undefined);
   return (
     <>
-      <tr className={`border-b border-zinc-900 hover:bg-zinc-900/60 ${TONE_TINT[tone] || (nested ? 'bg-zinc-950' : '')}`} data-testid="bet-row" data-bet-id={b.id} data-nested={nested || undefined} data-tone={tone}>
+      <tr className={`border-b border-zinc-900 hover:bg-zinc-900/60 ${TONE_TINT[tone] || (nested ? 'bg-zinc-950' : '')}`} data-testid="bet-row" data-bet-id={b.id} data-nested={nested || undefined} data-tone={tone} data-money={b.money}>
         <td className={`px-1 ${TONE_EDGE[tone]} ${nested ? 'pl-3' : ''}`}>
           {!solo && b.legs.length > 0 && (
             <button className="text-zinc-400 hover:text-white" aria-label={expanded ? 'Hide legs' : 'Show legs'} aria-expanded={expanded} onClick={toggle}>
@@ -352,7 +357,7 @@ function BetRow({ b, expanded, toggle, nested }: { b: Bet; expanded: boolean; to
           )}
         </td>
         <Cell kind="text" truncate="max-w-24" field="book" value={b.book} label="Book" onSave={(v) => save({ book: v })} />
-        <Cell kind="number" value={String(b.stake)} display={formatBRL(b.stake)} label="Stake" onSave={(v) => save({ stake: parseNumber(v) ?? b.stake })} right />
+        <Cell kind="number" value={String(b.stake)} display={formatMoney(b.stake, b.money)} extraClass={b.money === 'hypothetical' ? HYPO : undefined} title={b.money === 'hypothetical' ? HYPO_TITLE : undefined} label="Stake" onSave={(v) => save({ stake: parseNumber(v) ?? b.stake })} right />
         <Cell kind="odds" value={formatOdds(b.odds)} label="Odds" onSave={(v) => save({ odds: oddsFromText(v) ?? b.odds })} right />
         <td className="whitespace-nowrap px-1.5 py-1.5">
           <Cell bare kind="select" options={['solo', 'combination']} labels={{ solo: 'Solo', combination: 'Combo' }} value={b.type} label="Type" onSave={(v) => save({ type: v as Bet['type'] })} />
@@ -361,7 +366,7 @@ function BetRow({ b, expanded, toggle, nested }: { b: Bet; expanded: boolean; to
           </div>
         </td>
         <td className="whitespace-nowrap px-1.5 py-1.5 text-right tabular-nums" data-testid="profit">
-          <ProfitText value={profit(b)} pending={b.result === 'pending'} />
+          <ProfitText value={profit(b)} pending={b.result === 'pending'} money={b.money} />
         </td>
         <td className="whitespace-nowrap px-1.5 py-1.5">
           <span className="inline-flex items-center gap-1.5">
@@ -389,7 +394,7 @@ function BetRow({ b, expanded, toggle, nested }: { b: Bet; expanded: boolean; to
                   icon: '🗑',
                   danger: true,
                   onClick: () => {
-                    if (window.confirm(`Delete this bet (${formatBRL(b.stake)} @${formatOdds(b.odds)} ${betDisplay ?? ''})? This cannot be undone.`)) void remove(b.id);
+                    if (window.confirm(`Delete this bet (${formatMoney(b.stake, b.money)} @${formatOdds(b.odds)} ${betDisplay ?? ''})? This cannot be undone.`)) void remove(b.id);
                   },
                 },
               ]}
@@ -458,7 +463,7 @@ function ResultCell({ bet, onPick }: { bet: Bet; onPick(r: Result): void }) {
   return (
     <button className={`rounded px-2 py-0.5 text-xs font-medium ${TONE_BADGE[betTone(bet)]}`} onClick={() => setEditing(true)} title="Change result" data-testid="result">
       {RESULT_LABEL[bet.result]}
-      {bet.result === 'cash-out' && bet.cashout != null ? ` ${formatBRL(bet.cashout)}` : ''}
+      {bet.result === 'cash-out' && bet.cashout != null ? ` ${formatMoney(bet.cashout, bet.money)}` : ''}
     </button>
   );
 }
@@ -473,6 +478,9 @@ type CellProps = {
   bare?: boolean;
   /** Max-width class: the text is cut with "…" and shown in full on hover. */
   truncate?: string;
+  /** Extra classes and tooltip on the shown value (H$ stakes, BT-14). */
+  extraClass?: string;
+  title?: string;
 } & (
   | { kind: 'text'; field: Field; sport?: string }
   | { kind: 'number' }
@@ -517,8 +525,8 @@ function Cell(props: CellProps) {
         role="button"
         tabIndex={0}
         aria-label={`Edit ${props.label}`}
-        title={props.truncate && shown ? shown : undefined}
-        className={`-mx-1 block min-h-4 cursor-text rounded px-1 hover:bg-zinc-800 ${props.bare ? '' : 'text-zinc-200'} ${props.truncate ? `${props.truncate} truncate` : ''}`}
+        title={props.title ?? (props.truncate && shown ? shown : undefined)}
+        className={`-mx-1 block min-h-4 cursor-text rounded px-1 hover:bg-zinc-800 ${props.bare ? '' : 'text-zinc-200'} ${props.truncate ? `${props.truncate} truncate` : ''} ${props.extraClass ?? ''}`}
         onClick={start}
         onKeyDown={(e) => e.key === 'Enter' && start()}
       >

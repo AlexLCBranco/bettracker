@@ -932,3 +932,65 @@ test('BT-12: edit a logged dutch: change odds and stake, add a split, remove a s
     await expect(page.locator(`[data-dutch-id="${d}"]`).getByTestId('dutch-stake')).toHaveText('R$ 80,00');
   }
 });
+
+test('BT-14: hypothetical money (H$): quick-add and full form, never in Real totals, Hypothetical / Both switch, History filter', async ({ page, request, tag }) => {
+  const real = await createBet(request, { betText: `${tag} real`, stake: 100, odds: 2, result: 'won' });
+  const hypo = await createBet(request, { betText: `${tag} hypo`, stake: 1000, odds: 3, result: 'won', money: 'hypothetical' });
+  expect(hypo.money).toBe('hypothetical');
+
+  // quick-add "H$50" saves hypothetical money
+  await page.goto('/history');
+  await page.getByTestId('quick-add').fill(`H$50 @2 ${tag} quick`);
+  await page.getByTestId('quick-add').press('Enter');
+  await expect(page.getByRole('status')).toContainText('Saved: H$ 50,00');
+  await expect.poll(async () => (await betsTagged(request, tag)).find((b) => b.betText.endsWith('quick'))?.money).toBe('hypothetical');
+
+  // full form: pick Hypothetical
+  await page.getByRole('button', { name: 'Full form' }).click();
+  const dialog = page.getByRole('dialog', { name: 'New bet' });
+  await dialog.getByLabel('Money').selectOption('hypothetical');
+  await expect(dialog.getByText('Stake (H$) *')).toBeVisible();
+  await dialog.getByLabel('Stake').fill('20');
+  await dialog.getByLabel('Odds').fill('2');
+  await expect(dialog.getByTestId('potential-return')).toHaveText('H$ 40,00');
+  await dialog.getByLabel('Bet text').fill(`${tag} form`);
+  await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect.poll(async () => (await betsTagged(request, tag)).find((b) => b.betText.endsWith('form'))?.money).toBe('hypothetical');
+
+  // History: H$ in the stake cell; the Money filter
+  await page.getByLabel('Search bets').fill(tag);
+  await expect(page.locator(`[data-bet-id="${hypo.id}"]`).getByRole('button', { name: 'Edit Stake' })).toHaveText('H$ 1.000,00');
+  await expect(page.locator(`[data-bet-id="${hypo.id}"]`).getByTestId('profit')).toHaveText('+H$ 2.000,00');
+  await page.getByLabel('Filter money').selectOption('hypothetical');
+  await expect(page.locator(`[data-bet-id="${real.id}"]`)).toHaveCount(0);
+  await expect(page.locator('[data-money="hypothetical"]').filter({ hasText: tag })).toHaveCount(3);
+  await expect(page.getByTestId('history-summary')).toContainText('+H$ 2.000,00');
+  await page.getByLabel('Filter money').selectOption('real');
+  await expect(page.getByTestId('history-summary')).toContainText('1 of');
+  await expect(page.getByTestId('history-summary')).toContainText('+R$ 100,00');
+
+  // dashboard: Real by default never counts H$; Hypothetical / Both switch the totals (remembered)
+  await page.goto('/');
+  const net = page.getByTestId('stat-net-value');
+  await expect(page.getByRole('radio', { name: 'Real R$' })).toHaveAttribute('aria-checked', 'true');
+  await expect(net).toContainText('R$');
+  await expect(net).not.toContainText('H$');
+  await page.getByRole('radio', { name: 'Hypothetical H$' }).click();
+  await expect(net).toContainText('H$');
+  if (!LIVE) {
+    await expect(net).toHaveText('+H$ 2.000,00');
+    await expect(page.getByTestId('stat-wagered-value')).toHaveText('H$ 1.070,00');
+    await page.getByRole('radio', { name: 'Real R$' }).click();
+    await expect(net).toHaveText('+R$ 100,00');
+    await page.getByRole('radio', { name: 'Both' }).click();
+    await expect(net).toHaveText('+R$+H$ 2.100,00');
+  }
+  // Analytics shares the switch
+  await page.getByRole('radio', { name: 'Hypothetical H$' }).click();
+  await page.goto('/analytics');
+  await expect(page.getByRole('radio', { name: 'Hypothetical H$' })).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByTestId('cell-wagered').first()).toContainText('H$');
+  await page.getByRole('radio', { name: 'Real R$' }).click();
+  await expect(page.getByTestId('cell-wagered').first()).not.toContainText('H$');
+});

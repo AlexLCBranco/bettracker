@@ -34,6 +34,7 @@ const SCHEMA = [
     post_analysis TEXT NOT NULL DEFAULT '',
     bet_text TEXT NOT NULL DEFAULT '',
     dutch_id TEXT,
+    money TEXT NOT NULL DEFAULT 'real',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   )`,
@@ -67,6 +68,7 @@ async function migrate(c: Client): Promise<void> {
   await c.batch(SCHEMA, 'write');
   const cols = new Set((await c.execute('PRAGMA table_info(bets)')).rows.map((r) => String(r.name)));
   if (!cols.has('dutch_id')) await c.execute('ALTER TABLE bets ADD COLUMN dutch_id TEXT');
+  if (!cols.has('money')) await c.execute("ALTER TABLE bets ADD COLUMN money TEXT NOT NULL DEFAULT 'real'");
 }
 
 const s = (v: unknown) => (v == null ? '' : String(v));
@@ -89,6 +91,7 @@ function rowToBet(r: Row, legs: Leg[]): Bet {
     betText: s(r.bet_text),
     legs,
     dutchId: r.dutch_id == null || r.dutch_id === '' ? null : s(r.dutch_id),
+    money: r.money === 'hypothetical' ? 'hypothetical' : 'real',
     createdAt: s(r.created_at),
     updatedAt: s(r.updated_at),
   };
@@ -135,9 +138,9 @@ function writeStatements(bet: Bet): InStatement[] {
   return [
     {
       sql: `INSERT OR REPLACE INTO bets (id, book, placed_date, game_date, type, situation, stake, odds, result, cashout,
-            pre_analysis, post_analysis, bet_text, dutch_id, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+            pre_analysis, post_analysis, bet_text, dutch_id, money, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       args: [bet.id, bet.book, bet.placedDate, bet.gameDate, bet.type, bet.situation, bet.stake, bet.odds, bet.result, bet.cashout,
-        bet.preAnalysis, bet.postAnalysis, bet.betText, bet.dutchId, bet.createdAt, bet.updatedAt],
+        bet.preAnalysis, bet.postAnalysis, bet.betText, bet.dutchId, bet.money, bet.createdAt, bet.updatedAt],
     },
     { sql: 'DELETE FROM legs WHERE bet_id = ?', args: [bet.id] },
     ...bet.legs.map((l, i) => ({
@@ -167,7 +170,7 @@ export async function createBets(inputs: BetInput[]): Promise<Bet[]> {
 
 const COLUMNS = {
   book: 'book', placedDate: 'placed_date', gameDate: 'game_date', type: 'type', situation: 'situation', stake: 'stake',
-  odds: 'odds', result: 'result', cashout: 'cashout', preAnalysis: 'pre_analysis', postAnalysis: 'post_analysis', betText: 'bet_text', dutchId: 'dutch_id',
+  odds: 'odds', result: 'result', cashout: 'cashout', preAnalysis: 'pre_analysis', postAnalysis: 'post_analysis', betText: 'bet_text', dutchId: 'dutch_id', money: 'money',
 } as const satisfies Partial<Record<keyof Bet, string>>;
 
 const sameLegs = (a: BetInput['legs'], b: Leg[]) =>

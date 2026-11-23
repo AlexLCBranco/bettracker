@@ -8,7 +8,7 @@ import { DateField } from '@/components/BetFormModal';
 import { DataTransfer } from '@/components/DataTransfer';
 import { parseDateInput } from '@/lib/dates';
 import { filterBets, NO_FILTERS, type Filters } from '@/lib/filters';
-import { formatBRL } from '@/lib/money';
+import { formatMoney } from '@/lib/money';
 import { formatPercent, summarize } from '@/lib/stats';
 import { RESULT_LABEL, RESULTS } from '@/lib/types';
 
@@ -31,7 +31,7 @@ export default function HistoryPage() {
         <h1 className="text-2xl font-bold">History</h1>
         <DataTransfer />
       </div>
-      <div className="card grid grid-cols-2 gap-3 p-4 md:grid-cols-4 xl:grid-cols-9">
+      <div className="card grid grid-cols-2 gap-3 p-4 md:grid-cols-4 xl:grid-cols-10">
         <F label="From (bet date)">
           <DateField value={fromText} onChange={setFromText} aria-label="From date" />
         </F>
@@ -69,6 +69,13 @@ export default function HistoryPage() {
             ))}
           </select>
         </F>
+        <F label="Money">
+          <select className="field" value={f.money} onChange={(e) => set('money', e.target.value as Filters['money'])} aria-label="Filter money">
+            <option value="">Both</option>
+            <option value="real">Real R$</option>
+            <option value="hypothetical">Hypothetical H$</option>
+          </select>
+        </F>
         <F label="Search">
           <input className="field" value={f.text} onChange={(e) => set('text', e.target.value)} placeholder="bet, game, selection" aria-label="Search bets" />
         </F>
@@ -88,7 +95,7 @@ export default function HistoryPage() {
       </div>
 
       <p className="text-sm text-zinc-400" data-testid="history-summary">
-        {s.betCount} of {all.betCount} bets · net <span className={s.netProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}>{formatBRL(s.netProfit, true)}</span> · ROI {formatPercent(s.roi, true)} · win rate {formatPercent(s.winRate)} ({s.wins}W/{s.losses}L)
+        {s.betCount} of {all.betCount} bets · net <span className={s.netProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}>{formatMoney(s.netProfit, f.money || (shown.some((b) => b.money === 'hypothetical') ? (shown.some((b) => b.money === 'real') ? 'both' : 'hypothetical') : 'real'), true)}</span> · ROI {formatPercent(s.roi, true)} · win rate {formatPercent(s.winRate)} ({s.wins}W/{s.losses}L)
       </p>
 
       <section className="card p-3">{loaded ? <BetTable bets={shown} empty={bets.length ? 'No bets match these filters.' : undefined} /> : <p className="py-10 text-center text-sm text-zinc-500">Loading…</p>}</section>

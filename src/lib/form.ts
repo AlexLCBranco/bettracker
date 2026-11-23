@@ -2,7 +2,7 @@
 
 import { formatDate, parseDateInput, todayISO } from './dates';
 import { formatOdds, oddsFromText, parseNumber } from './money';
-import type { Bet, BetType, Result, Situation } from './types';
+import type { Bet, BetType, Money, Result, Situation } from './types';
 import { validateBet, type Validated } from './validate';
 
 export interface LegForm {
@@ -35,6 +35,8 @@ export interface BetForm {
   postAnalysis: string;
   /** Combination legs. */
   legs: LegForm[];
+  /** Real (R$) or hypothetical (H$) money (BT-14). */
+  money: Money;
 }
 
 export const emptyLeg = (sport = ''): LegForm => ({ sport, game: '', market: '', selection: '', odds: '', result: 'pending' });
@@ -44,6 +46,7 @@ export interface Defaults {
   sport: string;
   situation: Situation;
   type: BetType;
+  money?: Money;
 }
 
 export function newForm(defaults: Defaults, today = todayISO()): BetForm {
@@ -65,6 +68,7 @@ export function newForm(defaults: Defaults, today = todayISO()): BetForm {
     preAnalysis: '',
     postAnalysis: '',
     legs: [],
+    money: defaults.money ?? 'real',
   };
 }
 
@@ -88,6 +92,7 @@ export function formFromBet(b: Bet): BetForm {
     preAnalysis: b.preAnalysis,
     postAnalysis: b.postAnalysis,
     legs: b.type === 'combination' ? b.legs.map((l) => ({ sport: l.sport, game: l.game, market: l.market, selection: l.selection, odds: formatOdds(l.odds), result: l.result })) : [],
+    money: b.money,
   };
 }
 
@@ -158,5 +163,6 @@ export function formToBet(f: BetForm, today = todayISO()): Validated {
     postAnalysis: f.postAnalysis,
     betText: f.betText,
     legs,
+    money: f.money,
   });
 }

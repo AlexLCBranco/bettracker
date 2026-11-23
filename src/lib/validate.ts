@@ -1,7 +1,7 @@
 // Checks and normalizes a bet coming from a client (create, update, import). Shared by server and form.
 
 import { isValidISODate } from './dates';
-import { BET_TYPES, RESULTS, SITUATIONS, type BetInput, type Leg, type Result } from './types';
+import { BET_TYPES, MONEY, RESULTS, SITUATIONS, type BetInput, type Leg, type Money, type Result } from './types';
 
 export type Validated = { ok: true; value: BetInput } | { ok: false; error: string };
 
@@ -21,6 +21,8 @@ export function validateBet(raw: unknown): Validated {
   if (!BET_TYPES.includes(type)) return { ok: false, error: 'Type must be solo or combination' };
   const situation = (r.situation ?? 'pregame') as BetInput['situation'];
   if (!SITUATIONS.includes(situation)) return { ok: false, error: 'Situation must be pregame or live' };
+  const money = (r.money ?? 'real') as Money;
+  if (!MONEY.includes(money)) return { ok: false, error: 'Money must be real or hypothetical' };
   const placedDate = str(r.placedDate);
   const gameDate = str(r.gameDate) || placedDate;
   if (!isValidISODate(placedDate)) return { ok: false, error: 'Placed date must be a valid date' };
@@ -74,6 +76,7 @@ export function validateBet(raw: unknown): Validated {
       betText: str(r.betText),
       legs,
       dutchId,
+      money,
     },
   };
 }

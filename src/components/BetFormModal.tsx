@@ -3,10 +3,11 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { formatDate, parseDateInput } from '@/lib/dates';
 import { emptyLeg, formFromBet, formToBet, newForm, nextForm, type BetForm, type LegForm } from '@/lib/form';
-import { formatBRL, oddsFromText, parseNumber, potentialReturn } from '@/lib/money';
+import { formatMoney, MONEY_SYMBOL, oddsFromText, parseNumber, potentialReturn } from '@/lib/money';
 import { BET_TYPES, RESULT_LABEL, RESULTS, SITUATIONS, type Bet } from '@/lib/types';
 import { useApp } from './AppProvider';
 import { Autocomplete } from './Autocomplete';
+import { MoneySelect } from './Money';
 import { OddsInput } from './OddsInput';
 
 /** The full bet form, as a modal. New bets, edits and duplicates. */
@@ -91,7 +92,7 @@ function FormBody() {
         </div>
 
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <L label="Stake (R$) *">
+          <L label={`Stake (${MONEY_SYMBOL[f.money]}) *`}>
             <input ref={stakeRef} className="field" inputMode="decimal" value={f.stake} onChange={(e) => set('stake', e.target.value)} aria-label="Stake" />
           </L>
           <L label="Total odds *">
@@ -114,7 +115,7 @@ function FormBody() {
             <div className="flex flex-col justify-end">
               <span className="text-xs text-zinc-500">Potential return</span>
               <span className="text-lg font-semibold text-emerald-400" data-testid="potential-return">
-                {formatBRL(potential)}
+                {formatMoney(potential, f.money)}
               </span>
             </div>
           )}
@@ -125,13 +126,16 @@ function FormBody() {
             <span className="text-zinc-500">Stakes:</span>
             {presets.map((p) => (
               <button key={p} type="button" tabIndex={-1} className="chip" onClick={() => set('stake', String(p))}>
-                {formatBRL(p)}
+                {formatMoney(p, f.money)}
               </button>
             ))}
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
+          <L label="Money">
+            <MoneySelect value={f.money} onChange={(m) => set('money', m)} />
+          </L>
           <L label="Book">
             <Autocomplete value={f.book} onChange={(v) => set('book', v)} getSuggestions={(q) => suggestFor('book', q)} aria-label="Book" />
           </L>
