@@ -25,6 +25,11 @@ export function validateBet(raw: unknown): Validated {
   const gameDate = str(r.gameDate) || placedDate;
   if (!isValidISODate(placedDate)) return { ok: false, error: 'Placed date must be a valid date' };
   if (!isValidISODate(gameDate)) return { ok: false, error: 'Game date must be a valid date' };
+  let dutchId: string | null = null;
+  if (r.dutchId != null && r.dutchId !== '') {
+    if (typeof r.dutchId !== 'string' || !/^[A-Za-z0-9_-]{1,100}$/.test(r.dutchId)) return { ok: false, error: 'Dutch id is not valid' };
+    dutchId = r.dutchId;
+  }
   let cashout: number | null = null;
   if (result === 'cash-out') {
     cashout = num(r.cashout);
@@ -68,6 +73,7 @@ export function validateBet(raw: unknown): Validated {
       postAnalysis: str(r.postAnalysis),
       betText: str(r.betText),
       legs,
+      dutchId,
     },
   };
 }

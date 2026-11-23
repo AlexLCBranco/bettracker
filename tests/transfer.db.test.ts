@@ -31,8 +31,10 @@ describe('export and import', () => {
     await db.createBet(input({ type: 'combination', odds: 6.2, result: 'lost', situation: 'live', preAnalysis: 'line 1\nline 2', legs: [{ selection: 'A', odds: 2, result: 'won' }, { selection: 'B', result: 'lost' }] }));
     await db.createBet(input({ type: 'combination', odds: 3, legs: [] }));
     await db.createBet(input({ result: 'cash-out', cashout: 72.5, gameDate: '2026-11-03' }));
+    await db.createBets([input({ dutchId: 'dutch-rt', odds: 2.5, legs: [{ selection: 'Home' }] }), input({ dutchId: 'dutch-rt', odds: 3.2, result: 'won', legs: [{ selection: 'Draw' }] })]);
     const before = await db.listBets();
-    expect(before).toHaveLength(4);
+    expect(before).toHaveLength(6);
+    expect(before.filter((b) => b.dutchId === 'dutch-rt')).toHaveLength(2);
 
     const file = JSON.parse(JSON.stringify(buildExport(before, '0.0.0'))) as unknown; // as written to and read from disk
     for (const b of before) await db.deleteBet(b.id);
@@ -40,7 +42,7 @@ describe('export and import', () => {
 
     const parsed = parseImport(file);
     if (!parsed.ok) throw new Error(parsed.error);
-    expect(await db.importBets(parsed.bets)).toEqual({ added: 4, skipped: 0 });
+    expect(await db.importBets(parsed.bets)).toEqual({ added: 6, skipped: 0 });
     expect(await db.listBets()).toEqual(before);
   });
 

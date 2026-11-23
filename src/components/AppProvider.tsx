@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { buildIndex, lastUsed, stakePresets, suggest, type Field, type SuggestIndex } from '@/lib/autocomplete';
+import type { DutchDraft } from '@/lib/dutch';
 import type { BetForm } from '@/lib/form';
 import { latestGate } from '@/lib/latest';
 import type { Bet, BetInput } from '@/lib/types';
@@ -13,6 +14,14 @@ interface AppCtx {
   loaded: boolean;
   loadError: string;
   create(input: BetInput): Promise<Bet>;
+  /** Creates several bets in one request (all or none). */
+  createMany(inputs: BetInput[]): Promise<Bet[]>;
+  /** Deletes every bet of a dutch. */
+  removeDutch(dutchId: string): Promise<void>;
+  /** The "log as bets" form for a dutch (from the Betting Tool, or Duplicate on a dutch). */
+  dutchForm: { draft: DutchDraft; key: number } | null;
+  openDutch(draft: DutchDraft): void;
+  closeDutch(): void;
   update(id: string, patch: Partial<BetInput>): Promise<Bet>;
   remove(id: string): Promise<void>;
   /** Sends a JSON export to the server (adds missing bets only), then reloads all bets. */
@@ -55,6 +64,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [form, setForm] = useState<FormRequest | null>(null);
+  const [dutchForm, setDutchForm] = useState<AppCtx['dutchForm']>(null);
   const [toast, setToast] = useState<AppCtx['toast']>(null);
   const betsRef = useRef(bets);
   const [updates] = useState(latestGate);
@@ -91,6 +101,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setBets((bs) => [bet, ...bs]);
     return bet;
   }, []);
+
+  const createMany = useCallback(async (inputs: BetInput[]) => {
+    const made = await api<Bet[]>('/api/bets', { method: 'POST', body: JSON.stringify(inputs) });
+    setBets((bs) => [...[...made].reverse(), ...bs]);
+    return made;
+  }, []);
+
+  const removeDutch = useCallback(
+    async (dutchId: string) => {
+      const before = betsRef.current;
+      setBets((bs) => bs.filter((b) => b.dutchId !== dutchId));
+      try {
+        await api(`/api/dutch/${dutchId}`, { method: 'DELETE' });
+      } catch (e) {
+        setBets(before);
+        notify((e as Error).message, 'error');
+      }
+    },
+    [notify],
+  );
 
   const update = useCallback(
     async (id: string, patch: Partial<BetInput>) => {
@@ -136,6 +166,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     loaded,
     loadError,
     create,
+    createMany,
+    removeDutch,
+    dutchForm,
+    openDutch: (draft) => setDutchForm({ draft, key: ++formKey.current }),
+    closeDutch: () => setDutchForm(null),
     update,
     remove,
     importExport,

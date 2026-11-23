@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-22
+- BT-4 — Dutch bets: log a dutch from the Betting Tool and track it as one group (v0.5.0)
+  The Betting Tool reads odds in any format (decimal, American, fractional, Hong Kong, Indonesian, Malay, probability) and logs a dutch as linked bets in one go; History and the dashboard show it as one expandable row, Settle settles it with a number key (0 none won, V void, Z undo), and counts and win rate treat it as one bet.
 - BT-3 — Export and import (v0.4.0)
   History has Export JSON (everything, as a backup), Export CSV (one row per bet) and Import JSON, which adds the bets from an export that are not already there and never changes existing ones.
 - BT-2 — Betting Tool: dutching calculator (v0.3.0)

@@ -4,10 +4,12 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useMemo, type ReactNode } from 'react';
 import { todayISO } from '@/lib/dates';
+import { countBets } from '@/lib/dutch';
 import { settleQueue } from '@/lib/settle';
 import { BUILD_INFO } from '@/lib/build-info';
 import { AppProvider, useApp } from './AppProvider';
 import { BetFormModal } from './BetFormModal';
+import { DutchFormModal } from './DutchFormModal';
 import { QuickAdd } from './QuickAdd';
 
 export function Shell({ children }: { children: ReactNode }) {
@@ -34,14 +36,14 @@ const LINKS = [
 ];
 
 function Frame({ children }: { children: ReactNode }) {
-  const { bets, openNew, form, toast, loadError } = useApp();
+  const { bets, openNew, form, dutchForm, toast, loadError } = useApp();
   const path = usePathname();
   const due = useMemo(() => settleQueue(bets, todayISO()).length, [bets]);
-  const pending = useMemo(() => bets.filter((b) => b.result === 'pending').length, [bets]);
+  const pending = useMemo(() => countBets(bets).pending, [bets]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (form || isTyping(e) || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (form || dutchForm || isTyping(e) || e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.key === 'n' || e.key === 'N') {
         e.preventDefault();
         openNew();
@@ -49,7 +51,7 @@ function Frame({ children }: { children: ReactNode }) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [form, openNew]);
+  }, [form, dutchForm, openNew]);
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -80,6 +82,7 @@ function Frame({ children }: { children: ReactNode }) {
         {loadError ? <p className="rounded-md border border-red-800 bg-red-950 p-4 text-sm text-red-300">Could not load bets: {loadError}</p> : children}
       </main>
       <BetFormModal />
+      <DutchFormModal />
       {toast && (
         <div role="status" className={`fixed bottom-6 left-6 z-50 rounded-md border px-4 py-2 text-sm shadow-lg ${toast.kind === 'error' ? 'border-red-700 bg-red-950 text-red-200' : 'border-zinc-700 bg-zinc-900 text-zinc-100'}`}>
           {toast.text}

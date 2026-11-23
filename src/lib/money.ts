@@ -44,3 +44,110 @@ export function parseNumber(s: string): number | null {
   const n = Number(t);
   return Number.isFinite(n) ? n : null;
 }
+
+// Odds formats (Betting Tool only). Every format converts to decimal odds; bets store decimal odds only.
+
+export const ODDS_FORMATS = ['auto', 'decimal', 'american', 'fractional', 'hongkong', 'indonesian', 'malay', 'probability'] as const;
+export type OddsFormat = (typeof ODDS_FORMATS)[number];
+
+export const ODDS_FORMAT_LABEL: Record<OddsFormat, string> = {
+  auto: 'Auto',
+  decimal: 'Decimal',
+  american: 'American',
+  fractional: 'Fractional',
+  hongkong: 'Hong Kong',
+  indonesian: 'Indonesian',
+  malay: 'Malay',
+  probability: 'Probability %',
+};
+
+export interface ParsedOdds {
+  /** Unrounded decimal odds, always above 1. */
+  decimal: number;
+  /** The format it was read as, for display ("American", "Indonesian / Malay", ...). */
+  label: string;
+  /** True when the text was already plain decimal odds (nothing to show next to the box). */
+  plain: boolean;
+}
+
+const NUM = /^\d+(\.\d+)?$|^\.\d+$/;
+const toNum = (t: string): number | null => (NUM.test(t) ? Number(t) : null);
+
+/** "+220" → { sign: 1, abs: 220, signed: true }. Comma or dot decimals; spaces ignored. */
+function signed(t: string): { sign: 1 | -1; abs: number; explicit: boolean } | null {
+  const m = /^([+-]?)(.*)$/.exec(t)!;
+  const abs = toNum(m[2]!);
+  if (abs == null) return null;
+  return { sign: m[1] === '-' ? -1 : 1, abs, explicit: m[1] !== '' };
+}
+
+const american = (sign: 1 | -1, abs: number) => (sign > 0 ? 1 + abs / 100 : 1 + 100 / abs);
+/** Indonesian and Malay share one rule: positive x = 1 + x, negative x = 1 + 1/|x|. */
+const indoMalay = (sign: 1 | -1, abs: number) => (sign > 0 ? 1 + abs : 1 + 1 / abs);
+
+function fractional(t: string): number | null {
+  const parts = t.split('/');
+  if (parts.length === 1) {
+    const n = toNum(t);
+    return n == null ? null : 1 + n; // "2" as 2/1
+  }
+  if (parts.length !== 2) return null;
+  const a = toNum(parts[0]!);
+  const b = toNum(parts[1]!);
+  if (a == null || b == null || b === 0) return null;
+  return 1 + a / b;
+}
+
+function probability(t: string): number | null {
+  const p = toNum(t.endsWith('%') ? t.slice(0, -1) : t);
+  if (p == null || !(p > 0) || !(p < 100)) return null;
+  return 100 / p;
+}
+
+function read(t: string, format: OddsFormat): { decimal: number; label: string } | null {
+  const L = ODDS_FORMAT_LABEL;
+  switch (format) {
+    case 'auto': {
+      if (t.includes('/')) return wrap(fractional(t), L.fractional);
+      if (t.endsWith('%')) return wrap(probability(t), L.probability);
+      const s = signed(t);
+      if (!s) return null;
+      if (s.explicit) return s.abs >= 100 ? wrap(american(s.sign, s.abs), L.american) : wrap(indoMalay(s.sign, s.abs), 'Indonesian / Malay');
+      if (s.abs > 0 && s.abs <= 1) return wrap(1 + s.abs, 'Hong Kong / Malay');
+      return wrap(s.abs, L.decimal);
+    }
+    case 'decimal':
+      return wrap(toNum(t), L.decimal);
+    case 'american': {
+      const s = signed(t);
+      return s && s.abs > 0 ? wrap(american(s.sign, s.abs), L.american) : null;
+    }
+    case 'fractional':
+      return wrap(fractional(t), L.fractional);
+    case 'hongkong':
+      return wrap(toNum(t) == null ? null : 1 + toNum(t)!, L.hongkong);
+    case 'indonesian':
+    case 'malay': {
+      const s = signed(t);
+      return s && s.abs > 0 ? wrap(indoMalay(s.sign, s.abs), L[format]) : null;
+    }
+    case 'probability':
+      return wrap(probability(t), L.probability);
+  }
+}
+
+const wrap = (decimal: number | null, label: string) => (decimal == null ? null : { decimal, label });
+
+/**
+ * Reads odds typed in any format: decimal, American, fractional, Hong Kong, Indonesian, Malay or implied
+ * probability. `auto` guesses from the text (rules in FEATURE_BACKLOG BT-4 / BUILT.md); a picked format reads the
+ * text as that format only. Returns null for anything unreadable or that converts to 1 or less.
+ */
+export function parseOdds(text: string, format: OddsFormat = 'auto'): ParsedOdds | null {
+  const t = text.replace(/\s+/g, '').replace(/,/g, '.');
+  if (!t) return null;
+  const r = read(t, format);
+  if (!r || !Number.isFinite(r.decimal) || !(r.decimal > 1)) return null;
+  const plain = r.label === ODDS_FORMAT_LABEL.decimal && /^\d+(\.\d+)?$|^\.\d+$/.test(t);
+  return { ...r, plain };
+}

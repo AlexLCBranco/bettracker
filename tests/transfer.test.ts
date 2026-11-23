@@ -44,3 +44,23 @@ describe('toCSV', () => {
     expect(lines[2]).toContain(',pending,,,2,"two\nlines",');
   });
 });
+
+describe('dutch id in export and import', () => {
+  it('keeps the dutch id; old exports without one import as not a dutch', () => {
+    const r = parseImport(file([bet({ dutchId: 'grp-1' }), { ...bet(), dutchId: undefined }]));
+    if (!r.ok) throw new Error(r.error);
+    expect(r.bets.map((b) => b.input.dutchId)).toEqual(['grp-1', null]);
+  });
+
+  it('rejects a malformed dutch id', () => {
+    expect(parseImport(file([{ ...bet(), dutchId: 'no spaces allowed' }]))).toEqual({ ok: false, error: 'Bet 1: Dutch id is not valid' });
+  });
+
+  it('CSV has a dutch_id column at the end', () => {
+    const csv = toCSV([bet({ id: 'b1', dutchId: 'grp-1' }), bet({ id: 'b2' })]);
+    const lines = csv.slice(1).split('\r\n');
+    expect(lines[0]!.endsWith(',id,dutch_id')).toBe(true);
+    expect(lines[1]!.endsWith(',b1,grp-1')).toBe(true);
+    expect(lines[2]!.endsWith(',b2,')).toBe(true);
+  });
+});

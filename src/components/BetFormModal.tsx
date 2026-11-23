@@ -41,7 +41,8 @@ function FormBody() {
     setSaving(true);
     setError('');
     try {
-      if (editing) await update(editing.id, v.value);
+      // the form has no dutch field: an edited bet stays in its dutch
+      if (editing) await update(editing.id, { ...v.value, dutchId: editing.dutchId });
       else await create(v.value);
       notify(editing ? 'Bet updated' : 'Bet saved');
       if (another && !editing) {

@@ -1,6 +1,8 @@
 // Analytics page: performance broken down by one dimension at a time, and how combinations lose.
 // Pending bets count towards "bets" and "wagered"; profit, ROI and win rate use settled bets only (as on the Dashboard).
+// Money is bet by bet; counts (bets, pending, wins, losses) take a dutch as one bet (src/lib/dutch.ts).
 import { normalize } from './autocomplete';
+import { countBets } from './dutch';
 import { profit } from './money';
 import type { Bet, Leg, Result } from './types';
 
@@ -78,6 +80,7 @@ function groupOf(b: Bet, d: Dimension): { key: string; label: string } {
       return { key: label, label };
     }
     case 'type':
+      if (b.dutchId) return { key: 'dutch', label: 'Dutch' };
       return { key: b.type, label: b.type === 'solo' ? 'Solo' : 'Combination' };
     case 'situation':
       return { key: b.situation, label: b.situation === 'pregame' ? 'Pregame' : 'Live' };
@@ -90,32 +93,37 @@ function groupOf(b: Bet, d: Dimension): { key: string; label: string } {
  */
 export function breakdown(bets: Bet[], d: Dimension): Row[] {
   const rows = new Map<string, Row>();
+  const members = new Map<string, Bet[]>();
   for (const b of bets) {
     const g = groupOf(b, d);
     let r = rows.get(g.key);
     if (!r) {
       r = { key: g.key, label: g.label, bets: 0, pending: 0, wagered: 0, settledStake: 0, profit: 0, roi: null, wins: 0, losses: 0, winRate: null };
       rows.set(g.key, r);
+      members.set(g.key, []);
     }
-    r.bets++;
+    members.get(g.key)!.push(b);
     r.wagered += b.stake;
-    if (b.result === 'pending') {
-      r.pending++;
-      continue;
-    }
+    if (b.result === 'pending') continue;
     r.settledStake += b.stake;
     r.profit += profit(b);
-    if (b.result === 'won') r.wins++;
-    if (b.result === 'lost') r.losses++;
   }
-  const out = [...rows.values()].map((r) => ({
-    ...r,
-    wagered: round2(r.wagered),
-    settledStake: round2(r.settledStake),
-    profit: round2(r.profit),
-    roi: r.settledStake > 0 ? r.profit / r.settledStake : null,
-    winRate: r.wins + r.losses > 0 ? r.wins / (r.wins + r.losses) : null,
-  }));
+  // counts: a dutch is one bet within each row it has bets in (judged by those bets)
+  const out = [...rows.values()].map((r) => {
+    const c = countBets(members.get(r.key)!);
+    return {
+      ...r,
+      bets: c.count,
+      pending: c.pending,
+      wins: c.wins,
+      losses: c.losses,
+      wagered: round2(r.wagered),
+      settledStake: round2(r.settledStake),
+      profit: round2(r.profit),
+      roi: r.settledStake > 0 ? r.profit / r.settledStake : null,
+      winRate: c.wins + c.losses > 0 ? c.wins / (c.wins + c.losses) : null,
+    };
+  });
   if (d === 'odds') {
     const order = ODDS_RANGES.map((r) => r.label as string);
     return out.sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));

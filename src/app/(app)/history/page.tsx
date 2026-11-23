@@ -22,6 +22,7 @@ export default function HistoryPage() {
   const filters = { ...f, from: parseDateInput(fromText) ?? '', to: parseDateInput(toText) ?? '' };
   const shown = filterBets(bets, filters);
   const s = summarize(shown);
+  const all = summarize(bets);
   const active = JSON.stringify(f) !== JSON.stringify(NO_FILTERS) || fromText || toText;
 
   return (
@@ -48,6 +49,7 @@ export default function HistoryPage() {
             <option value="">All</option>
             <option value="solo">Solo</option>
             <option value="combination">Combination</option>
+            <option value="dutch">Dutch</option>
           </select>
         </F>
         <F label="Situation">
@@ -86,7 +88,7 @@ export default function HistoryPage() {
       </div>
 
       <p className="text-sm text-zinc-400" data-testid="history-summary">
-        {shown.length} of {bets.length} bets · net <span className={s.netProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}>{formatBRL(s.netProfit, true)}</span> · ROI {formatPercent(s.roi, true)} · win rate {formatPercent(s.winRate)} ({s.wins}W/{s.losses}L)
+        {s.betCount} of {all.betCount} bets · net <span className={s.netProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}>{formatBRL(s.netProfit, true)}</span> · ROI {formatPercent(s.roi, true)} · win rate {formatPercent(s.winRate)} ({s.wins}W/{s.losses}L)
       </p>
 
       <section className="card p-4">{loaded ? <BetTable bets={shown} empty={bets.length ? 'No bets match these filters.' : undefined} /> : <p className="py-10 text-center text-sm text-zinc-500">Loading…</p>}</section>

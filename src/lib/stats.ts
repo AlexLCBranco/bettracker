@@ -1,3 +1,4 @@
+import { countBets } from './dutch';
 import { profit } from './money';
 import type { Bet } from './types';
 
@@ -6,8 +7,9 @@ export interface Summary {
   /** Net profit / settled stake, as a fraction; null with no settled stake. */
   roi: number | null;
   totalWagered: number;
+  /** Bets, a dutch counted once. */
   betCount: number;
-  /** won / (won + lost); null when there are none. */
+  /** wins / (wins + losses), a dutch counted once (see countBets); null when there are none. */
   winRate: number | null;
   wins: number;
   losses: number;
@@ -22,27 +24,22 @@ export function summarize(bets: Bet[]): Summary {
   let netProfit = 0;
   let settledStake = 0;
   let totalWagered = 0;
-  let wins = 0;
-  let losses = 0;
-  let pendingCount = 0;
   let pendingAmount = 0;
   for (const b of bets) {
     totalWagered += b.stake;
     if (b.result === 'pending') {
-      pendingCount++;
       pendingAmount += b.stake;
       continue;
     }
     settledStake += b.stake;
     netProfit += profit(b);
-    if (b.result === 'won') wins++;
-    if (b.result === 'lost') losses++;
   }
+  const { count, pending: pendingCount, wins, losses } = countBets(bets);
   return {
     netProfit: round2(netProfit),
     roi: settledStake > 0 ? netProfit / settledStake : null,
     totalWagered: round2(totalWagered),
-    betCount: bets.length,
+    betCount: count,
     winRate: wins + losses > 0 ? wins / (wins + losses) : null,
     wins,
     losses,

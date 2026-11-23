@@ -1,14 +1,18 @@
 'use client';
 
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useApp } from '@/components/AppProvider';
+import { newDutchDraft } from '@/lib/dutch';
 import { dutch, type DutchError } from '@/lib/dutching';
-import { formatBRL, formatOdds, parseNumber } from '@/lib/money';
+import { formatBRL, formatOdds, ODDS_FORMAT_LABEL, ODDS_FORMATS, parseNumber, parseOdds, type OddsFormat } from '@/lib/money';
 import { formatPercent } from '@/lib/stats';
 
 interface Selection {
   id: number;
   name: string;
   odds: string;
+  /** How to read the odds text; "auto" guesses. Missing in calculations saved before formats existed. */
+  format?: OddsFormat;
 }
 interface ToolState {
   stake: string;
@@ -17,13 +21,13 @@ interface ToolState {
 }
 
 const STORAGE_KEY = 'bettracker.dutching';
-const blank = (id: number): Selection => ({ id, name: '', odds: '' });
+const blank = (id: number, format: OddsFormat = 'auto'): Selection => ({ id, name: '', odds: '', format });
 const INITIAL: ToolState = { stake: '100', step: 0.01, rows: [blank(1), blank(2), blank(3)] };
 
 const ERROR_TEXT: Record<DutchError, string> = {
   stake: 'Enter a total stake above zero.',
   'too-few': 'Enter odds for at least two selections.',
-  odds: 'Every odds value must be above 1.00.',
+  odds: 'Every odds value must be readable and above 1.00 as decimal odds.',
 };
 
 /** The last calculation, kept across visits in this browser. */
@@ -46,26 +50,36 @@ export default function BettingToolPage() {
 }
 
 function Tool() {
+  const { defaults, openDutch } = useApp();
   const [s, setS] = useState<ToolState>(loadSaved);
   useEffect(() => localStorage.setItem(STORAGE_KEY, JSON.stringify(s)), [s]);
 
   const setRow = (id: number, patch: Partial<Selection>) => setS((x) => ({ ...x, rows: x.rows.map((r) => (r.id === id ? { ...r, ...patch } : r)) }));
   const addRow = () => setS((x) => ({ ...x, rows: [...x.rows, blank(Math.max(0, ...x.rows.map((r) => r.id)) + 1)] }));
-  const removeRow = (id: number) => setS((x) => ({ ...x, rows: x.rows.length > 2 ? x.rows.filter((r) => r.id !== id) : x.rows.map((r) => (r.id === id ? blank(r.id) : r)) }));
+  const removeRow = (id: number) => setS((x) => ({ ...x, rows: x.rows.length > 2 ? x.rows.filter((r) => r.id !== id) : x.rows.map((r) => (r.id === id ? blank(r.id, r.format) : r)) }));
 
   // rows with nothing typed in the odds are left out; anything typed must be valid
   const used = s.rows.filter((r) => r.odds.trim() !== '');
-  const oddsValues = used.map((r) => parseNumber(r.odds) ?? NaN);
+  const parsed = new Map(s.rows.map((r) => [r.id, parseOdds(r.odds, r.format ?? 'auto')]));
+  // unrounded decimal odds: the maths and the logged bets use these
+  const oddsValues = used.map((r) => parsed.get(r.id)?.decimal ?? NaN);
   const stake = parseNumber(s.stake) ?? NaN;
   const result = dutch(stake, oddsValues, s.step);
   const byId = new Map(used.map((r, i) => [r.id, i]));
   const ok = 'error' in result ? null : result;
 
+  const logAsBets = () => {
+    if (!ok) return;
+    openDutch(newDutchDraft(used.map((r, i) => ({ selection: r.name.trim() || `Selection ${s.rows.indexOf(r) + 1}`, odds: oddsValues[i]!, stake: ok.stakes[i]! })), defaults));
+  };
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Betting Tool</h1>
-        <p className="text-sm text-zinc-400">Dutching: split a total stake across several selections so every one returns the same amount.</p>
+        <p className="text-sm text-zinc-400">
+            Dutching: split a total stake across several selections so every one returns the same amount. Odds in any format: decimal, American (+220), fractional (5/2), Hong Kong, Indonesian, Malay or probability (40%).
+          </p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
@@ -83,20 +97,46 @@ function Tool() {
           </div>
 
           <div>
-            <div className="mb-1 grid grid-cols-[minmax(0,1fr)_7rem_2rem] gap-2 text-xs text-zinc-400">
+            <div className="mb-1 grid grid-cols-[minmax(0,1fr)_7rem_7.5rem_2rem] gap-2 text-xs text-zinc-400">
               <span>Selection</span>
               <span>Odds</span>
+              <span>Format</span>
             </div>
             <div className="space-y-2">
-              {s.rows.map((r, n) => (
-                <div key={r.id} className="grid grid-cols-[minmax(0,1fr)_7rem_2rem] gap-2" data-testid="dutch-input-row">
-                  <input className="field" value={r.name} placeholder={`Selection ${n + 1}`} onChange={(e) => setRow(r.id, { name: e.target.value })} aria-label={`Selection ${n + 1} name`} />
-                  <input className="field tabular-nums" inputMode="decimal" value={r.odds} placeholder="2.10" onChange={(e) => setRow(r.id, { odds: e.target.value })} aria-label={`Selection ${n + 1} odds`} />
-                  <button className="btn justify-center px-0 text-zinc-500" onClick={() => removeRow(r.id)} aria-label={`Remove selection ${n + 1}`} title={s.rows.length > 2 ? 'Remove' : 'Clear'}>
-                    ×
-                  </button>
-                </div>
-              ))}
+              {s.rows.map((r, n) => {
+                const p = parsed.get(r.id);
+                const typed = r.odds.trim() !== '';
+                return (
+                  <div key={r.id} data-testid="dutch-input-row">
+                    <div className="grid grid-cols-[minmax(0,1fr)_7rem_7.5rem_2rem] gap-2">
+                      <input className="field" value={r.name} placeholder={`Selection ${n + 1}`} onChange={(e) => setRow(r.id, { name: e.target.value })} aria-label={`Selection ${n + 1} name`} />
+                      <input
+                        className={`field tabular-nums ${typed && !p ? 'border-red-500' : ''}`}
+                        value={r.odds}
+                        placeholder="2.10"
+                        onChange={(e) => setRow(r.id, { odds: e.target.value })}
+                        aria-label={`Selection ${n + 1} odds`}
+                        aria-invalid={typed && !p}
+                      />
+                      <select className="field" value={r.format ?? 'auto'} onChange={(e) => setRow(r.id, { format: e.target.value as OddsFormat })} aria-label={`Selection ${n + 1} format`}>
+                        {ODDS_FORMATS.map((f) => (
+                          <option key={f} value={f}>
+                            {ODDS_FORMAT_LABEL[f]}
+                          </option>
+                        ))}
+                      </select>
+                      <button className="btn justify-center px-0 text-zinc-500" onClick={() => removeRow(r.id)} aria-label={`Remove selection ${n + 1}`} title={s.rows.length > 2 ? 'Remove' : 'Clear'}>
+                        ×
+                      </button>
+                    </div>
+                    {typed && (!p || !p.plain) && (
+                      <p className={`mt-0.5 pl-1 text-xs ${p ? 'text-zinc-400' : 'text-red-400'}`} data-testid="odds-converted">
+                        {p ? <>= {formatOdds(p.decimal)} decimal · {p.label}</> : 'Cannot read these odds'}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -106,6 +146,9 @@ function Tool() {
             </button>
             <button className="btn" onClick={() => setS({ ...INITIAL, stake: s.stake, step: s.step })}>
               Clear all
+            </button>
+            <button className="btn btn-primary ml-auto" disabled={!ok} onClick={logAsBets} title={ok ? 'Save one pending bet per selection, linked as one dutch' : 'Needs a valid calculation'}>
+              Log as bets
             </button>
           </div>
         </section>

@@ -49,13 +49,13 @@ export default function Dashboard() {
       <section className="card p-5">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="font-semibold">Bet History</h2>
-          {bets.length > RECENT && (
+          {s.betCount > RECENT && (
             <Link href="/history" className="text-sm text-emerald-400 hover:underline">
-              All {bets.length} bets →
+              All {s.betCount} bets →
             </Link>
           )}
         </div>
-        {loaded ? <BetTable bets={bets.slice(0, RECENT)} /> : <p className="py-10 text-center text-sm text-zinc-500">Loading…</p>}
+        {loaded ? <BetTable bets={bets} limit={RECENT} /> : <p className="py-10 text-center text-sm text-zinc-500">Loading…</p>}
       </section>
     </div>
   );

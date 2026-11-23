@@ -255,8 +255,10 @@ test('betting tool: dutching splits the stake so every selection returns the sam
 
   await page.getByLabel('Selection 3 odds').fill('1.5');
   await expect(page.getByRole('alert').filter({ hasText: 'you lose money whichever selection wins' })).toContainText('141.7%');
-  await page.getByLabel('Selection 3 odds').fill('1');
-  await expect(page.getByTestId('dutch-error')).toHaveText('Every odds value must be above 1.00.');
+  await page.getByLabel('Selection 3 odds').fill('100%'); // converts to 1.00: not valid
+  await expect(page.getByTestId('dutch-error')).toHaveText('Every odds value must be readable and above 1.00 as decimal odds.');
+  await expect(page.getByTestId('odds-converted')).toHaveText('Cannot read these odds');
+  await expect(page.getByRole('button', { name: 'Log as bets' })).toBeDisabled();
   await page.getByRole('button', { name: 'Remove selection 3' }).click();
   await expect(page.getByTestId('dutch-input-row')).toHaveCount(2);
 
@@ -306,4 +308,79 @@ test('export JSON and CSV, then import: restores a deleted bet exactly, leaves e
   await page.getByLabel('Import file').setInputFiles({ name: 'other.json', mimeType: 'application/json', buffer: Buffer.from('{"hello":1}') });
   await expect(page.getByRole('status')).toHaveText('Import failed: This is not a BetTracker export file');
   expect(await betsTagged(request, tag)).toHaveLength(2);
+});
+
+test('dutch: odds in any format, log as linked bets, one group row, settle with a number key, counted as one bet', async ({ page, request, tag }) => {
+  await page.goto('/betting-tool');
+  await page.getByLabel('Total stake').fill('100');
+  await page.getByLabel('Selection 1 name').fill('Home');
+  await page.getByLabel('Selection 1 odds').fill('+200'); // American = 3.00
+  await page.getByLabel('Selection 2 name').fill('Draw');
+  await page.getByLabel('Selection 2 odds').fill('25%'); // probability = 4.00
+  await page.getByLabel('Selection 3 name').fill('Away');
+  await page.getByLabel('Selection 3 odds').fill('2');
+  await page.getByLabel('Selection 3 format').selectOption({ label: 'Hong Kong' }); // HK 2 = 3.00
+  const hints = page.getByTestId('odds-converted');
+  await expect(hints).toHaveText(['= 3.00 decimal · American', '= 4.00 decimal · Probability %', '= 3.00 decimal · Hong Kong']);
+  await expect(page.getByTestId('dutch-odds-value')).toHaveText('1.09');
+
+  await page.getByRole('button', { name: 'Log as bets' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Log dutch' });
+  await dialog.getByLabel('Game', { exact: true }).fill(`${tag} game`);
+  await dialog.getByLabel('Placed date').fill('01/01/2000');
+  await dialog.getByLabel('Game date').fill('01/01/2000');
+  await dialog.getByLabel('Selection 1 book').fill(`${tag} BookA`);
+  await expect(dialog.getByLabel('Selection 2 book')).toHaveValue(`${tag} BookA`); // copied from the row above
+  await dialog.getByLabel('Selection 3 book').fill(`${tag} BookB`);
+  await dialog.getByRole('button', { name: 'Log 3 bets' }).click();
+  await expect(dialog).toBeHidden();
+
+  const logged = await betsTagged(request, tag);
+  expect(logged).toHaveLength(3);
+  expect(new Set(logged.map((b) => b.dutchId)).size).toBe(1);
+  expect(logged[0]!.dutchId).toBeTruthy();
+  const bySel = Object.fromEntries(logged.map((b) => [b.legs[0]!.selection, b]));
+  expect(Object.keys(bySel).sort()).toEqual(['Away', 'Draw', 'Home']);
+  expect([bySel.Home!.odds, bySel.Draw!.odds, bySel.Away!.odds]).toEqual([3, 4, 3]);
+  expect([bySel.Home!.book, bySel.Draw!.book, bySel.Away!.book]).toEqual([`${tag} BookA`, `${tag} BookA`, `${tag} BookB`]);
+  expect(Math.round(logged.reduce((s, b) => s + b.stake, 0) * 100)).toBe(10000);
+  expect(logged.every((b) => b.result === 'pending' && b.type === 'solo' && b.gameDate === '2000-01-01')).toBe(true);
+
+  // History: one group row that expands to its three bets
+  await page.goto('/history');
+  await page.getByLabel('Search bets').fill(tag);
+  const group = page.getByTestId('dutch-row');
+  await expect(group).toHaveCount(1);
+  await expect(group.getByTestId('dutch-stake')).toHaveText('R$ 100,00');
+  await expect(page.getByTestId('bet-row')).toHaveCount(0);
+  await group.getByRole('button', { name: 'Show bets' }).click();
+  await expect(page.locator('[data-testid=bet-row][data-nested]')).toHaveCount(3);
+  await expect(page.getByTestId('history-summary')).toContainText(/^1 of \d+ bets/);
+
+  // Settle: the dutch is one item; 2 = Draw won, the others lost; Z undoes the whole group
+  await page.goto('/settle');
+  const item = page.getByTestId('queue-row').filter({ hasText: `${tag} BookA` });
+  await expect(item).toHaveCount(1);
+  await expect(item.getByTestId('queue-dutch-bet')).toHaveCount(3);
+  await item.click();
+  await page.keyboard.press('2');
+  const results = async () => Object.fromEntries((await betsTagged(request, tag)).map((b) => [b.legs[0]!.selection, b.result]));
+  await expect.poll(results).toEqual({ Home: 'lost', Draw: 'won', Away: 'lost' });
+  await expect(item).toHaveCount(0);
+  await page.keyboard.press('z');
+  await expect.poll(results).toEqual({ Home: 'pending', Draw: 'pending', Away: 'pending' });
+  await expect(item).toHaveCount(1);
+  await item.click();
+  await page.keyboard.press('2');
+  await expect.poll(results).toEqual({ Home: 'lost', Draw: 'won', Away: 'lost' });
+
+  // Stats: one bet, one win, money bet by bet (Draw stake × 4 − 100)
+  const draw = (await betsTagged(request, tag)).find((b) => b.legs[0]!.selection === 'Draw')!;
+  const net = Math.round((draw.stake * 4 - 100) * 100) / 100;
+  await page.goto('/history');
+  await page.getByLabel('Search bets').fill(tag);
+  await expect(page.getByTestId('history-summary')).toContainText('1 of ');
+  await expect(page.getByTestId('history-summary')).toContainText('win rate 100.0% (1W/0L)');
+  await expect(page.getByTestId('history-summary')).toContainText(`+R$ ${net.toFixed(2).replace('.', ',')}`);
+  await expect(page.getByTestId('dutch-row').getByTestId('result')).toHaveText('Won');
 });

@@ -20,6 +20,9 @@ prototype at https://v0-gambling-app-nine.vercel.app/ (its layout and fields, no
 - Dates are local "YYYY-MM-DD" strings, never `Date` objects or UTC; shown as dd/mm/yyyy (`src/lib/dates.ts`).
 - Combination total odds are entered by the user; never multiply legs.
 - Profit per result: `src/lib/money.ts`. Win rate = won / (won + lost). ROI = net profit / settled stake.
+- A dutch (bets sharing a `dutchId`, `src/lib/dutch.ts`) counts as ONE bet in bet count, pending count, wins, losses
+  and win rate: a win when its net profit is above 0, a loss below 0, neither at exactly 0, pending while any of its
+  bets is pending. Money figures (net profit, ROI, wagered, pending amount) stay bet by bet.
   No settled bets → "-", never NaN.
 - No paid services. Quick-add parsing is rule-based (no AI).
 

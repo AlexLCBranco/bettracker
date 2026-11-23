@@ -2,6 +2,7 @@
 
 import { Fragment, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { formatDate, parseDateInput } from '@/lib/dates';
+import { duplicateDutchDraft, dutchSummary, groupRows, type GroupOutcome } from '@/lib/dutch';
 import { duplicateForm } from '@/lib/form';
 import { formatBRL, formatOdds, parseNumber, profit } from '@/lib/money';
 import { RESULT_LABEL, RESULTS, type Bet, type BetInput, type Leg, type Result } from '@/lib/types';
@@ -35,29 +36,22 @@ function legSummary(b: Bet, k: 'sport' | 'game') {
   return vals[0] ?? '';
 }
 
-export function BetTable({ bets, empty = 'No bets yet. Type one in the quick-add line above.' }: { bets: Bet[]; empty?: string }) {
-  const { update, remove, openEdit, openNew } = useApp();
+/**
+ * Bets as table rows, each cell editable inline. A dutch is one row (total stake, combined odds, net profit) that
+ * expands to its bets. `limit` caps the rows shown (a dutch counts as one row).
+ */
+export function BetTable({ bets, limit, empty = 'No bets yet. Type one in the quick-add line above.' }: { bets: Bet[]; limit?: number; empty?: string }) {
   const [open, setOpen] = useState<Set<string>>(new Set());
-  const toggle = (id: string) => setOpen((s) => {
-    const n = new Set(s);
-    if (n.has(id)) n.delete(id);
-    else n.add(id);
-    return n;
-  });
-
-  const save = (b: Bet, patch: Partial<BetInput>) => update(b.id, patch).catch(() => undefined);
-  const saveLeg = (b: Bet, i: number, patch: Partial<Leg>) => save(b, { legs: b.legs.map((l, j) => (j === i ? { ...l, ...patch } : l)) });
-
-  const settle = (b: Bet, r: Result) => {
-    if (r === 'cash-out') {
-      const a = window.prompt('Cash-out amount returned (R$):');
-      const amount = a == null ? null : parseNumber(a);
-      if (amount == null) return;
-      void save(b, { result: r, cashout: amount });
-    } else void save(b, { result: r, cashout: null });
-  };
+  const toggle = (id: string) =>
+    setOpen((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
 
   if (!bets.length) return <p className="py-10 text-center text-sm text-zinc-500">{empty}</p>;
+  const rows = groupRows(bets).slice(0, limit);
 
   return (
     <div className="overflow-x-auto">
@@ -81,88 +75,190 @@ export function BetTable({ bets, empty = 'No bets yet. Type one in the quick-add
           </tr>
         </thead>
         <tbody>
-          {bets.map((b) => {
-            const solo = b.type === 'solo';
-            const expanded = open.has(b.id);
+          {rows.map((r) => {
+            if (r.kind === 'bet') return <BetRow key={r.bet.id} b={r.bet} expanded={open.has(r.bet.id)} toggle={() => toggle(r.bet.id)} />;
+            const expanded = open.has(r.dutchId);
             return (
-              <Fragment key={b.id}>
-                <tr className="border-b border-zinc-900 hover:bg-zinc-900/60" data-testid="bet-row" data-bet-id={b.id}>
-                  <td className="px-1">
-                    {!solo && b.legs.length > 0 && (
-                      <button className="text-zinc-400 hover:text-white" aria-label={expanded ? 'Hide legs' : 'Show legs'} aria-expanded={expanded} onClick={() => toggle(b.id)}>
-                        {expanded ? '▾' : '▸'}
-                      </button>
-                    )}
-                  </td>
-                  <Cell kind="date" value={formatDate(b.placedDate)} label="Bet date" onSave={(v) => save(b, { placedDate: parseDateInput(v) ?? b.placedDate })} />
-                  <Cell kind="date" value={formatDate(b.gameDate)} label="Game date" onSave={(v) => save(b, { gameDate: parseDateInput(v) ?? b.gameDate })} />
-                  {solo ? (
-                    <>
-                      <Cell kind="text" field="sport" value={b.legs[0]?.sport ?? ''} label="Sport" onSave={(v) => saveLeg(b, 0, { sport: v })} />
-                      <Cell kind="text" field="game" sport={b.legs[0]?.sport} value={b.legs[0]?.game ?? ''} label="Game" onSave={(v) => saveLeg(b, 0, { game: v })} />
-                    </>
-                  ) : (
-                    <>
-                      <td className="px-2 py-1.5 text-zinc-300">{legSummary(b, 'sport')}</td>
-                      <td className="px-2 py-1.5 text-zinc-300">{legSummary(b, 'game') || <span className="text-zinc-600">Combination</span>}</td>
-                    </>
-                  )}
-                  <Cell kind="text" field="betText" value={b.betText} label="Bet" onSave={(v) => save(b, { betText: v })} wide />
-                  <Cell kind="text" field="book" value={b.book} label="Book" onSave={(v) => save(b, { book: v })} />
-                  <Cell kind="number" value={String(b.stake)} display={formatBRL(b.stake)} label="Stake" onSave={(v) => save(b, { stake: parseNumber(v) ?? b.stake })} right />
-                  <Cell kind="number" value={formatOdds(b.odds)} label="Odds" onSave={(v) => save(b, { odds: parseNumber(v) ?? b.odds })} right />
-                  <Cell kind="select" options={['solo', 'combination']} value={b.type} label="Type" onSave={(v) => save(b, { type: v as Bet['type'] })} />
-                  <Cell kind="select" options={['pregame', 'live']} value={b.situation} label="Situation" onSave={(v) => save(b, { situation: v as Bet['situation'] })} />
-                  <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums" data-testid="profit">
-                    <ProfitText value={profit(b)} pending={b.result === 'pending'} />
-                  </td>
-                  <td className="whitespace-nowrap px-2 py-1.5">
-                    <ResultCell bet={b} onPick={(r) => settle(b, r)} />
-                  </td>
-                  <td className="whitespace-nowrap px-2 py-1.5 text-right">
-                    <span className="inline-flex gap-0.5">
-                      {QUICK_RESULTS.map(({ r, key, cls }) => (
-                        <button key={r} className={`rounded px-1.5 py-0.5 text-xs font-semibold ${cls} ${b.result === r ? 'ring-1 ring-current' : ''}`} title={RESULT_LABEL[r]} aria-label={`Mark ${RESULT_LABEL[r]}`} onClick={() => settle(b, r)}>
-                          {key}
-                        </button>
-                      ))}
-                      <IconButton label="Duplicate" onClick={() => openNew(duplicateForm(b))}>⧉</IconButton>
-                      <IconButton label="Edit" onClick={() => openEdit(b)}>✎</IconButton>
-                      <IconButton
-                        label="Delete"
-                        onClick={() => {
-                          if (window.confirm(`Delete this bet (${formatBRL(b.stake)} @${formatOdds(b.odds)} ${b.betText})? This cannot be undone.`)) void remove(b.id);
-                        }}
-                      >
-                        🗑
-                      </IconButton>
-                    </span>
-                  </td>
-                </tr>
-                {expanded &&
-                  b.legs.map((l, i) => (
-                    <tr key={l.id} className="border-b border-zinc-900 bg-zinc-950 text-xs" data-testid="leg-row">
-                      <td />
-                      <td className="px-2 py-1 text-zinc-500" colSpan={2}>
-                        Leg {i + 1}
-                      </td>
-                      <Cell kind="text" field="sport" value={l.sport} label={`Leg ${i + 1} sport`} onSave={(v) => saveLeg(b, i, { sport: v })} />
-                      <Cell kind="text" field="game" sport={l.sport} value={l.game} label={`Leg ${i + 1} game`} onSave={(v) => saveLeg(b, i, { game: v })} />
-                      <Cell kind="text" field="selection" sport={l.sport} value={l.selection} label={`Leg ${i + 1} selection`} onSave={(v) => saveLeg(b, i, { selection: v })} />
-                      <Cell kind="text" field="market" sport={l.sport} value={l.market} label={`Leg ${i + 1} market`} onSave={(v) => saveLeg(b, i, { market: v })} />
-                      <td />
-                      <Cell kind="number" value={formatOdds(l.odds)} label={`Leg ${i + 1} odds`} onSave={(v) => saveLeg(b, i, { odds: v.trim() ? (parseNumber(v) ?? l.odds) : null })} right />
-                      <td colSpan={3} />
-                      <Cell kind="select" options={[...RESULTS]} labels={RESULT_LABEL} value={l.result} label={`Leg ${i + 1} result`} onSave={(v) => saveLeg(b, i, { result: v as Result })} />
-                      <td />
-                    </tr>
-                  ))}
+              <Fragment key={r.dutchId}>
+                <DutchRow bets={r.bets} dutchId={r.dutchId} expanded={expanded} toggle={() => toggle(r.dutchId)} />
+                {expanded && r.bets.map((b) => <BetRow key={b.id} b={b} expanded={open.has(b.id)} toggle={() => toggle(b.id)} nested />)}
               </Fragment>
             );
           })}
         </tbody>
       </table>
     </div>
+  );
+}
+
+const OUTCOME: Record<GroupOutcome, { label: string; cls: string }> = {
+  pending: { label: 'Pending', cls: resultClass('pending') },
+  won: { label: 'Won', cls: resultClass('won') },
+  lost: { label: 'Lost', cls: resultClass('lost') },
+  even: { label: 'Even', cls: resultClass('void') },
+};
+
+/** The dutch's bets' shared value for a field, "Mixed" when they differ, "" when none is set. */
+function shared(bets: Bet[], pick: (b: Bet) => string) {
+  const vals = [...new Set(bets.map(pick).filter(Boolean))];
+  return vals.length === 1 ? vals[0]! : vals.length > 1 ? 'Mixed' : '';
+}
+
+function DutchRow({ bets, dutchId, expanded, toggle }: { bets: Bet[]; dutchId: string; expanded: boolean; toggle(): void }) {
+  const { removeDutch, openDutch } = useApp();
+  const s = dutchSummary(bets);
+  const o = OUTCOME[s.outcome];
+  const names = bets.map((b) => b.legs[0]?.selection || b.betText || '?').join(' / ');
+  const books = [...new Set(bets.map((b) => b.book).filter(Boolean))].join(', ');
+  const placed = bets.map((b) => b.placedDate).sort()[0]!;
+  const game = bets.map((b) => b.gameDate).sort()[0]!;
+  const cell = 'px-2 py-1.5 text-zinc-200';
+  return (
+    <tr className="border-b border-zinc-900 bg-indigo-500/5 hover:bg-zinc-900/60" data-testid="dutch-row" data-dutch-id={dutchId}>
+      <td className="px-1">
+        <button className="text-zinc-400 hover:text-white" aria-label={expanded ? 'Hide bets' : 'Show bets'} aria-expanded={expanded} onClick={toggle}>
+          {expanded ? '▾' : '▸'}
+        </button>
+      </td>
+      <td className={cell}>{formatDate(placed)}</td>
+      <td className={cell}>{formatDate(game)}</td>
+      <td className={cell}>{shared(bets, (b) => b.legs[0]?.sport ?? '')}</td>
+      <td className={cell}>{shared(bets, (b) => b.legs[0]?.game ?? '')}</td>
+      <td className={`${cell} min-w-48`}>
+        <span className="mr-1.5 rounded bg-indigo-500/20 px-1.5 py-0.5 text-xs font-semibold text-indigo-300">Dutch</span>
+        {names}
+      </td>
+      <td className={cell}>{books}</td>
+      <td className={`${cell} whitespace-nowrap text-right tabular-nums`} data-testid="dutch-stake">
+        {formatBRL(s.stake)}
+      </td>
+      <td className={`${cell} whitespace-nowrap text-right tabular-nums`} data-testid="dutch-odds" title="Combined odds: 1 / Σ(1/odds)">
+        {formatOdds(s.combinedOdds)}
+      </td>
+      <td className={cell}>Dutch · {bets.length}</td>
+      <td className={cell}>{capitalize(shared(bets, (b) => b.situation))}</td>
+      <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums" data-testid="profit">
+        <ProfitText value={s.profit} pending={s.outcome === 'pending'} />
+      </td>
+      <td className="whitespace-nowrap px-2 py-1.5">
+        <span className={`rounded px-2 py-0.5 text-xs font-medium ${o.cls}`} data-testid="result">
+          {o.label}
+        </span>
+      </td>
+      <td className="whitespace-nowrap px-2 py-1.5 text-right">
+        <span className="inline-flex gap-0.5">
+          <IconButton label="Duplicate dutch" onClick={() => openDutch(duplicateDutchDraft(bets))}>
+            ⧉
+          </IconButton>
+          <IconButton
+            label="Delete dutch"
+            onClick={() => {
+              if (window.confirm(`Delete this dutch and its ${bets.length} bets (${formatBRL(s.stake)} in all: ${names})? This cannot be undone.`)) void removeDutch(dutchId);
+            }}
+          >
+            🗑
+          </IconButton>
+        </span>
+      </td>
+    </tr>
+  );
+}
+
+function BetRow({ b, expanded, toggle, nested }: { b: Bet; expanded: boolean; toggle(): void; nested?: boolean }) {
+  const { update, remove, openEdit, openNew } = useApp();
+  const save = (patch: Partial<BetInput>) => update(b.id, patch).catch(() => undefined);
+  const saveLeg = (i: number, patch: Partial<Leg>) => save({ legs: b.legs.map((l, j) => (j === i ? { ...l, ...patch } : l)) });
+
+  const settle = (r: Result) => {
+    if (r === 'cash-out') {
+      const a = window.prompt('Cash-out amount returned (R$):');
+      const amount = a == null ? null : parseNumber(a);
+      if (amount == null) return;
+      void save({ result: r, cashout: amount });
+    } else void save({ result: r, cashout: null });
+  };
+
+  const solo = b.type === 'solo';
+  // a dutch's bets are logged without bet text: show the selection instead
+  const betDisplay = b.betText || (nested ? b.legs[0]?.selection : undefined);
+  return (
+    <>
+      <tr className={`border-b border-zinc-900 hover:bg-zinc-900/60 ${nested ? 'bg-zinc-950' : ''}`} data-testid="bet-row" data-bet-id={b.id} data-nested={nested || undefined}>
+        <td className={`px-1 ${nested ? 'border-l-2 border-indigo-500/40' : ''}`}>
+          {!solo && b.legs.length > 0 && (
+            <button className="text-zinc-400 hover:text-white" aria-label={expanded ? 'Hide legs' : 'Show legs'} aria-expanded={expanded} onClick={toggle}>
+              {expanded ? '▾' : '▸'}
+            </button>
+          )}
+        </td>
+        <Cell kind="date" value={formatDate(b.placedDate)} label="Bet date" onSave={(v) => save({ placedDate: parseDateInput(v) ?? b.placedDate })} />
+        <Cell kind="date" value={formatDate(b.gameDate)} label="Game date" onSave={(v) => save({ gameDate: parseDateInput(v) ?? b.gameDate })} />
+        {solo ? (
+          <>
+            <Cell kind="text" field="sport" value={b.legs[0]?.sport ?? ''} label="Sport" onSave={(v) => saveLeg(0, { sport: v })} />
+            <Cell kind="text" field="game" sport={b.legs[0]?.sport} value={b.legs[0]?.game ?? ''} label="Game" onSave={(v) => saveLeg(0, { game: v })} />
+          </>
+        ) : (
+          <>
+            <td className="px-2 py-1.5 text-zinc-300">{legSummary(b, 'sport')}</td>
+            <td className="px-2 py-1.5 text-zinc-300">{legSummary(b, 'game') || <span className="text-zinc-600">Combination</span>}</td>
+          </>
+        )}
+        <Cell kind="text" field="betText" value={b.betText} display={betDisplay} label="Bet" onSave={(v) => save({ betText: v })} wide />
+        <Cell kind="text" field="book" value={b.book} label="Book" onSave={(v) => save({ book: v })} />
+        <Cell kind="number" value={String(b.stake)} display={formatBRL(b.stake)} label="Stake" onSave={(v) => save({ stake: parseNumber(v) ?? b.stake })} right />
+        <Cell kind="number" value={formatOdds(b.odds)} label="Odds" onSave={(v) => save({ odds: parseNumber(v) ?? b.odds })} right />
+        <Cell kind="select" options={['solo', 'combination']} value={b.type} label="Type" onSave={(v) => save({ type: v as Bet['type'] })} />
+        <Cell kind="select" options={['pregame', 'live']} value={b.situation} label="Situation" onSave={(v) => save({ situation: v as Bet['situation'] })} />
+        <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums" data-testid="profit">
+          <ProfitText value={profit(b)} pending={b.result === 'pending'} />
+        </td>
+        <td className="whitespace-nowrap px-2 py-1.5">
+          <ResultCell bet={b} onPick={(r) => settle(r)} />
+        </td>
+        <td className="whitespace-nowrap px-2 py-1.5 text-right">
+          <span className="inline-flex gap-0.5">
+            {QUICK_RESULTS.map(({ r, key, cls }) => (
+              <button key={r} className={`rounded px-1.5 py-0.5 text-xs font-semibold ${cls} ${b.result === r ? 'ring-1 ring-current' : ''}`} title={RESULT_LABEL[r]} aria-label={`Mark ${RESULT_LABEL[r]}`} onClick={() => settle(r)}>
+                {key}
+              </button>
+            ))}
+            <IconButton label="Duplicate" onClick={() => openNew(duplicateForm(b))}>
+              ⧉
+            </IconButton>
+            <IconButton label="Edit" onClick={() => openEdit(b)}>
+              ✎
+            </IconButton>
+            <IconButton
+              label="Delete"
+              onClick={() => {
+                if (window.confirm(`Delete this bet (${formatBRL(b.stake)} @${formatOdds(b.odds)} ${betDisplay ?? ''})? This cannot be undone.`)) void remove(b.id);
+              }}
+            >
+              🗑
+            </IconButton>
+          </span>
+        </td>
+      </tr>
+      {expanded &&
+        b.legs.map((l, i) => (
+          <tr key={l.id} className="border-b border-zinc-900 bg-zinc-950 text-xs" data-testid="leg-row">
+            <td />
+            <td className="px-2 py-1 text-zinc-500" colSpan={2}>
+              Leg {i + 1}
+            </td>
+            <Cell kind="text" field="sport" value={l.sport} label={`Leg ${i + 1} sport`} onSave={(v) => saveLeg(i, { sport: v })} />
+            <Cell kind="text" field="game" sport={l.sport} value={l.game} label={`Leg ${i + 1} game`} onSave={(v) => saveLeg(i, { game: v })} />
+            <Cell kind="text" field="selection" sport={l.sport} value={l.selection} label={`Leg ${i + 1} selection`} onSave={(v) => saveLeg(i, { selection: v })} />
+            <Cell kind="text" field="market" sport={l.sport} value={l.market} label={`Leg ${i + 1} market`} onSave={(v) => saveLeg(i, { market: v })} />
+            <td />
+            <Cell kind="number" value={formatOdds(l.odds)} label={`Leg ${i + 1} odds`} onSave={(v) => saveLeg(i, { odds: v.trim() ? (parseNumber(v) ?? l.odds) : null })} right />
+            <td colSpan={3} />
+            <Cell kind="select" options={[...RESULTS]} labels={RESULT_LABEL} value={l.result} label={`Leg ${i + 1} result`} onSave={(v) => saveLeg(i, { result: v as Result })} />
+            <td />
+          </tr>
+        ))}
+    </>
   );
 }
 

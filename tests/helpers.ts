@@ -23,8 +23,16 @@ export function bet(over: Partial<Bet> = {}): Bet {
     postAnalysis: '',
     betText: 'lakers ml',
     legs: [leg()],
+    dutchId: null,
     createdAt: '2026-11-20T12:00:00.000Z',
     updatedAt: '2026-11-20T12:00:00.000Z',
     ...over,
   };
+}
+
+/** The bets of one dutch: solo bets sharing a dutch id, logged one after another. */
+export function dutchBets(id: string, rows: Partial<Bet>[]): Bet[] {
+  return rows.map((over, i) =>
+    bet({ dutchId: id, betText: '', createdAt: `2026-11-20T12:00:00.00${i}Z`, legs: [leg({ selection: `Sel ${i + 1}`, odds: over.odds ?? 2 })], ...over }),
+  );
 }

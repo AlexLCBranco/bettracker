@@ -38,6 +38,8 @@ export interface Bet {
   betText: string;
   /** Solo: exactly 1. Combination: 0 (not entered) or 2+. */
   legs: Leg[];
+  /** Bets logged together as one dutch share this id (see src/lib/dutch.ts); null = not part of a dutch. */
+  dutchId: string | null;
   /** ISO timestamps, used for "most recent" ordering. */
   createdAt: string;
   updatedAt: string;
