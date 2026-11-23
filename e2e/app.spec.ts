@@ -680,3 +680,70 @@ test('log dutch: Game(s) and Market(s) as chips, picked per leg (owner example),
   // each bet: one game, two markets
   await expect(page.locator('[data-testid=bet-row][data-nested]').first().getByTestId('several-markets')).toHaveText('2 markets');
 });
+
+test('dutch row: one-click settle buttons in History (Pick W… one split, Undo, Shared ✕, Z), badge updates', async ({ page, request, tag }) => {
+  const dutchId = `${tag}-row`;
+  for (const own of ['McCain 25 pts', 'Mitchell 30 pts'])
+    await createBet(request, {
+      dutchId,
+      type: 'combination',
+      odds: 4,
+      stake: 50,
+      book: `${tag} Book`,
+      betText: `${tag} ${own} + Celtics W`,
+      legs: [
+        { selection: own, odds: 3.2 },
+        { selection: 'Celtics W', odds: 1.3 },
+      ],
+    });
+  const state = async () =>
+    Object.fromEntries((await betsTagged(request, tag)).map((b) => [b.betText.replace(`${tag} `, ''), [b.result, ...b.legs.map((l) => l.result)].join(' ')]));
+
+  await page.goto('/history');
+  await page.getByLabel('Search bets').fill(tag);
+  const row = page.getByTestId('dutch-row');
+  const badge = row.getByTestId('hit-count');
+  await expect(row.getByTestId('dutch-settle').getByRole('button')).toHaveText(['0 W', 'All W', 'Pick W…', 'Shared ✕', 'V']);
+
+  // Pick W… with two splits: one button per split, one click settles
+  await row.getByRole('button', { name: 'Dutch: pick winners' }).click();
+  await page.getByRole('dialog', { name: 'Which splits won' }).getByRole('button', { name: /Mitchell 30 pts \+ Celtics W won/ }).click();
+  await expect.poll(state).toEqual({ 'McCain 25 pts + Celtics W': 'lost pending pending', 'Mitchell 30 pts + Celtics W': 'won won won' });
+  await expect(badge).toHaveText('1/2');
+  await expect(row.getByTestId('dutch-settle')).toHaveCount(0); // settled: buttons hidden, Undo shown
+
+  await row.getByRole('button', { name: 'Undo' }).click();
+  await expect.poll(state).toEqual({ 'McCain 25 pts + Celtics W': 'pending pending pending', 'Mitchell 30 pts + Celtics W': 'pending pending pending' });
+  await expect(row.getByTestId('dutch-settle')).toBeVisible();
+
+  await row.getByRole('button', { name: 'Dutch: shared leg lost' }).click();
+  await expect.poll(state).toEqual({ 'McCain 25 pts + Celtics W': 'lost pending lost', 'Mitchell 30 pts + Celtics W': 'lost pending lost' });
+  await expect(badge).toHaveText('0/2');
+  await expect(row.getByTestId('hit-misses')).toHaveText('1 miss');
+
+  // Z on the page undoes too (not while typing in the search box)
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await page.keyboard.press('z');
+  await expect.poll(state).toEqual({ 'McCain 25 pts + Celtics W': 'pending pending pending', 'Mitchell 30 pts + Celtics W': 'pending pending pending' });
+});
+
+test('dutch row: Pick W… with three splits uses checkboxes, Enter saves', async ({ page, request, tag }) => {
+  for (const [sel, odds] of [
+    ['Home', 2.5],
+    ['Draw', 3.2],
+    ['Away', 4],
+  ] as const)
+    await createBet(request, { dutchId: `${tag}-3`, book: `${tag} Book`, betText: '', odds, legs: [{ selection: `${tag} ${sel}`, odds }] });
+  await page.goto('/history');
+  await page.getByLabel('Search bets').fill(tag);
+  const row = page.getByTestId('dutch-row');
+  await row.getByRole('button', { name: 'Dutch: pick winners' }).click();
+  const pick = page.getByRole('dialog', { name: 'Which splits won' });
+  await expect(pick.getByRole('checkbox')).toHaveCount(3);
+  await pick.getByLabel(`${tag} Home @2.50`).check();
+  await pick.getByLabel(`${tag} Away @4.00`).check();
+  await pick.getByLabel(`${tag} Away @4.00`).press('Enter');
+  const results = async () => Object.fromEntries((await betsTagged(request, tag)).map((b) => [b.legs[0]!.selection.replace(`${tag} `, ''), b.result]));
+  await expect.poll(results).toEqual({ Home: 'won', Draw: 'lost', Away: 'won' });
+  await expect(row.getByTestId('hit-count')).toHaveText('2/3');
+});

@@ -4,7 +4,7 @@ import { defineConfig, devices } from '@playwright/test';
 // - local (default): builds and starts the app on a fresh SQLite file with a test password.
 // - live: E2E_BASE_URL=https://<app>.vercel.app E2E_PASSWORD=<the APP_PASSWORD> — runs against the real site, every
 //   test creating its own throwaway bets (tagged "e2e-…", dated 2000-01-0x so the settle queue shows them first)
-//   and deleting them afterwards.
+//   and deleting them afterwards (by id in each test's fixture, then a final sweep: e2e/global-teardown.ts).
 const LIVE = !!process.env.E2E_BASE_URL;
 const PORT = 3100;
 export const TEST_PASSWORD = 'e2e-local-password';
@@ -13,6 +13,9 @@ if (!LIVE) process.env.E2E_PASSWORD ??= TEST_PASSWORD;
 
 export default defineConfig({
   testDir: 'e2e',
+  // BT-11: notes the run start, then sweeps every e2e bet left at the end and fails if this run leaked one
+  globalSetup: './e2e/global-setup.ts',
+  globalTeardown: './e2e/global-teardown.ts',
   timeout: 30_000,
   fullyParallel: false,
   workers: 1,

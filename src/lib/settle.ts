@@ -197,3 +197,26 @@ export function moveCursor(queue: QueueItem[], state: SettleState, delta: number
     cursor: Math.max(0, Math.min(queue.length - 1, state.cursor + delta)),
   };
 }
+
+// ---- Settle buttons on a dutch row (BT-10) ----
+// The History / dashboard row settles a dutch with the same functions as the Settle page, on a one-item queue.
+
+/** What a dutch row's buttons do: 0 W, All W, the picked winners (indexes into its pending bets), Shared ✕, V. */
+export type DutchRowAction = 'none' | 'all' | 'void' | 'shared' | number[];
+
+/** A dutch as a one-item queue holding its pending bets, whatever their dates. */
+export function dutchQueue(dutchId: string, bets: Bet[]): QueueItem[] {
+  return [{ kind: 'dutch', key: dutchId, dutchId, bets, pending: bets.filter((b) => b.result === 'pending') }];
+}
+
+/** Settles a dutch row; null when there is nothing to settle (or no single shared leg for 'shared'). Undo: undoLast(step.state). */
+export function settleDutchRow(dutchId: string, bets: Bet[], action: DutchRowAction): SettleStep | null {
+  const queue = dutchQueue(dutchId, bets);
+  const item = queue[0] as Extract<QueueItem, { kind: 'dutch' }>;
+  if (!item.pending.length) return null;
+  const state: SettleState = { cursor: 0, undo: [] };
+  if (action === 'shared') return settleSharedLostAt(queue, state);
+  if (action === 'all') return settleDutchAt(queue, state, item.pending.map((_, i) => i));
+  if (Array.isArray(action)) return settleDutchAt(queue, state, action.length ? action : 'none');
+  return settleDutchAt(queue, state, action);
+}

@@ -3,6 +3,10 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-22
+- BT-10 — One-click settle buttons on a dutch row (v0.9.0)
+  A pending dutch in History and on the dashboard has 0 W, All W, Pick W… (one button per split with two, checkboxes with more), Shared ✕ and V; Undo shows for 8 s and Z undoes, the same as the Settle page.
+- BT-11 — Fix: live e2e tests no longer leave bets behind (v0.9.0)
+  Each test deletes the bets it made by id even when it fails, and a final sweep removes any e2e bet still there (also older leftovers such as "e2e-mwskca2engub edit me") and fails the run if a test leaked one.
 - BT-9 — Betting Tool clears after "Log as bets" (v0.8.0)
   Once a dutch is saved the selections and shared legs clear (total stake and rounding kept, a reload stays empty) and a note says "Dutch logged: 2 bets, R$ 100,00" with View in History and Undo clear.
 - BT-8 — Log dutch: Game(s) and Market(s) picked per leg (v0.8.0)

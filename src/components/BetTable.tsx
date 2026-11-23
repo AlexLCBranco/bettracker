@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { formatDate, parseDateInput } from '@/lib/dates';
 import { betLabel, duplicateDutchDraft, dutchSummary, groupRows, type GroupOutcome } from '@/lib/dutch';
 import { duplicateForm } from '@/lib/form';
@@ -11,6 +11,9 @@ import { useApp } from './AppProvider';
 import { Autocomplete } from './Autocomplete';
 import { HitBadge, SplitMarkTag } from './HitBadge';
 import { splitMark } from '@/lib/hits';
+import { settleDutchRow, undoLast, type DutchRowAction, type SettleChange, type SettleState } from '@/lib/settle';
+import { DutchSettleButtons } from './DutchSettle';
+import { isTyping } from './Shell';
 
 const QUICK_RESULTS: { r: Result; key: string; cls: string }[] = [
   { r: 'won', key: 'W', cls: 'hover:bg-emerald-600/40 text-emerald-400' },
@@ -75,6 +78,7 @@ function Several({ vals, noun }: { vals: string[]; noun: string }) {
  */
 export function BetTable({ bets, limit, empty = 'No bets yet. Type one in the quick-add line above.' }: { bets: Bet[]; limit?: number; empty?: string }) {
   const [open, setOpen] = useState<Set<string>>(new Set());
+  const rowSettle = useDutchRowSettle();
   const toggle = (id: string) =>
     setOpen((s) => {
       const n = new Set(s);
@@ -113,7 +117,7 @@ export function BetTable({ bets, limit, empty = 'No bets yet. Type one in the qu
             const expanded = open.has(r.dutchId);
             return (
               <Fragment key={r.dutchId}>
-                <DutchRow bets={r.bets} dutchId={r.dutchId} expanded={expanded} toggle={() => toggle(r.dutchId)} />
+                <DutchRow bets={r.bets} dutchId={r.dutchId} expanded={expanded} toggle={() => toggle(r.dutchId)} settle={rowSettle} />
                 {expanded && r.bets.map((b) => <BetRow key={b.id} b={b} expanded={open.has(b.id)} toggle={() => toggle(b.id)} nested />)}
               </Fragment>
             );
@@ -137,7 +141,60 @@ function shared(bets: Bet[], pick: (b: Bet) => string) {
   return vals.length === 1 ? vals[0]! : vals.length > 1 ? 'Mixed' : '';
 }
 
-function DutchRow({ bets, dutchId, expanded, toggle }: { bets: Bet[]; dutchId: string; expanded: boolean; toggle(): void }) {
+const ACTION_LABEL = (a: DutchRowAction, bets: Bet[]) =>
+  a === 'none' ? 'None won' : a === 'all' ? 'All won' : a === 'void' ? 'Void' : a === 'shared' ? 'Shared leg lost' : a.length ? `Won: ${a.map((i) => betLabel(bets.filter((b) => b.result === 'pending')[i]!)).join(', ')}` : 'None won';
+
+type RowSettle = ReturnType<typeof useDutchRowSettle>;
+
+/**
+ * The dutch row buttons' settle and undo (BT-10): the Settle page's functions, one undo step. "Undo" shows on the
+ * settled row for 8 s; Z on the page undoes the last one (while not typing and no form is open).
+ */
+function useDutchRowSettle() {
+  const { update, notify, form, dutchForm } = useApp();
+  const [last, setLast] = useState<{ dutchId: string; state: SettleState } | null>(null);
+  const [undoShown, setUndoShown] = useState<string | null>(null);
+  useEffect(() => {
+    if (!undoShown) return;
+    const t = setTimeout(() => setUndoShown(null), 8000);
+    return () => clearTimeout(t);
+  }, [undoShown, last]);
+  const apply = (changes: SettleChange[]) => {
+    for (const c of changes) void update(c.id, { result: c.result, cashout: c.cashout, ...(c.legs ? { legs: c.legs } : {}) }).catch(() => undefined);
+  };
+  const settle = (dutchId: string, bets: Bet[], action: DutchRowAction) => {
+    const step = settleDutchRow(dutchId, bets, action);
+    if (!step) return;
+    apply(step.changes);
+    setLast({ dutchId, state: step.state });
+    setUndoShown(dutchId);
+    notify(`${ACTION_LABEL(action, bets)} · dutch (${bets.length} bets)`);
+  };
+  const undo = () => {
+    const u = last && undoLast(last.state);
+    if (!u) return;
+    apply(u.changes);
+    setLast(null);
+    setUndoShown(null);
+    notify('Undone');
+  };
+  const keys = useRef<(e: globalThis.KeyboardEvent) => void>(() => {});
+  useEffect(() => {
+    keys.current = (e) => {
+      if (form || dutchForm || isTyping(e) || e.ctrlKey || e.metaKey || e.altKey || e.key.toLowerCase() !== 'z' || !last) return;
+      e.preventDefault();
+      undo();
+    };
+  });
+  useEffect(() => {
+    const h = (e: globalThis.KeyboardEvent) => keys.current(e);
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, []);
+  return { settle, undo, undoShown };
+}
+
+function DutchRow({ bets, dutchId, expanded, toggle, settle }: { bets: Bet[]; dutchId: string; expanded: boolean; toggle(): void; settle: RowSettle }) {
   const { removeDutch, openDutch } = useApp();
   const s = dutchSummary(bets);
   const o = OUTCOME[s.outcome];
@@ -182,7 +239,14 @@ function DutchRow({ bets, dutchId, expanded, toggle }: { bets: Bet[]; dutchId: s
         </span>
       </td>
       <td className="whitespace-nowrap px-2 py-1.5 text-right">
-        <span className="inline-flex gap-0.5">
+        <span className="inline-flex items-center gap-0.5">
+          {settle.undoShown === dutchId ? (
+            <button className="rounded px-1.5 py-0.5 text-xs font-semibold text-amber-300 hover:bg-amber-600/30" title="Undo the settle (Z)" onClick={settle.undo}>
+              Undo
+            </button>
+          ) : (
+            <DutchSettleButtons dutchId={dutchId} bets={bets} onSettle={(a) => settle.settle(dutchId, bets, a)} />
+          )}
           <IconButton label="Duplicate dutch" onClick={() => openDutch(duplicateDutchDraft(bets))}>
             ⧉
           </IconButton>
