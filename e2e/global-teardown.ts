@@ -2,7 +2,7 @@
 // Fails the run when a bet created by this run had to be swept (a test leaked it) or when any e2e bet remains.
 import { request, type FullConfig } from '@playwright/test';
 import { existsSync, readFileSync } from 'node:fs';
-import { deleteEntryIds, deleteIds, e2eLeftovers, isE2eEntry, listBets, listEntries } from './cleanup';
+import { deleteBatchIds, deleteEntryIds, deleteIds, e2eLeftovers, isE2eBatch, isE2eEntry, listBatches, listBets, listEntries } from './cleanup';
 
 export const RUN_START_FILE = 'e2e/.auth/run-start.txt';
 const STATE = 'e2e/.auth/state.json';
@@ -28,6 +28,11 @@ export default async function globalTeardown(config: FullConfig) {
     await deleteEntryIds(api, entries.map((e) => e.id));
     const leakedEntries = entries.filter((e) => e.createdAt >= since);
     if (leakedEntries.length) throw new Error(`e2e sweep: ${leakedEntries.length} money entr${leakedEntries.length === 1 ? 'y' : 'ies'} from this run were left by a test (now deleted)`);
+    // BT-30: PP batches
+    const batches = (await listBatches(api)).filter(isE2eBatch);
+    if (batches.length) console.log(`e2e sweep: deleting ${batches.length} e2e PP batch(es)`);
+    await deleteBatchIds(api, batches.map((b) => b.id));
+    if (batches.some((b) => b.createdAt >= since)) throw new Error('e2e sweep: a PP batch from this run was left by a test (now deleted)');
     if (thisRun.length) throw new Error(`e2e sweep: ${thisRun.length} bet(s) from this run were left by a test (now deleted): ${thisRun.map((b) => `"${b.betText || b.book}"`).join(', ')}`);
   } finally {
     await api.dispose();

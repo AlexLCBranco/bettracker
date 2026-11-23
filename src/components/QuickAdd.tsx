@@ -83,7 +83,8 @@ export function QuickAdd() {
           getSuggestions={(q) => (line.trim() ? (q.trim() ? suggestFor('betText', q) : []) : recentLines)}
           toQuery={(v) => splitQuickAddText(v).text}
           applySuggestion={(v, s) => (v.trim() ? splitQuickAddText(v).prefix + s : s)}
-          placeholder='Quick add: "150 @2.10 lakers ml" then Enter ("H$150" hypothetical, "B$150" bonus)'
+          placeholder="Quick add: 150 @2.10 lakers ml (B$150 bonus, H$150 paper)"
+          title='Quick add: "150 @2.10 lakers ml" then Enter. "B$150" = bonus money, "H$150" = hypothetical, "R$150" = real.'
           aria-label="Quick add"
           data-testid="quick-add"
           className="field w-full"

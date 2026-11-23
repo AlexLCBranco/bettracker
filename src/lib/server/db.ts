@@ -5,6 +5,7 @@ import { dirname } from 'node:path';
 import type { Bet, BetInput, Leg } from '../types';
 import type { ImportBet } from '../transfer';
 import type { EntryInput, MoneyEntry } from '../bankroll';
+import type { BatchInput, PPBatch, PPLeg, PPTicket } from '../pp';
 import { asSolo } from '../games';
 import { repairLegs } from '../settle';
 
@@ -71,6 +72,45 @@ const SCHEMA = [
     expiry TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
+  )`,
+  // BT-30: PP batches: the batch, its leg pool (each leg once) and its tickets (leg ids as a JSON list)
+  `CREATE TABLE IF NOT EXISTS pp_batches (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    placed_date TEXT NOT NULL,
+    book TEXT NOT NULL DEFAULT '',
+    stake REAL NOT NULL,
+    target_odds REAL NOT NULL,
+    money TEXT NOT NULL DEFAULT 'real',
+    scheme TEXT,
+    notes TEXT NOT NULL DEFAULT '',
+    tiers TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS pp_legs (
+    id TEXT NOT NULL,
+    batch_id TEXT NOT NULL,
+    position INTEGER NOT NULL,
+    sport TEXT NOT NULL DEFAULT '',
+    game TEXT NOT NULL DEFAULT '',
+    market TEXT NOT NULL DEFAULT '',
+    selection TEXT NOT NULL DEFAULT '',
+    odds REAL NOT NULL,
+    tier TEXT NOT NULL,
+    result TEXT NOT NULL DEFAULT 'pending',
+    actual TEXT NOT NULL DEFAULT '',
+    note TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (batch_id, id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS pp_tickets (
+    id TEXT NOT NULL,
+    batch_id TEXT NOT NULL,
+    number INTEGER NOT NULL,
+    leg_ids TEXT NOT NULL,
+    placed INTEGER NOT NULL DEFAULT 1,
+    odds_override REAL,
+    PRIMARY KEY (batch_id, id)
   )`,
 ];
 
@@ -368,5 +408,136 @@ export async function importEntries(items: MoneyEntry[]): Promise<{ added: numbe
   const existing = new Set((await c.execute('SELECT id FROM money_entries')).rows.map((r) => s(r.id)));
   const fresh = items.filter((e) => !existing.has(e.id));
   if (fresh.length) await c.batch(fresh.map(entryWrite), 'write');
+  return { added: fresh.length, skipped: items.length - fresh.length };
+}
+
+// BT-30: PP batches. A batch is written as a whole (its legs and tickets replaced); a leg's result, actual and note can
+// be changed on their own (settling ~30 legs one by one).
+
+function parseJSON<T>(v: unknown, fallback: T): T {
+  try {
+    return v == null || v === '' ? fallback : (JSON.parse(String(v)) as T);
+  } catch {
+    return fallback;
+  }
+}
+
+export async function listBatches(): Promise<PPBatch[]> {
+  return readBatches(await db());
+}
+
+async function readBatches(c: Client, id?: string): Promise<PPBatch[]> {
+  const where = id ? ' WHERE batch_id = ?' : '';
+  const args = id ? [id] : [];
+  const [b, l, t] = await c.batch(
+    [
+      { sql: `SELECT * FROM pp_batches${id ? ' WHERE id = ?' : ''} ORDER BY placed_date DESC, created_at DESC`, args },
+      { sql: `SELECT * FROM pp_legs${where} ORDER BY batch_id, position`, args },
+      { sql: `SELECT * FROM pp_tickets${where} ORDER BY batch_id, number`, args },
+    ],
+    'read',
+  );
+  const legs = new Map<string, PPLeg[]>();
+  for (const r of l!.rows) {
+    const k = s(r.batch_id);
+    if (!legs.has(k)) legs.set(k, []);
+    legs.get(k)!.push({ id: s(r.id), sport: s(r.sport), game: s(r.game), market: s(r.market), selection: s(r.selection), odds: Number(r.odds), tier: s(r.tier), result: s(r.result) as PPLeg['result'], actual: s(r.actual), note: s(r.note) });
+  }
+  const tickets = new Map<string, PPTicket[]>();
+  for (const r of t!.rows) {
+    const k = s(r.batch_id);
+    if (!tickets.has(k)) tickets.set(k, []);
+    tickets.get(k)!.push({ id: s(r.id), number: Number(r.number), legIds: parseJSON<string[]>(r.leg_ids, []), placed: Number(r.placed) === 1, oddsOverride: n(r.odds_override) });
+  }
+  return b!.rows.map((r) => ({
+    id: s(r.id),
+    name: s(r.name),
+    placedDate: s(r.placed_date),
+    book: s(r.book),
+    stake: Number(r.stake),
+    targetOdds: Number(r.target_odds),
+    money: r.money === 'bonus' || r.money === 'hypothetical' ? r.money : 'real',
+    scheme: parseJSON<Record<string, unknown> | null>(r.scheme, null),
+    notes: s(r.notes),
+    tiers: parseJSON(r.tiers, []),
+    legs: legs.get(s(r.id)) ?? [],
+    tickets: tickets.get(s(r.id)) ?? [],
+    createdAt: s(r.created_at),
+    updatedAt: s(r.updated_at),
+  }));
+}
+
+export async function getBatch(id: string): Promise<PPBatch | null> {
+  return (await readBatches(await db(), id))[0] ?? null;
+}
+
+function batchStatements(b: PPBatch): InStatement[] {
+  return [
+    {
+      sql: 'INSERT OR REPLACE INTO pp_batches (id, name, placed_date, book, stake, target_odds, money, scheme, notes, tiers, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+      args: [b.id, b.name, b.placedDate, b.book, b.stake, b.targetOdds, b.money, b.scheme ? JSON.stringify(b.scheme) : null, b.notes, JSON.stringify(b.tiers), b.createdAt, b.updatedAt],
+    },
+    { sql: 'DELETE FROM pp_legs WHERE batch_id = ?', args: [b.id] },
+    { sql: 'DELETE FROM pp_tickets WHERE batch_id = ?', args: [b.id] },
+    ...b.legs.map((l, i) => ({
+      sql: 'INSERT INTO pp_legs (id, batch_id, position, sport, game, market, selection, odds, tier, result, actual, note) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+      args: [l.id, b.id, i, l.sport, l.game, l.market, l.selection, l.odds, l.tier, l.result, l.actual, l.note],
+    })),
+    ...b.tickets.map((t) => ({
+      sql: 'INSERT INTO pp_tickets (id, batch_id, number, leg_ids, placed, odds_override) VALUES (?,?,?,?,?,?)',
+      args: [t.id, b.id, t.number, JSON.stringify(t.legIds), t.placed ? 1 : 0, t.oddsOverride],
+    })),
+  ];
+}
+
+/** Creates a batch (`id` given: with that id, as an import or an undo does) or replaces it as a whole. */
+export async function saveBatch(input: BatchInput, id?: string, createdAt?: string): Promise<PPBatch> {
+  const c = await db();
+  const existing = id ? await getBatch(id) : null;
+  const at = new Date().toISOString();
+  const b: PPBatch = { ...input, id: id ?? crypto.randomUUID(), createdAt: existing?.createdAt ?? createdAt ?? at, updatedAt: at };
+  await c.batch(batchStatements(b), 'write');
+  return b;
+}
+
+/** Changes one leg's result, actual or note. */
+export async function patchLeg(batchId: string, legId: string, patch: Partial<Pick<PPLeg, 'result' | 'actual' | 'note'>>): Promise<boolean> {
+  const sets: string[] = [];
+  const args: string[] = [];
+  for (const k of ['result', 'actual', 'note'] as const) {
+    if (patch[k] == null) continue;
+    sets.push(`${k} = ?`);
+    args.push(patch[k]!);
+  }
+  const c = await db();
+  if (!sets.length) return (await c.execute({ sql: 'SELECT 1 FROM pp_legs WHERE batch_id = ? AND id = ?', args: [batchId, legId] })).rows.length > 0;
+  const [r] = await c.batch(
+    [
+      { sql: `UPDATE pp_legs SET ${sets.join(', ')} WHERE batch_id = ? AND id = ?`, args: [...args, batchId, legId] },
+      { sql: 'UPDATE pp_batches SET updated_at = ? WHERE id = ?', args: [new Date().toISOString(), batchId] },
+    ],
+    'write',
+  );
+  return (r?.rowsAffected ?? 0) > 0;
+}
+
+export async function deleteBatch(id: string): Promise<boolean> {
+  const [r] = await (await db()).batch(
+    [
+      { sql: 'DELETE FROM pp_batches WHERE id = ?', args: [id] },
+      { sql: 'DELETE FROM pp_legs WHERE batch_id = ?', args: [id] },
+      { sql: 'DELETE FROM pp_tickets WHERE batch_id = ?', args: [id] },
+    ],
+    'write',
+  );
+  return (r?.rowsAffected ?? 0) > 0;
+}
+
+/** Import: batches whose id is not there yet (never overwritten). */
+export async function importBatches(items: PPBatch[]): Promise<{ added: number; skipped: number }> {
+  const c = await db();
+  const existing = new Set((await c.execute('SELECT id FROM pp_batches')).rows.map((r) => s(r.id)));
+  const fresh = items.filter((b) => !existing.has(b.id));
+  if (fresh.length) await c.batch(fresh.flatMap(batchStatements), 'write');
   return { added: fresh.length, skipped: items.length - fresh.length };
 }

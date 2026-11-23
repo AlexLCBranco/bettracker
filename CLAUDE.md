@@ -20,8 +20,13 @@ the whole website, but a redesign wider than a backlog item asks for is talked t
 ## Rules from the spec (do not break)
 
 - Dates are local "YYYY-MM-DD" strings, never `Date` objects or UTC; shown as dd/mm/yyyy (`src/lib/dates.ts`).
-- Combination total odds are entered by the user; never multiply legs. One exception: the Betting Tool prefills a
-  combination split's total odds box with its legs multiplied, marked "estimated" and editable (`src/lib/splits.ts`).
+- Combination total odds are entered by the user; never multiply legs. Two exceptions: the Betting Tool prefills a
+  combination split's total odds box with its legs multiplied, marked "estimated" and editable (`src/lib/splits.ts`);
+  a PP ticket's odds are its legs multiplied, shown "estimated", unless the book's price was typed over it
+  (`src/lib/pp.ts`, BT-30).
+- PP batches (BT-30, `src/lib/pp.ts`, page `/pp`) live in their own tables and never count in the Bets or Analytics
+  totals. Bonus money (BT-33): a loss costs no real money, a win pays the winnings only as real money; bonus stakes
+  never count in real "wagered" (`src/lib/money.ts`, bankroll in `src/lib/bankroll.ts`).
 - Profit per result: `src/lib/money.ts`. Win rate = won / (won + lost). ROI = net profit / settled stake.
 - A dutch (bets sharing a `dutchId`, `src/lib/dutch.ts`) counts as ONE bet in bet count, pending count, wins, losses
   and win rate: a win when its net profit is above 0, a loss below 0, neither at exactly 0, pending while any of its

@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-23
+- BT-30 — PP batches: leg pool, tickets, leg-first settling, archive (v0.24.0)
+  A new "PP" page lists batches (won / alive / dead, one leg away, staked, returned); a batch is a pool of legs by tier (Major-major, Major, PP shot, levels can be added or renamed) plus its PPs, each leg is settled once with W / L / V (↑ ↓, T for actual and note, Z undo) and every PP follows, a leg that decides PPs is flagged and first in its tier, the Tickets view shows each PP with coloured leg chips, estimated or book odds, potential and status with filters and sorting, PPs can be added by hand, the batch is read-only until Edit, and placed PPs count in the bankroll and in export / import.
 - BT-33 — Bankroll: insert real, bonus and hypothetical money, and see what you have (v0.23.0)
   Bonus (B$, amber) is a third money type everywhere (form, dutch log, "B$10" in quick-add, the Real / Bonus / Hypothetical / All switch, export) whose losses cost nothing and whose wins pay the winnings only as real money; the top bar shows R$, Bonus and H$ now (pending under each, click for each book with the next bonus expiry, expired unused and bonus converted), M or "Insert money" puts money in or takes it out, /bankroll lists every entry to edit or delete (Z undoes), and the bet form shows the balance and warns when the stake is more.
 - BT-34 — Cash-out button "C" next to W / L / V, typed as an amount or a percentage (v0.22.0)

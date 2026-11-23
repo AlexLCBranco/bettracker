@@ -24,53 +24,6 @@ Words the owner uses (keep them in the UI):
   works in volume. Before, it was done in Excalidraw with AIs inventing the scheme per batch, the history lived only
   in the bookmaker's app and vanished, and both building and following 100 PPs was the part that broke.
 
-### BT-30 — PP batches: leg pool, tickets, leg-first settling, archive
-**In short:** A new "PP" page where a batch is a pool of legs plus the tickets made from them, you settle each leg once and every ticket updates itself, and every batch stays saved to reopen later.
-
-Decided by the owner (2026-11-23):
-- PPs live only on the PP page. They never show on the Bets page and never count in the Bets or Analytics totals
-  (bet count, wagered, profit, ROI, win rate, pending). The PP page has its own totals.
-- PPs are mainly placed with bonus money. Until BT-33 (bonus wallet) is built, a batch's money type is Real or
-  Hypothetical, as for bets (BT-14); BT-33 adds Bonus.
-
-Data (new tables, same `CREATE TABLE IF NOT EXISTS` pattern as `src/lib/server/db.ts`; loaded into the client like bets):
-- Batch: id, name (default "Batch dd/mm"), placed date, book, stake per ticket, target odds (default 20), money
-  type, the scheme used to build it (BT-31), notes, created/updated.
-- Batch leg (entered ONCE per batch): sport, game, market, selection, odds (any format, `OddsInput`), tier,
-  result (pending / won / lost / void), actual (as BT-27), a short note (his confidence or theory on it).
-  Autocomplete on every text field, same as the bet form.
-- Ticket (a PP): batch id, number (PP 1, PP 2, ...), its leg ids, placed yes/no, odds override (the book's real
-  price, optional).
-- Tiers are a per-batch ordered list with names, default: Major-major, Major, PP shot. He can add a level
-  (for example "Major 2") or rename one.
-
-Rules:
-- Ticket odds = its legs' odds multiplied, shown as "estimated", unless he typed the book's price over it. This is
-  a second stated exception to "never multiply legs" (CLAUDE.md): add it there when this ships.
-- Ticket result is derived, never typed: lost as soon as one leg is lost; won when every leg is won or void and at
-  least one is won; void when all are void; otherwise pending. A void leg drops out and the ticket's estimated odds
-  are recalculated without it.
-- Ticket status for reading: Alive (no lost leg, legs pending), **One leg away** (alive with exactly one leg
-  pending), Won, Dead, Void.
-
-Page (desktop first, no cut text, same row styling and W / L / V look as BT-18 and BT-28):
-- Nav gets "PP" after "Dutch tool". The page lists batches newest first, one row each: name, date, tickets
-  won / alive / dead, one-leg-away count, staked, returned. Click opens the batch.
-- Inside a batch, the main view is the LEG list grouped by tier. Each leg row: selection, game, odds, tier chip,
-  "on 34 PPs · 12 alive", note, and W / L / V buttons. Keyboard: arrows move, W / L / V settle, T sets the actual
-  and note, Z undoes (same keys as the Bets page). Settling ~30 legs settles ~100 tickets: he never has to touch
-  a ticket to enter a result.
-- A leg that is the last pending leg of any ticket is flagged "decides 3 PPs" and sorts to the top of its tier.
-- Second view, "Tickets": every PP with its legs as chips coloured by result, odds, stake, potential return,
-  status. Filter chips: All / Alive / One leg away / Won / Dead. Sort by number, odds, legs left. Clicking a leg
-  chip filters to the tickets containing that leg.
-- Tickets can also be added and edited by hand (pick legs from the pool) for batches not made with BT-31.
-- Reopening an old batch shows exactly the same two views, read-only until "Edit" is pressed.
-- Export / Import (BT-3) include batches.
-
-Tests: unit tests for ticket result and status derivation (including void legs and undo), db integration for the
-new tables, Playwright for create batch → add legs → add tickets → settle legs by keyboard → tickets update.
-
 ### BT-31 — PP builder: scheme helper and ticket generator
 **In short:** Enter the legs and their tiers, and the app proposes how many PPs to make and how often each tier appears, then generates all the tickets and gives a checklist for placing them.
 

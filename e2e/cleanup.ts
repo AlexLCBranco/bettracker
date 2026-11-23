@@ -74,3 +74,29 @@ export async function deleteEntryIds(request: Requester, ids: Iterable<string>):
   }
   if (failed.length) throw new Error(`e2e cleanup: could not delete money entries ${failed.join(', ')}`);
 }
+
+// BT-30: PP batches made by e2e tests carry the tag in their name or book (and are dated 2000-01-0x).
+export interface SweepBatch {
+  id: string;
+  name: string;
+  book: string;
+  placedDate: string;
+  createdAt: string;
+}
+
+export const isE2eBatch = (b: SweepBatch): boolean => E2E_TEXT.test(b.name) || E2E_TEXT.test(b.book) || E2E_DATE.test(b.placedDate);
+
+export async function listBatches(request: Requester): Promise<SweepBatch[]> {
+  const r = await request.get('/api/pp');
+  if (!r.ok()) throw new Error(`e2e cleanup: GET /api/pp returned ${r.status()}`);
+  return (await r.json()) as SweepBatch[];
+}
+
+export async function deleteBatchIds(request: Requester, ids: Iterable<string>): Promise<void> {
+  const failed: string[] = [];
+  for (const id of ids) {
+    const r = await request.delete(`/api/pp/${id}`);
+    if (r.status() !== 200 && r.status() !== 404) failed.push(`${id} (${r.status()})`);
+  }
+  if (failed.length) throw new Error(`e2e cleanup: could not delete PP batches ${failed.join(', ')}`);
+}

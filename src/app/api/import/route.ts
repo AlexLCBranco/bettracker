@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { importBets, importEntries } from '@/lib/server/db';
+import { importBatches, importBets, importEntries } from '@/lib/server/db';
 import { parseImport } from '@/lib/transfer';
 
 export const dynamic = 'force-dynamic';
@@ -11,5 +11,7 @@ export async function POST(request: Request) {
   const bets = await importBets(parsed.bets);
   // BT-33: the bankroll's entries come along (added the same way: only ids not already here)
   const entries = await importEntries(parsed.entries);
-  return NextResponse.json({ ...bets, entries });
+  // BT-30: and the PP batches
+  const batches = await importBatches(parsed.batches);
+  return NextResponse.json({ ...bets, entries, batches });
 }

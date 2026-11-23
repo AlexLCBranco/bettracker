@@ -10,6 +10,7 @@ import { tidyBet, type NameCasing } from '@/lib/tidy';
 import type { Bet, BetInput, Money } from '@/lib/types';
 import { bankroll as computeBankroll, type Bankroll, type EntryInput, type MoneyEntry } from '@/lib/bankroll';
 import { todayISO } from '@/lib/dates';
+import { ticketMoney, type BatchInput, type PPBatch, type PPLeg } from '@/lib/pp';
 
 /** BT-20: names typed "Mccain" saved as "McCain" once that spelling is known (the server tidies games and units). */
 function tidyPatch<T extends Partial<BetInput>>(p: T, names: NameCasing): T {
@@ -69,6 +70,14 @@ interface AppCtx {
   moneyForm: MoneyFormRequest | null;
   openMoney(req?: Omit<MoneyFormRequest, 'key'>): void;
   closeMoney(): void;
+  /** BT-30: PP batches, newest first. */
+  batches: PPBatch[];
+  /** Creates (no id) or replaces a whole batch; shown at once, put back if the server refuses. */
+  saveBatch(input: BatchInput, id?: string): Promise<PPBatch>;
+  /** Settles a leg or sets its actual / note. */
+  patchPPLeg(batchId: string, legId: string, patch: Partial<Pick<PPLeg, 'result' | 'actual' | 'note'>>): Promise<void>;
+  /** Deletes a batch; the returned function puts it back. */
+  removeBatch(b: PPBatch): Promise<() => Promise<void>>;
 }
 
 export interface MoneyFormRequest {
@@ -106,6 +115,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [dutchForm, setDutchForm] = useState<AppCtx['dutchForm']>(null);
   const [toast, setToast] = useState<AppCtx['toast']>(null);
   const [entries, setEntries] = useState<MoneyEntry[]>([]);
+  const [batches, setBatches] = useState<PPBatch[]>([]);
   const [moneyForm, setMoneyForm] = useState<MoneyFormRequest | null>(null);
   const betsRef = useRef(bets);
   const names = useMemo(() => betNames(bets), [bets]);
@@ -118,10 +128,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const formKey = useRef(0);
 
   useEffect(() => {
-    Promise.all([api<Bet[]>('/api/bets'), api<MoneyEntry[]>('/api/money')])
-      .then(([b, e]) => {
+    Promise.all([api<Bet[]>('/api/bets'), api<MoneyEntry[]>('/api/money'), api<PPBatch[]>('/api/pp')])
+      .then(([b, e, p]) => {
         setBets(b);
         setEntries(e);
+        setBatches(p);
         setLoaded(true);
       })
       .catch((e: Error) => setLoadError(e.message));
@@ -140,11 +151,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       lastAt = Date.now();
       const token = writes.begin();
       if (token == null) return;
-      Promise.all([api<Bet[]>('/api/bets'), api<MoneyEntry[]>('/api/money')])
-        .then(([b, e]) => {
+      Promise.all([api<Bet[]>('/api/bets'), api<MoneyEntry[]>('/api/money'), api<PPBatch[]>('/api/pp')])
+        .then(([b, e, p]) => {
           if (!writes.canApply(token)) return;
           setBets(b);
           setEntries(e);
+          setBatches(p);
         })
         .catch(() => undefined);
     };
@@ -160,6 +172,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const r = await write<{ added: number; skipped: number }>('/api/import', { method: 'POST', body: JSON.stringify(json) });
     setBets(await api<Bet[]>('/api/bets'));
     setEntries(await api<MoneyEntry[]>('/api/money'));
+    setBatches(await api<PPBatch[]>('/api/pp'));
     return r;
   }, [write]);
 
@@ -266,7 +279,65 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [notify, write],
   );
   const today = todayISO();
-  const bankroll = useMemo(() => computeBankroll(entries, bets, today), [entries, bets, today]);
+  // BT-30: placed PP tickets are money too
+  const bankroll = useMemo(() => computeBankroll(entries, bets, today, ticketMoney(batches)), [entries, bets, today, batches]);
+
+  const batchesRef = useRef(batches);
+  useEffect(() => {
+    batchesRef.current = batches;
+  }, [batches]);
+  const byPlaced = (a: PPBatch, b: PPBatch) => (a.placedDate !== b.placedDate ? (a.placedDate < b.placedDate ? 1 : -1) : a.createdAt < b.createdAt ? 1 : -1);
+  const saveBatch = useCallback(
+    async (input: BatchInput, id?: string) => {
+      const before = id ? batchesRef.current.find((b) => b.id === id) : undefined;
+      if (before) setBatches((bs) => bs.map((b) => (b.id === id ? { ...b, ...input } : b)));
+      try {
+        const saved = id
+          ? await write<PPBatch>(`/api/pp/${id}`, { method: 'PUT', body: JSON.stringify(input) })
+          : await write<PPBatch>('/api/pp', { method: 'POST', body: JSON.stringify(input) });
+        setBatches((bs) => [...bs.filter((b) => b.id !== saved.id), saved].sort(byPlaced));
+        return saved;
+      } catch (e) {
+        if (before) setBatches((bs) => bs.map((b) => (b.id === id ? before : b)));
+        notify((e as Error).message, 'error');
+        throw e;
+      }
+    },
+    [notify, write],
+  );
+  const patchPPLeg = useCallback(
+    async (batchId: string, legId: string, patch: Partial<Pick<PPLeg, 'result' | 'actual' | 'note'>>) => {
+      const apply = (bs: PPBatch[], p: typeof patch) => bs.map((b) => (b.id === batchId ? { ...b, legs: b.legs.map((l) => (l.id === legId ? { ...l, ...p } : l)) } : b));
+      const old = batchesRef.current.find((b) => b.id === batchId)?.legs.find((l) => l.id === legId);
+      setBatches((bs) => apply(bs, patch));
+      try {
+        await write(`/api/pp/${batchId}/legs/${legId}`, { method: 'PATCH', body: JSON.stringify(patch) });
+      } catch (e) {
+        if (old) setBatches((bs) => apply(bs, { result: old.result, actual: old.actual, note: old.note }));
+        notify((e as Error).message, 'error');
+      }
+    },
+    [notify, write],
+  );
+  const removeBatch = useCallback(
+    async (b: PPBatch) => {
+      setBatches((bs) => bs.filter((x) => x.id !== b.id));
+      try {
+        await write(`/api/pp/${b.id}`, { method: 'DELETE' });
+      } catch (e) {
+        setBatches((bs) => [...bs, b].sort(byPlaced));
+        notify((e as Error).message, 'error');
+        throw e;
+      }
+      return async () => {
+        const { id, createdAt, updatedAt: _u, ...input } = b;
+        void _u;
+        const back = await write<PPBatch>('/api/pp', { method: 'POST', body: JSON.stringify({ ...input, restore: { id, createdAt } }) });
+        setBatches((bs) => [...bs.filter((x) => x.id !== back.id), back].sort(byPlaced));
+      };
+    },
+    [notify, write],
+  );
 
   const index = useMemo(() => buildIndex(bets), [bets]);
   const suggestFor = useCallback((field: Field, query: string, sport?: string) => suggest(index, field, query, { sport }), [index]);
@@ -304,6 +375,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     moneyForm,
     openMoney: (req) => setMoneyForm({ ...req, key: ++formKey.current }),
     closeMoney: () => setMoneyForm(null),
+    batches,
+    saveBatch,
+    patchPPLeg,
+    removeBatch,
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

@@ -34,6 +34,8 @@ const LINKS = [
   { href: '/', label: 'Bets' },
   { href: '/analytics', label: 'Analytics' },
   { href: '/betting-tool', label: 'Dutch tool' },
+  // BT-30
+  { href: '/pp', label: 'PP' },
 ];
 
 function Frame({ children }: { children: ReactNode }) {
@@ -78,7 +80,7 @@ function Frame({ children }: { children: ReactNode }) {
           <nav className="flex items-center gap-4 text-sm">
             {LINKS.map((l) => (
               <span key={l.href} className="inline-flex items-center">
-                <Link href={l.href} className={path === l.href ? 'font-semibold text-white' : 'text-zinc-400 hover:text-white'}>
+                <Link href={l.href} className={path === l.href || (l.href !== '/' && path.startsWith(`${l.href}/`)) ? 'font-semibold text-white' : 'text-zinc-400 hover:text-white'}>
                   {l.label}
                 </Link>
                 {l.href === '/' && due > 0 && (

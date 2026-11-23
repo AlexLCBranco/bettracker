@@ -17,7 +17,7 @@ function download(name: string, type: string, text: string) {
 
 /** Export all bets (JSON with everything, or CSV) and import a JSON export, which only adds bets not already here. */
 export function DataTransfer({ vertical }: { vertical?: boolean } = {}) {
-  const { bets, loaded, importExport, notify } = useApp();
+  const { bets, entries, batches, loaded, importExport, notify } = useApp();
   const fileInput = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
 
@@ -43,7 +43,7 @@ export function DataTransfer({ vertical }: { vertical?: boolean } = {}) {
 
   return (
     <div className={vertical ? "flex w-40 flex-col gap-2" : "flex flex-wrap items-center gap-2"}>
-      <button className="btn" disabled={!loaded} onClick={() => download(`bettracker-${todayISO()}.json`, 'application/json', JSON.stringify(buildExport(bets, BUILD_INFO.version), null, 2))} title="Everything, to keep as a backup or import later">
+      <button className="btn" disabled={!loaded} onClick={() => download(`bettracker-${todayISO()}.json`, 'application/json', JSON.stringify(buildExport(bets, BUILD_INFO.version, undefined, entries, batches), null, 2))} title="Everything, to keep as a backup or import later">
         Export JSON
       </button>
       <button className="btn" disabled={!loaded} onClick={() => download(`bettracker-bets-${todayISO()}.csv`, 'text/csv;charset=utf-8', toCSV(bets))} title="One row per bet, for a spreadsheet">
