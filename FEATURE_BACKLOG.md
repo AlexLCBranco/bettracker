@@ -21,11 +21,31 @@ Item IDs are BT-1, BT-2, ... (never reused; BT is this repo's prefix, unique acr
 - Bug to reproduce first (owner, 2026-11-23, v0.16.0): on the "no game" row "Jokic 6 4Q pts" (Combo ×0, live, Old Book) he tried to add the game from the table and could not. Find out why with Playwright before redesigning.
 - Owner's ask: double click on the game (or on "no game") starts editing it, on every row type. Add an e2e test that adds a game to a "no game" bet this way.
 
-### BT-26 — Redesign the bet table so dutch bets are fully readable
-**In short:** No more "…" cut off text on dutch rows: each split gets its own aligned line, and the table layout is redone to make room.
+### BT-26 — One "Bets" page: merge Dashboard, History and Settle, with a table that does not cut text
+**In short:** The site becomes three pages (Bets, Analytics, Dutch tool); Bets is one full-width table with stats on top, and bet text is no longer cut with "…".
 
-- The owner called the current dutch row unacceptable: game and bet are cut ("Celtics @ Warriors / Nuggets …", "Jokic 30 pts + Celtics ML / J…").
-- Rows may be taller. A dutch row lists every split on its own line, with the split's game, bet and odds lined up in the same columns across all lines and rows. Nothing important is ever truncated on a dutch; wrap or add lines instead.
-- Make room: content starts at the left edge of the page, and the Book column goes away from the default view (show the book on hover or in the expanded row).
-- Scope: this item is the bet table. The owner is open to redesigning the whole website, but wants to talk any wider redesign through first: do not redesign the shell, navigation or other pages under this item; note what you would change and ask him. The v0 prototype is the minimum bar for a v1 ("at least as good as v0"), not the layout to copy.
-- Keep: day headers with totals, sticky header, inline editing, settle buttons always visible, no sideways scroll at 1366px.
+Agreed with the owner on 2026-11-23 after looking at the live site (v0.16.0). Usability is the priority. Anything not written here that changes a page's structure: ask him first.
+
+**Site structure**
+- Navigation: Bets (home, `/`), Analytics, Dutch tool. The separate History and Settle pages go away (redirect `/history` and `/settle` to `/`).
+- Layout uses the full window width (today a ~1120px centered column leaves about 30% of a 1568px window empty while the table truncates).
+- One Real / Hypothetical / Both switch in the top bar, applied to every page (today: a toggle on Dashboard and Analytics, a "Money" filter on History).
+- The "Performance Over Time" chart moves to Analytics.
+
+**Bets page**
+- Top: a thin strip of the stats now on the Dashboard cards (net profit, ROI, wagered, win rate, pending), one row, small.
+- Then one row of filters (the History filters, minus Money) and Export / Import in a "⋯" menu.
+- Tabs: All / Pending / To settle (To settle = the old Settle queue: pending bets with a game date of today or earlier, oldest first; its count stays as the badge).
+- The settle keys (W L V C H J, 1-9, Enter, 0, S, arrows, Z) work on the selected row in any tab. It must be as fast as the old queue: after settling, selection moves to the next row. The key legend becomes a "?" popover, not a row of text.
+
+**Table: no "…", everything aligned**
+- Columns: [▸] [Bet: takes ALL leftover width] [Stake] [Odds] [+/-] [Result] [actions]. Stake, Odds, +/- and Result are fixed, narrow, numbers right-aligned with tabular digits; the Result column is only as wide as its pill.
+- The Bet cell is two lines: line 1 the bet text (bold), line 2 muted "game · sport · market · book" plus the type tag (Combo ×n, Dutch ×n, LIVE) and the result sub-line ("1 of 2 splits hit", "lost by …"). Game, Book and Type stop being columns; that is where the width comes from.
+- Bet text wraps to a second line instead of truncating. "…" is allowed only on the muted line, and only with the full text on hover.
+- A dutch row shows one such two-line block per split, stacked, and each split's own odds and stake sit in the Odds and Stake columns on that split's line, so numbers line up down the page across singles, combos and dutches. The dutch's combined odds, total stake and profit sit on a summary line.
+- Rows are as tall as they need to be.
+- Keep: day headers with totals, sticky header, inline editing (double click, see BT-25), settle buttons always visible, no sideways scroll at 1366px.
+
+**Tests**
+- e2e with throwaway long bets (a 3-split dutch of combinations with long names) at 1366px and 1920px: no bet text is truncated (`scrollWidth <= clientWidth` on every bet line), no horizontal scroll, and the Odds / Stake / +/- cells of different row types share the same x position.
+- e2e: settle three bets in a row from the To settle tab with the keyboard only.
