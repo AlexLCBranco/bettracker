@@ -163,9 +163,9 @@ bonus win pays winnings only into real.
 Asked for by the owner on 2026-11-23 with a screenshot of the W / L / V buttons. Today cash-out exists only behind
 the C key and the result pill, and `CashoutBox` (`src/components/BetTable.tsx`) takes an amount only.
 
-- Add "C" as a fourth button after V in the same button group (`SETTLE_BUTTONS` in `BetTable.tsx`), on plain bets
-  and on each split of a dutch, wherever W / L / V show. Colour: blue, and clearly different from V at a glance
-  (V is sky today: change V's colour if needed so the two cannot be confused). Tooltip "Cash-out (C)".
+- Add "C" as a fourth button after V in the same button group (`QUICK_RESULTS` in `BetTable.tsx`), on plain bets
+  and on each split of a dutch, wherever W / L / V show. Colour: blue (V is grey, `text-zinc-300`, but looks
+  bluish on the dark background: make C a saturated blue so the two cannot be confused). Tooltip "Cash-out (C)".
 - Clicking it (or pressing C on the selected row, as now) opens the cash-out box in place. One input that accepts
   either form:
   - a money amount ("140", "140,50") = the amount returned;
