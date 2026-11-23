@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { betLabel } from '@/lib/dutch';
-import { settleAt, settleDutchRow, type DutchRowAction, type SettleChange, type SettleStep } from '@/lib/settle';
+import { beforeOf, betResultChanges, legResultChanges, settleDutchRow, type DutchRowAction, type SettleChange, type SettleStep } from '@/lib/settle';
 import { RESULT_LABEL, type Bet, type Result } from '@/lib/types';
 import { useApp } from './AppProvider';
 
@@ -15,7 +15,9 @@ interface Undo {
 
 export interface Settler {
   /** Settles a plain bet (or one split of a dutch); cash-out without an amount opens the amount box. */
-  settleBet(b: Bet, r: Result, cashout?: number | null): void;
+  settleBet(b: Bet, r: Result, cashout?: number | null, group?: Bet[]): void;
+  /** BT-28: a leg's result; the same leg on the other splits and every touched bet follow, in one undo step. */
+  settleLeg(group: Bet[], b: Bet, index: number, r: Result): void;
   settleDutch(dutchId: string, bets: Bet[], action: DutchRowAction): void;
   undo(): void;
   canUndo: boolean;
@@ -61,12 +63,27 @@ export function useSettle({ settled, restored }: { settled(key: string): void; r
     settled(key);
   };
 
+  /** Saves changes made outside the settle queue functions, with their undo. */
+  const pushChanges = (bets: Bet[], changes: SettleChange[], key: string, label: string) => {
+    const before = beforeOf(bets, changes);
+    apply(changes);
+    setStack((st) => [...st, { before, key }]);
+    notify(label);
+    settled(key);
+  };
+
   return {
-    settleBet(b, r, cashout = null) {
+    settleBet(b, r, cashout = null, group = [b]) {
       if (r === 'cash-out' && cashout == null) return setCashoutFor(b.id);
       setCashoutFor(null);
-      const step = settleAt([{ kind: 'bet', key: b.id, bet: b }], { cursor: 0, undo: [] }, r, cashout);
-      if (step) push(step, `bet:${b.id}`, `${RESULT_LABEL[r]}: ${b.betText || betLabel(b) || 'bet'}`);
+      const changes = betResultChanges(group, b, r, cashout);
+      if (changes.length) pushChanges(group, changes, `bet:${b.id}`, `${RESULT_LABEL[r]}: ${b.betText || betLabel(b) || 'bet'}`);
+    },
+    settleLeg(group, b, index, r) {
+      const changes = legResultChanges(group, b.id, index, r);
+      const leg = b.legs[index];
+      const moved = changes.filter((c) => c.id !== b.id || c.result !== b.result).length;
+      if (changes.length) pushChanges(group, changes, `bet:${b.id}`, `Leg ${RESULT_LABEL[r]}: ${leg?.selection || 'leg'}${moved > 1 ? ` · ${changes.length} bets` : ''}`);
     },
     settleDutch(dutchId, bets, action) {
       const step = settleDutchRow(dutchId, bets, action);

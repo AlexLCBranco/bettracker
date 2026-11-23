@@ -5,6 +5,7 @@ import { dirname } from 'node:path';
 import type { Bet, BetInput, Leg } from '../types';
 import type { ImportBet } from '../transfer';
 import { asSolo } from '../games';
+import { repairLegs } from '../settle';
 
 // Turso (libSQL) in production: TURSO_DATABASE_URL + TURSO_AUTH_TOKEN. Locally and in tests: a SQLite file,
 // data/local.db unless TURSO_DATABASE_URL says otherwise (e.g. file:data/e2e.db).
@@ -53,6 +54,8 @@ const SCHEMA = [
     actual TEXT NOT NULL DEFAULT ''
   )`,
   `CREATE INDEX IF NOT EXISTS legs_bet ON legs (bet_id)`,
+  // one-time data passes already run (BT-28)
+  `CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
 ];
 
 export async function db(): Promise<Client> {
@@ -76,6 +79,21 @@ async function migrate(c: Client): Promise<void> {
   if (!cols.has('label')) await c.execute("ALTER TABLE bets ADD COLUMN label TEXT NOT NULL DEFAULT ''");
   const legCols = new Set((await c.execute('PRAGMA table_info(legs)')).rows.map((r) => String(r.name)));
   if (!legCols.has('actual')) await c.execute("ALTER TABLE legs ADD COLUMN actual TEXT NOT NULL DEFAULT ''");
+  await repairLegsOnce(c);
+}
+
+/** BT-28 rule 5: settled combinations logged before BT-28 get the leg results their bet implies, once. */
+async function repairLegsOnce(c: Client): Promise<void> {
+  const done = await c.execute({ sql: 'SELECT 1 FROM meta WHERE key = ?', args: ['bt28-legs'] });
+  if (done.rows.length) return;
+  const fixes = repairLegs(await readBets(c));
+  await c.batch(
+    [
+      ...fixes.flatMap((f) => f.legs.map((l, i) => ({ sql: 'UPDATE legs SET result = ? WHERE bet_id = ? AND position = ?', args: [l.result, f.id, i] }))),
+      { sql: 'INSERT OR IGNORE INTO meta (key, value) VALUES (?, ?)', args: ['bt28-legs', new Date().toISOString()] },
+    ],
+    'write',
+  );
 }
 
 const s = (v: unknown) => (v == null ? '' : String(v));
@@ -120,7 +138,10 @@ function rowToLeg(r: Row): Leg {
 }
 
 export async function listBets(): Promise<Bet[]> {
-  const c = await db();
+  return readBets(await db());
+}
+
+async function readBets(c: Client): Promise<Bet[]> {
   const [bets, legs] = await c.batch(['SELECT * FROM bets ORDER BY placed_date DESC, created_at DESC', 'SELECT * FROM legs ORDER BY bet_id, position'], 'read');
   const byBet = new Map<string, Leg[]>();
   for (const r of legs!.rows) {

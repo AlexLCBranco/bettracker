@@ -411,6 +411,7 @@ function BetRow({ b, open, toggle, selected, select, settle, split, annotating, 
   // BT-27: the label chip (a split shows its own only when it differs from the dutch's), a solo's actual, losing legs
   const chip = b.label && !(nested && normalize(b.label) === normalize(split.sharedLabel)) ? b.label : '';
   const soloActual = solo ? (leg0?.actual ?? '') : '';
+  const group = split?.group ?? [b];
   const losses = losingLegs(b, split?.group ?? []);
   const flow = !!(chip || soloActual);
   const annotateHere = () => {
@@ -511,11 +512,11 @@ function BetRow({ b, open, toggle, selected, select, settle, split, annotating, 
           <ProfitText value={profit(b)} pending={pending} money={b.money} />
         </td>
         <td className={CELL} data-col="result">
-          <ResultCell bet={b} title={hits ? missesTitle(hits) : undefined} onPick={(r) => (r === 'pending' ? void save({ result: r, cashout: null }) : settle.settleBet(b, r))} />
+          <ResultCell bet={b} title={hits ? missesTitle(hits) : undefined} onPick={(r) => settle.settleBet(b, r, null, group)} />
         </td>
         <td className={ACTIONS}>
           {settle.cashoutFor === b.id ? (
-            <CashoutBox bet={b} onDone={(a) => settle.settleBet(b, 'cash-out', a)} onClose={settle.cancelCashout} />
+            <CashoutBox bet={b} onDone={(a) => settle.settleBet(b, 'cash-out', a, group)} onClose={settle.cancelCashout} />
           ) : nested ? (
             <span className={HOVER_ONLY} data-testid="row-actions">
               <AnnotateButton onClick={annotateHere} />
@@ -526,7 +527,7 @@ function BetRow({ b, open, toggle, selected, select, settle, split, annotating, 
                 {/* BT-18 / BT-23: W / L / V always on unsettled bets (a settled one changes from its result pill) */}
                 {pending &&
                   QUICK_RESULTS.map(({ r, key: k, cls }) => (
-                    <button key={r} className={`rounded px-1.5 py-0.5 text-xs font-semibold ${cls}`} title={`${RESULT_LABEL[r]} (${k})`} aria-label={`Mark ${RESULT_LABEL[r]}`} onClick={() => settle.settleBet(b, r)}>
+                    <button key={r} className={`rounded px-1.5 py-0.5 text-xs font-semibold ${cls}`} title={`${RESULT_LABEL[r]} (${k})`} aria-label={`Mark ${RESULT_LABEL[r]}`} onClick={() => settle.settleBet(b, r, null, group)}>
                       {k}
                     </button>
                   ))}
@@ -571,7 +572,7 @@ function BetRow({ b, open, toggle, selected, select, settle, split, annotating, 
           const lt = resultTone(l.result);
           const legLost = l.result === 'lost' || l.result === 'half-lost';
           return (
-            <tr key={l.id} className={`${ROW} text-xs`} data-testid="leg-row" data-lost={legLost || undefined} data-tone={lt}>
+            <tr key={l.id} className={`${ROW} text-xs`} data-testid="leg-row" data-leg-of={b.id} data-lost={legLost || undefined} data-tone={lt}>
               <td className={`relative px-1 ${TONE_EDGE[lt]}`}>
                 <Connector last={i === b.legs.length - 1 && (!nested || split.last)} />
               </td>
@@ -599,7 +600,9 @@ function BetRow({ b, open, toggle, selected, select, settle, split, annotating, 
               <td />
               <Cell kind="odds" value={formatOdds(l.odds)} label={`Leg ${i + 1} odds`} onSave={(v) => saveLeg(i, { odds: v.trim() ? (oddsFromText(v) ?? l.odds) : null })} right />
               <td />
-              <Cell kind="select" options={[...RESULTS]} labels={RESULT_LABEL} value={l.result} extraClass={`font-medium ${TONE_TEXT[lt]}`} label={`Leg ${i + 1} result`} onSave={(v) => saveLeg(i, { result: v as Result })} />
+              <td className={CELL} data-col="result">
+                <LegResult leg={l} bet={b} n={i + 1} onPick={(r) => settle.settleLeg(group, b, i, r)} />
+              </td>
               <td />
             </tr>
           );
@@ -645,6 +648,52 @@ function IconButton({ label, onClick, children }: { label: string; onClick(): vo
     <button className="rounded px-1.5 py-0.5 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-white" title={label} aria-label={label} onClick={onClick}>
       {children}
     </button>
+  );
+}
+
+const LEG_KEYS: { r: Result; key: string; cls: string }[] = [...QUICK_RESULTS, { r: 'pending', key: '?', cls: 'hover:bg-zinc-600/40 text-zinc-400' }];
+
+/**
+ * BT-28: a leg's result. Pending on a pending bet: W / L / V buttons. Pending on a settled bet: "?" (not known which
+ * leg lost) with W / L. Settled: its result; a click brings the buttons back to change it (? = back to pending).
+ */
+function LegResult({ leg, bet, n, onPick }: { leg: Leg; bet: Bet; n: number; onPick(r: Result): void }) {
+  const [editing, setEditing] = useState(false);
+  const unknown = leg.result === 'pending' && bet.result !== 'pending';
+  const keys = editing ? LEG_KEYS.filter((k) => k.r !== leg.result) : leg.result !== 'pending' ? [] : unknown ? QUICK_RESULTS.filter((k) => k.r !== 'void') : QUICK_RESULTS;
+  const pick = (r: Result) => {
+    setEditing(false);
+    onPick(r);
+  };
+  const buttons = keys.map(({ r, key: k, cls }) => (
+    <button
+      key={r}
+      className={`rounded px-1.5 py-0.5 text-xs font-semibold ${cls}`}
+      title={`Leg ${n}: ${RESULT_LABEL[r]}`}
+      aria-label={`Mark leg ${n} ${RESULT_LABEL[r]}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        pick(r);
+      }}
+    >
+      {k}
+    </button>
+  ));
+  return (
+    <span className="inline-flex items-center gap-0.5 whitespace-nowrap" data-testid="leg-result" data-result={leg.result} data-unknown={unknown || undefined} onKeyDown={(e) => e.key === 'Escape' && setEditing(false)}>
+      {unknown && !editing && (
+        <span className="px-1 text-xs font-semibold text-zinc-400" title="Not known which leg lost: click the one that did">
+          ?
+        </span>
+      )}
+      {leg.result !== 'pending' && !editing ? (
+        <button className={`rounded px-1 py-0.5 text-xs font-medium ${TONE_TEXT[resultTone(leg.result)]} hover:bg-zinc-800`} title="Click to change" aria-label={`Leg ${n} result: ${RESULT_LABEL[leg.result]}`} onClick={(e) => { e.stopPropagation(); setEditing(true); }}>
+          {RESULT_LABEL[leg.result]}
+        </button>
+      ) : (
+        buttons
+      )}
+    </span>
   );
 }
 

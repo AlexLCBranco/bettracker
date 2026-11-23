@@ -167,7 +167,7 @@ function Bets() {
       e.preventDefault();
       if (b.result !== 'pending') return notify(`Already settled (${RESULT_LABEL[b.result]}): change it on its result pill`, 'error');
       if (k === 'c') settle.startCashout(b.id);
-      else settle.settleBet(b, SETTLE_KEYS[k]!);
+      else settle.settleBet(b, SETTLE_KEYS[k]!, null, b.dutchId ? shown.filter((x) => x.dutchId === b.dutchId) : [b]);
     };
   });
   useEffect(() => {

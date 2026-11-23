@@ -2,7 +2,7 @@
 // A dutch is one item: number keys toggle the splits that won, Enter confirms (the rest lose), 0 = none won,
 // V = void all, S = its shared leg lost (every split lost, that leg marked lost on each bet).
 
-import { withKnownLegs } from './actuals';
+import { isLost, legKey, withKnownLegs } from './actuals';
 import { groupRows, isLeg, sharedLegNames } from './dutch';
 import type { Bet, Leg, Result } from './types';
 
@@ -236,4 +236,99 @@ export function settleDutchRow(dutchId: string, bets: Bet[], action: DutchRowAct
   if (action === 'all') return settleDutchAt(queue, state, item.pending.map((_, i) => i));
   if (Array.isArray(action)) return settleDutchAt(queue, state, action.length ? action : 'none');
   return settleDutchAt(queue, state, action);
+}
+
+// ---- BT-28: leg results and bet results always agree ----
+// Leg → up: a lost leg loses its bet; every leg won wins it; a void leg leaves it to the owner. A shared leg of a dutch
+// (same game + selection on other splits) gets the same result on every split. Bet → down: won → its legs won;
+// set back to pending → its legs pending; lost with no losing leg known → its pending legs read "?" (display only).
+
+/** A bet's result as its legs say it; only pending / won / lost bets follow their legs (cash-outs, halves, void stay). */
+function resultFromLegs(b: Bet, legs: Pick<Leg, 'result'>[], editedWas: Result | null): Result {
+  if (b.result !== 'pending' && b.result !== 'won' && b.result !== 'lost') return b.result;
+  if (b.type === 'solo') {
+    const r = legs[0]?.result;
+    return r === 'won' || r === 'lost' ? r : r === 'pending' && editedWas && editedWas === b.result ? 'pending' : b.result;
+  }
+  if (legs.some((l) => isLost(l.result))) return 'lost';
+  if (legs.length && legs.every((l) => l.result === 'won')) return 'won';
+  // the change took away what had settled it: the leg that lost, or one of the legs that won
+  if (b.result === 'won') return 'pending';
+  if (b.result === 'lost' && editedWas && isLost(editedWas)) return 'pending';
+  return b.result;
+}
+
+/** Rule 3: a combination's legs after its result is set by hand (won → every leg won, pending → every leg pending). */
+export function legsForResult(b: Bet, result: Result): Omit<Leg, 'id'>[] | undefined {
+  if (b.type !== 'combination' || !b.legs.length) return undefined;
+  if (result === 'won') return legsAs(b, (l) => (l.result === 'void' ? 'void' : 'won'));
+  if (result === 'pending') return legsAs(b, () => 'pending');
+  return undefined;
+}
+
+/** What each bet was before `changes`, to undo them in one step. */
+export function beforeOf(bets: Bet[], changes: SettleChange[]): SettleChange[] {
+  return changes.flatMap((c) => {
+    const b = bets.find((x) => x.id === c.id);
+    return b ? [{ id: b.id, result: b.result, cashout: b.cashout, ...(c.legs ? { legs: plainLegs(b) } : {}) }] : [];
+  });
+}
+
+const sameLegResults = (b: Bet, legs: Omit<Leg, 'id'>[] | undefined) => !legs || legs.every((l, i) => l.result === b.legs[i]?.result);
+
+/** Drops changes that change nothing. */
+const real = (bets: Bet[], changes: SettleChange[]) =>
+  changes.filter((c) => {
+    const b = bets.find((x) => x.id === c.id);
+    return !b || b.result !== c.result || b.cashout !== c.cashout || !sameLegResults(b, c.legs);
+  });
+
+/**
+ * A bet's result set from its row (W / L / V buttons, the result pill): the change for it, its legs set by rule 3,
+ * and legs worked out from the other bets of its dutch (`group`, the bet itself for a plain bet).
+ */
+export function betResultChanges(group: Bet[], b: Bet, result: Result, cashout: number | null = null): SettleChange[] {
+  if (result === 'cash-out' && (cashout == null || !(cashout >= 0))) return [];
+  const legs = legsForResult(b, result);
+  const change: SettleChange = { id: b.id, result, cashout: result === 'cash-out' ? cashout : null, ...(legs ? { legs } : {}) };
+  const filled = result === 'pending' ? [change] : fillLegs(group.some((x) => x.id === b.id) ? group : [...group, b], [change]);
+  return real(group.concat(b), filled);
+}
+
+/**
+ * A leg's result set by its W / L / V buttons. `group`: every bet of the dutch (or just the bet). The same leg on the
+ * other bets of the group gets the same result; then each touched bet's result follows its legs (rule 2), and legs
+ * that can now be worked out are filled in. Only bets that change are returned.
+ */
+export function legResultChanges(group: Bet[], betId: string, index: number, result: Result): SettleChange[] {
+  const bet = group.find((b) => b.id === betId);
+  const leg = bet?.legs[index];
+  if (!bet || !leg) return [];
+  const key = legKey(leg);
+  const changes: SettleChange[] = [];
+  for (const b of group) {
+    const hits = b.legs.flatMap((l, i) => ((b.id === betId ? i === index : legKey(l) === key) ? [i] : []));
+    if (!hits.length) continue;
+    const was = b.legs[hits[0]!]!.result;
+    const legs = legsAs(b, (l) => (hits.some((i) => b.legs[i] === l) ? result : l.result));
+    const next = resultFromLegs(b, legs, was);
+    const downLegs = next !== b.result && next === 'won' ? legsForResult(b, 'won') : undefined;
+    changes.push({ id: b.id, result: next, cashout: next === b.result ? b.cashout : null, legs: downLegs ?? legs });
+  }
+  return real(group, fillLegs(group, changes));
+}
+
+/**
+ * Rule 5, for bets logged before BT-28: a won combination's pending legs become won, and a lost one's legs are filled
+ * in where they can be worked out (other splits of its dutch, the last unknown leg). The legs that change, per bet.
+ */
+export function repairLegs(bets: Bet[]): { id: string; legs: Omit<Leg, 'id'>[] }[] {
+  const out: { id: string; legs: Omit<Leg, 'id'>[] }[] = [];
+  for (const b of bets) {
+    if (b.type !== 'combination' || !b.legs.some((l) => l.result === 'pending')) continue;
+    const group = b.dutchId ? bets.filter((x) => x.dutchId === b.dutchId) : [b];
+    const legs = b.result === 'won' ? legsForResult(b, 'won') : b.result === 'lost' ? (withKnownLegs(b, group) ?? undefined) : undefined;
+    if (legs && !sameLegResults(b, legs)) out.push({ id: b.id, legs });
+  }
+  return out;
 }

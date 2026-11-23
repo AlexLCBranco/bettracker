@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-23
+- BT-28 — Leg results: one-click W / L / V, and legs, splits and dutch always agree (v0.20.0)
+  A pending leg has W / L / V buttons (a settled one changes from its result); a lost leg loses its bet, all legs won wins it, a shared leg of a dutch is set on every split, a bet set won or back to pending takes its legs along, and a lost bet's unknown legs show "?" instead of "Pending", all undone with Z in one step.
 - BT-27 — Label chip and actual results on a bet (v0.19.0)
   T on a selected row (or "+ label / result" on hover, or the full form) sets a label shown as a small uppercase chip and what actually happened ("McCain 25+ pts → 24 pts"); a lost combination lists every losing leg with its actual ("✗ Jokic 12+ ass 11 · ✗ Celtics ML 111-112") instead of the red "lost by" text, which no longer glues the market onto the leg and now finds legs that lost on dutch splits.
 - BT-26 — One "Bets" page: Dashboard, History and Settle merged, a table that does not cut text (v0.18.0)
