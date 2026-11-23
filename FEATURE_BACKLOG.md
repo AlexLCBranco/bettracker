@@ -32,9 +32,9 @@ Owner's example: R$ 100 @ 1,60 wins → R$ 160 → all R$ 160 on a 1,20 = one sh
 - A void or cash-out inside a chain: void = that bet's odds count as 1,00; cash-out = the chain ends with the cash-out
   amount as its final payout.
 - Tiers by odds, shown as a small chip on a banked bet and on the open shot ("Banked Semi · needs 1,29+ for a Shot"):
-  Mini 1,10–1,22 · Semi 1,33–1,50 · Pepsi 1,51–1,79 · Shot 1,80+. Names and ranges live in ONE table in code:
+  Mini 1,10–1,32 · Semi 1,33–1,50 · Pepsi 1,51–1,79 · Shot 1,80+. Names and ranges live in ONE table in code:
   "Pepsi" is a placeholder the owner expects to rename, and "Major" is reserved for something else (do not use it).
-  Odds outside these ranges (under 1,10, and 1,23–1,32, which the owner has not assigned yet) show no chip.
+  Odds under 1,10 show no chip.
 - Every bet in a chain has the first bet's money type (Real or Hypothetical); the added leg inherits it, not editable.
   The owner uses this to simulate his "shots" system with hypothetical money.
 - Export / import carry `rolloverId`. Undo (Z) covers bank, add leg and close.
