@@ -31,5 +31,7 @@ Owner's example: R$ 100 @ 1,60 wins → R$ 160 → all R$ 160 on a 1,20 = one sh
   stake (or −first stake if any bet lost). A banked/open shot counts as pending, and its banked payout is not profit yet.
 - A void or cash-out inside a chain: void = that bet's odds count as 1,00; cash-out = the chain ends with the cash-out
   amount as its final payout.
+- Every bet in a chain has the first bet's money type (Real or Hypothetical); the added leg inherits it, not editable.
+  The owner uses this to simulate his "shots" system with hypothetical money.
 - Export / import carry `rolloverId`. Undo (Z) covers bank, add leg and close.
 - Tests: unit (chain odds, profit, counts, needed-odds rounding, void/cash-out), e2e (bank → add leg → win; → lose; close).
