@@ -5,8 +5,6 @@ Item IDs are BT-1, BT-2, ... (never reused; BT is this repo's prefix, unique acr
 
 ## Ready
 
-_Nothing planned right now._
-
 ### BT-7 — Betting Tool: "if 0 / 1 / 2 / … win" outcome table
 **In short:** Under the stake table, a small table shows the return and profit if 0, 1, 2 … up to every selection wins, since splits with player props can win together.
 
