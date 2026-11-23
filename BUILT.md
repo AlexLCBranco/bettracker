@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-22
+- BT-16 — Every odds box accepts any odds format (v0.10.0)
+  Typing -114, +220, 5/2, 1,3 or 40% in the bet form (total and legs), the quick-add line ("@-114") or a History odds cell shows "-114 → 1.88" while typing, turns into the decimal value when you leave the box, and is saved as decimal.
 - Fix: bets reload when you come back to the tab, so bets added, settled or deleted elsewhere (another tab, the phone, a test run) show up without reloading the page (v0.9.1)
 - BT-10 — One-click settle buttons on a dutch row (v0.9.0)
   A pending dutch in History and on the dashboard has 0 W, All W, Pick W… (one button per split with two, checkboxes with more), Shared ✕ and V; Undo shows for 8 s and Z undoes, the same as the Settle page.

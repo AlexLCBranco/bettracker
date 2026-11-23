@@ -5,14 +5,6 @@ Item IDs are BT-1, BT-2, ... (never reused; BT is this repo's prefix, unique acr
 
 ## Ready
 
-### BT-16 — Every odds box accepts any odds format (priority)
-**In short:** Typing -114, +220, 5/2 or 1,3 works in every odds box and is always turned into decimal odds.
-The bet form's "Total odds" and leg "Odds" boxes use `parseNumber` (`src/lib/form.ts`, `BetFormModal.tsx`), so "-114" is rejected; only the Betting Tool uses `parseOdds(…, 'auto')` (`src/lib/money.ts`).
-- Use `parseOdds` auto-detect in every odds input: full form (total and legs), quick-add line, History inline odds cell, and the dutch edit form (BT-12).
-- Same formats as the Betting Tool: decimal (comma or dot), American (+220 / -114), fractional, Hong Kong, Indonesian, Malay, probability. Always translate to decimal: when the box loses focus (or on save) the typed text is replaced by the decimal value (e.g. "-114" becomes "1.88"); while typing, a hint shows "-114 → 1.88"; error only when nothing reads. Odds are always displayed as decimal everywhere in the app (History, dashboard, legs, dutch rows, Analytics, export); no other display format.
-- Stored value stays decimal; potential return updates live from the parsed value.
-- Tests: unit for each input path; Playwright logs a bet with "-114" and with "+220" and checks the saved decimal odds.
-
 ### BT-12 — Edit a logged dutch as a whole
 **In short:** A dutch can be edited after it is logged, like single bets already can.
 Single bets already have Edit (pencil + inline cells), but a dutch row only has settle, Duplicate and Delete: there is no way to fix a dutch after logging it.

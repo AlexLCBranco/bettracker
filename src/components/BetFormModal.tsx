@@ -3,10 +3,11 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { formatDate, parseDateInput } from '@/lib/dates';
 import { emptyLeg, formFromBet, formToBet, newForm, nextForm, type BetForm, type LegForm } from '@/lib/form';
-import { formatBRL, parseNumber, potentialReturn } from '@/lib/money';
+import { formatBRL, oddsFromText, parseNumber, potentialReturn } from '@/lib/money';
 import { BET_TYPES, RESULT_LABEL, RESULTS, SITUATIONS, type Bet } from '@/lib/types';
 import { useApp } from './AppProvider';
 import { Autocomplete } from './Autocomplete';
+import { OddsInput } from './OddsInput';
 
 /** The full bet form, as a modal. New bets, edits and duplicates. */
 export function BetFormModal() {
@@ -67,7 +68,7 @@ function FormBody() {
   };
 
   const stake = parseNumber(f.stake);
-  const odds = parseNumber(f.odds);
+  const odds = oddsFromText(f.odds);
   const potential = stake && odds ? potentialReturn(stake, odds) : 0;
   const lastSport = f.type === 'solo' ? f.sport : (f.legs.at(-1)?.sport ?? defaults.sport);
 
@@ -94,7 +95,7 @@ function FormBody() {
             <input ref={stakeRef} className="field" inputMode="decimal" value={f.stake} onChange={(e) => set('stake', e.target.value)} aria-label="Stake" />
           </L>
           <L label="Total odds *">
-            <input className="field" inputMode="decimal" value={f.odds} onChange={(e) => set('odds', e.target.value)} aria-label="Odds" />
+            <OddsInput value={f.odds} onChange={(v) => set('odds', v)} placeholder="2.10, -114, 5/2" aria-label="Odds" />
           </L>
           <L label="Result *">
             <select className="field" value={f.result} onChange={(e) => set('result', e.target.value as BetForm['result'])} aria-label="Result">
@@ -198,7 +199,7 @@ function FormBody() {
                   <Autocomplete value={l.selection} onChange={(v) => setLeg(i, { selection: v })} getSuggestions={(q) => suggestFor('selection', q, l.sport)} aria-label={`Leg ${i + 1} selection`} />
                 </L>
                 <L label="Odds">
-                  <input className="field" inputMode="decimal" value={l.odds} onChange={(e) => setLeg(i, { odds: e.target.value })} aria-label={`Leg ${i + 1} odds`} />
+                  <OddsInput value={l.odds} onChange={(v) => setLeg(i, { odds: v })} aria-label={`Leg ${i + 1} odds`} />
                 </L>
                 <L label="Result">
                   <select className="field" value={l.result} onChange={(e) => setLeg(i, { result: e.target.value as LegForm['result'] })} aria-label={`Leg ${i + 1} result`}>

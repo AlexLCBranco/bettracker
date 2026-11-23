@@ -4,11 +4,12 @@ import { Fragment, useEffect, useRef, useState, type KeyboardEvent, type ReactNo
 import { formatDate, parseDateInput } from '@/lib/dates';
 import { betLabel, duplicateDutchDraft, dutchSummary, groupRows, type GroupOutcome } from '@/lib/dutch';
 import { duplicateForm } from '@/lib/form';
-import { formatBRL, formatOdds, parseNumber, profit } from '@/lib/money';
+import { formatBRL, formatOdds, oddsFromText, parseNumber, profit } from '@/lib/money';
 import { RESULT_LABEL, RESULTS, type Bet, type BetInput, type Leg, type Result } from '@/lib/types';
 import type { Field } from '@/lib/autocomplete';
 import { useApp } from './AppProvider';
 import { Autocomplete } from './Autocomplete';
+import { OddsInput } from './OddsInput';
 import { HitBadge, SplitMarkTag } from './HitBadge';
 import { splitMark } from '@/lib/hits';
 import { settleDutchRow, undoLast, type DutchRowAction, type SettleChange, type SettleState } from '@/lib/settle';
@@ -307,7 +308,7 @@ function BetRow({ b, expanded, toggle, nested }: { b: Bet; expanded: boolean; to
         <Cell kind="text" field="betText" value={b.betText} display={betDisplay} label="Bet" onSave={(v) => save({ betText: v })} wide />
         <Cell kind="text" field="book" value={b.book} label="Book" onSave={(v) => save({ book: v })} />
         <Cell kind="number" value={String(b.stake)} display={formatBRL(b.stake)} label="Stake" onSave={(v) => save({ stake: parseNumber(v) ?? b.stake })} right />
-        <Cell kind="number" value={formatOdds(b.odds)} label="Odds" onSave={(v) => save({ odds: parseNumber(v) ?? b.odds })} right />
+        <Cell kind="odds" value={formatOdds(b.odds)} label="Odds" onSave={(v) => save({ odds: oddsFromText(v) ?? b.odds })} right />
         <Cell kind="select" options={['solo', 'combination']} value={b.type} label="Type" onSave={(v) => save({ type: v as Bet['type'] })} />
         <Cell kind="select" options={['pregame', 'live']} value={b.situation} label="Situation" onSave={(v) => save({ situation: v as Bet['situation'] })} />
         <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums" data-testid="profit">
@@ -355,7 +356,7 @@ function BetRow({ b, expanded, toggle, nested }: { b: Bet; expanded: boolean; to
             <Cell kind="text" field="selection" sport={l.sport} value={l.selection} label={`Leg ${i + 1} selection`} onSave={(v) => saveLeg(i, { selection: v })} />
             <Cell kind="text" field="market" sport={l.sport} value={l.market} label={`Leg ${i + 1} market`} onSave={(v) => saveLeg(i, { market: v })} />
             <td />
-            <Cell kind="number" value={formatOdds(l.odds)} label={`Leg ${i + 1} odds`} onSave={(v) => saveLeg(i, { odds: v.trim() ? (parseNumber(v) ?? l.odds) : null })} right />
+            <Cell kind="odds" value={formatOdds(l.odds)} label={`Leg ${i + 1} odds`} onSave={(v) => saveLeg(i, { odds: v.trim() ? (oddsFromText(v) ?? l.odds) : null })} right />
             <td colSpan={3} />
             <Cell kind="select" options={[...RESULTS]} labels={RESULT_LABEL} value={l.result} label={`Leg ${i + 1} result`} onSave={(v) => saveLeg(i, { result: v as Result })} />
             <td />
@@ -414,6 +415,7 @@ type CellProps = {
 } & (
   | { kind: 'text'; field: Field; sport?: string }
   | { kind: 'number' }
+  | { kind: 'odds' }
   | { kind: 'date' }
   | { kind: 'select'; options: string[]; labels?: Record<string, string> }
 );
@@ -487,6 +489,8 @@ function Cell(props: CellProps) {
             </option>
           ))}
         </select>
+      ) : props.kind === 'odds' ? (
+        <OddsInput autoFocus className={`${cls} w-24`} value={draft} onChange={setDraft} onBlur={commit} onKeyDown={keys} aria-label={props.label} />
       ) : (
         <input autoFocus className={`${cls} w-24`} value={draft} inputMode={props.kind === 'number' ? 'decimal' : undefined} placeholder={props.kind === 'date' ? 'dd/mm/yyyy' : undefined} onChange={(e) => setDraft(e.target.value)} onBlur={commit} onKeyDown={keys} aria-label={props.label} />
       )}

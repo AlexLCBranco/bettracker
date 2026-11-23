@@ -1,7 +1,7 @@
 // The bet form's state (strings, as typed) and its conversion to and from a bet.
 
 import { formatDate, parseDateInput, todayISO } from './dates';
-import { formatOdds, parseNumber } from './money';
+import { formatOdds, oddsFromText, parseNumber } from './money';
 import type { Bet, BetType, Result, Situation } from './types';
 import { validateBet, type Validated } from './validate';
 
@@ -125,8 +125,9 @@ export function nextForm(f: BetForm): BetForm {
 export function formToBet(f: BetForm, today = todayISO()): Validated {
   const stake = parseNumber(f.stake);
   if (stake == null) return { ok: false, error: 'Stake is required' };
-  const odds = parseNumber(f.odds);
-  if (odds == null) return { ok: false, error: 'Odds are required' };
+  if (!f.odds.trim()) return { ok: false, error: 'Odds are required' };
+  const odds = oddsFromText(f.odds);
+  if (odds == null) return { ok: false, error: 'Odds: cannot read "' + f.odds.trim() + '" (decimal, American, fractional…)' };
   const placedDate = f.placedDate.trim() ? parseDateInput(f.placedDate, today) : today;
   if (!placedDate) return { ok: false, error: 'Placed date: use dd/mm/yyyy' };
   const gameDate = f.gameDate.trim() ? parseDateInput(f.gameDate, today) : placedDate;
@@ -140,7 +141,7 @@ export function formToBet(f: BetForm, today = todayISO()): Validated {
     f.type === 'solo'
       ? [{ sport: f.sport, game: f.game, market: f.market, selection: f.selection, odds, result: f.result }]
       : f.legs.map((l) => {
-          const lo = l.odds.trim() ? parseNumber(l.odds) : null;
+          const lo = l.odds.trim() ? oddsFromText(l.odds) : null;
           return { sport: l.sport, game: l.game, market: l.market, selection: l.selection, odds: l.odds.trim() && lo == null ? NaN : lo, result: l.result };
         });
   return validateBet({

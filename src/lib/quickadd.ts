@@ -1,18 +1,22 @@
 // Quick-add line: "150 @2.10 lakers ml". First standalone number = stake, "@number" = odds, the rest = bet text.
-// Rule-based only. Comma or dot decimals.
+// Rule-based only. Comma or dot decimals. Odds in any format (BT-16): "@-114", "@+220", "@5/2", "@1,3", always stored as decimal.
+
+import { oddsFromText } from './money';
 
 export type QuickAdd =
   | { ok: true; stake: number; odds: number; betText: string }
   | { ok: false; stake: number | null; odds: number | null; betText: string; reason: string };
 
 const NUM = String.raw`\d+(?:[.,]\d+)?`;
+/** An odds token after "@": decimal, signed (American / Indonesian / Malay), fractional or a percentage. */
+const ODDS = String.raw`[+-]?(?:\d+(?:[.,]\d+)?|[.,]\d+)(?:\/\d+(?:[.,]\d+)?)?%?`;
 
 export function parseQuickAdd(line: string): QuickAdd {
   let rest = line.trim();
   let odds: number | null = null;
-  const oddsMatch = new RegExp(String.raw`(^|\s)@\s*(${NUM})(?=\s|$)`).exec(rest);
+  const oddsMatch = new RegExp(String.raw`(^|\s)@\s*(${ODDS})(?=\s|$)`).exec(rest);
   if (oddsMatch) {
-    odds = Number(oddsMatch[2]!.replace(',', '.'));
+    odds = oddsFromText(oddsMatch[2]!) ?? 0;
     rest = (rest.slice(0, oddsMatch.index) + ' ' + rest.slice(oddsMatch.index + oddsMatch[0].length)).trim();
   }
   const tokens = rest.split(/\s+/).filter(Boolean);
@@ -33,6 +37,6 @@ export function parseQuickAdd(line: string): QuickAdd {
 export function splitQuickAddText(line: string): { prefix: string; text: string } {
   const tokens = line.match(/\S+\s*/g) ?? [];
   let i = 0;
-  while (i < tokens.length && new RegExp(String.raw`^(?:@\s*)?(?:R\$)?${NUM}\s*$|^@\s*$`, 'i').test(tokens[i]!)) i++;
+  while (i < tokens.length && new RegExp(String.raw`^(?:R\$)?${NUM}\s*$|^@\s*(?:${ODDS})?\s*$`, 'i').test(tokens[i]!)) i++;
   return { prefix: tokens.slice(0, i).join(''), text: tokens.slice(i).join('') };
 }

@@ -769,3 +769,35 @@ test('bets reload when the tab comes back into view: a bet added and deleted els
   await comeBack();
   await expect(page.getByTestId('bet-row')).toHaveCount(0);
 });
+
+test('BT-16: odds in any format in the full form, quick-add and History cells, saved as decimal', async ({ page, request, tag }) => {
+  await page.goto('/history');
+  // full form: "-114" shows the hint, becomes 1.88 on blur, saves 1.88
+  await page.getByRole('button', { name: 'Full form' }).click();
+  const dialog = page.getByRole('dialog', { name: 'New bet' });
+  await dialog.getByLabel('Stake').fill('100');
+  await dialog.getByLabel('Odds').fill('-114');
+  await expect(dialog.getByTestId('odds-hint')).toHaveText('-114 → 1.88 (American)');
+  await expect(dialog.getByTestId('potential-return')).toHaveText('R$ 188,00');
+  await dialog.getByLabel('Bet text').fill(`${tag} minus`);
+  await expect(dialog.getByLabel('Odds')).toHaveValue('1.88');
+  await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect.poll(async () => (await betsTagged(request, tag)).map((b) => b.odds)).toEqual([1.88]);
+
+  // quick-add "+220"
+  await page.getByTestId('quick-add').fill(`50 @+220 ${tag} plus`);
+  await page.getByTestId('quick-add').press('Enter');
+  await expect(page.getByRole('status')).toContainText('@3.20');
+  await expect.poll(async () => (await betsTagged(request, tag)).find((b) => b.betText.endsWith('plus'))?.odds).toBe(3.2);
+
+  // History inline odds cell: "5/2" saves 3.5 and shows 3.50
+  await page.getByLabel('Search bets').fill(tag);
+  const row = page.getByTestId('bet-row').filter({ hasText: `${tag} minus` });
+  await row.getByRole('button', { name: 'Edit Odds' }).click();
+  await row.getByLabel('Odds').fill('5/2');
+  await expect(row.getByTestId('odds-hint')).toContainText('→ 3.50');
+  await row.getByLabel('Odds').press('Enter');
+  await expect(row.getByRole('button', { name: 'Edit Odds' })).toHaveText('3.50');
+  await expect.poll(async () => (await betsTagged(request, tag)).find((b) => b.betText.endsWith('minus'))?.odds).toBe(3.5);
+});

@@ -151,3 +151,32 @@ export function parseOdds(text: string, format: OddsFormat = 'auto'): ParsedOdds
   const plain = r.label === ODDS_FORMAT_LABEL.decimal && /^\d+(\.\d+)?$|^\.\d+$/.test(t);
   return { ...r, plain };
 }
+
+/**
+ * Odds typed in any box (BT-16): any format `parseOdds` auto-detects, always as decimal odds. Plain decimal text
+ * keeps its exact value ("1.875"); a converted format is rounded to 2 decimals, as shown ("-114" → 1.88).
+ * Null when nothing reads or it is not above 1.
+ */
+export function oddsFromText(text: string): number | null {
+  // a bare "1" would read as Hong Kong evens (2.00); in a bet's odds box it is a typo for odds of 1, so refuse it
+  if (/^\s*1([.,]0*)?\s*$/.test(text)) return null;
+  const p = parseOdds(text, 'auto');
+  if (!p) return null;
+  return p.plain ? p.decimal : Math.round(p.decimal * 100) / 100;
+}
+
+/** The text an odds box shows once it loses focus: decimal with a dot ("1,3" → "1.3", "-114" → "1.88"); unreadable text stays. */
+export function normalizeOddsText(text: string): string {
+  const p = oddsFromText(text) == null ? null : parseOdds(text, 'auto');
+  if (!p) return text;
+  return p.plain ? String(p.decimal) : formatOdds(oddsFromText(text));
+}
+
+/** The hint under an odds box while typing another format: "-114 → 1.88"; null for plain decimal or empty text. */
+export function oddsHint(text: string): string | null {
+  const t = text.trim();
+  if (!t) return null;
+  const p = oddsFromText(t) == null ? null : parseOdds(t, 'auto');
+  if (!p) return 'Cannot read these odds';
+  return p.plain ? null : `${t} → ${formatOdds(oddsFromText(t))} (${p.label})`;
+}
