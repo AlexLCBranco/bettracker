@@ -5,6 +5,10 @@ Item IDs are BT-1, BT-2, ... (never reused; BT is this repo's prefix, unique acr
 
 ## Ready
 
+**Build order when building everything in one go** (owner, 2026-11-23): BT-34, BT-33, BT-30, BT-31, BT-32, BT-35,
+BT-36. One item at a time: finish it, tests green, version bump, moved to `BUILT.md` and committed before starting
+the next. With this order BT-30 gets Bonus money from the start and BT-36 includes its "Start this ladder" part.
+
 BT-30 to BT-32 are one feature, the "PP system", written up from a conversation on 2026-11-23.
 Build order: BT-30, BT-31, BT-32.
 
