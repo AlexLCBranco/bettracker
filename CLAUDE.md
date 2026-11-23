@@ -3,8 +3,9 @@
 @AGENTS.md
 
 Personal bet tracker (single user, desktop first, dark theme, UI in English, currency BRL). Rebuild of the v0
-prototype at https://v0-gambling-app-nine.vercel.app/ (not its code). v0 is the minimum bar ("at least as good as
- v0"), not a layout to copy: the whole website (every page, shell, navigation) may be redesigned freely.
+prototype at https://v0-gambling-app-nine.vercel.app/ (not its code). v0 is the minimum bar for
+functionality and usability, not a layout to copy: changes beyond it are expected. The owner is open to redesigning
+the whole website, but a redesign wider than a backlog item asks for is talked through with him first.
 
 ## Stack
 
