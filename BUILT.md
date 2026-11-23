@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-22
+- BT-12 — Edit a logged dutch as a whole (v0.13.0)
+  A dutch row has ✎ Edit, which opens the log form with the saved dutch (selections, legs, shared legs, odds in any format, stakes, books, games, markets, dates); saving updates its bets in place and keeps results already set, a removed split deletes its bet and "+ Add split" adds one.
 - BT-13 — Clearer wins and losses (v0.12.0)
   Every bet, dutch and leg row has a coloured left edge and a sign (green ✓ won, red ✕ lost, amber ½ half, grey … pending, – void), a lost combination says "✕ lost by Celtics", a dutch row is coloured by its net with the net profit in large type, and its splits show ✓ hit / ✕ miss.
 - BT-15 — History table fits the screen (v0.11.0)

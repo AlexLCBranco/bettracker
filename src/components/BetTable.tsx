@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { formatDate, parseDateInput } from '@/lib/dates';
-import { betLabel, duplicateDutchDraft, dutchSummary, groupRows, type GroupOutcome } from '@/lib/dutch';
+import { betLabel, duplicateDutchDraft, dutchSummary, editDutchDraft, groupRows, type GroupOutcome } from '@/lib/dutch';
 import { duplicateForm } from '@/lib/form';
 import { formatBRL, formatOdds, oddsFromText, parseNumber, profit } from '@/lib/money';
 import { RESULT_LABEL, RESULTS, type Bet, type BetInput, type Leg, type Result } from '@/lib/types';
@@ -272,6 +272,9 @@ function DutchRow({ bets, dutchId, expanded, toggle, settle }: { bets: Bet[]; du
           ) : (
             <DutchSettleButtons dutchId={dutchId} bets={bets} onSettle={(a) => settle.settle(dutchId, bets, a)} />
           )}
+          <IconButton label="Edit dutch" onClick={() => openDutch(editDutchDraft(bets), undefined, { dutchId, bets })}>
+            ✎
+          </IconButton>
           <RowMenu
             label="More dutch actions"
             items={[

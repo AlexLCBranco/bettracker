@@ -20,9 +20,10 @@ interface AppCtx {
   /** Deletes every bet of a dutch. */
   removeDutch(dutchId: string): Promise<void>;
   /** The "log as bets" form for a dutch (from the Betting Tool, or Duplicate on a dutch). */
-  dutchForm: { draft: DutchDraft; key: number; onSaved?: (bets: Bet[]) => void } | null;
+  /** `edit`: editing a logged dutch (BT-12), its id and bets as they were when the form opened. */
+  dutchForm: { draft: DutchDraft; key: number; onSaved?: (bets: Bet[]) => void; edit?: { dutchId: string; bets: Bet[] } } | null;
   /** `onSaved` runs after the bets are saved (the Betting Tool clears itself, BT-9). */
-  openDutch(draft: DutchDraft, onSaved?: (bets: Bet[]) => void): void;
+  openDutch(draft: DutchDraft, onSaved?: (bets: Bet[]) => void, edit?: { dutchId: string; bets: Bet[] }): void;
   closeDutch(): void;
   update(id: string, patch: Partial<BetInput>): Promise<Bet>;
   remove(id: string): Promise<void>;
@@ -199,7 +200,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     createMany,
     removeDutch,
     dutchForm,
-    openDutch: (draft, onSaved) => setDutchForm({ draft, onSaved, key: ++formKey.current }),
+    openDutch: (draft, onSaved, edit) => setDutchForm({ draft, onSaved, edit, key: ++formKey.current }),
     closeDutch: () => setDutchForm(null),
     update,
     remove,

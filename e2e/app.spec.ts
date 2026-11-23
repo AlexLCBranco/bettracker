@@ -878,3 +878,57 @@ test('BT-13: wins green ✓, losses red ✕, half amber ½, pending grey; a lost
   await dutch.getByRole('button', { name: 'Show bets' }).click();
   await expect(page.getByTestId('split-mark')).toHaveText(['✓ hit', '✕ miss']);
 });
+
+test('BT-12: edit a logged dutch: change odds and stake, add a split, remove a split; results kept, History and dashboard follow', async ({ page, request, tag }) => {
+  const d = tag.replace(/[^A-Za-z0-9_-]/g, '');
+  const leg = (selection: string) => [{ sport: 'Football', game: `${tag} A x B`, market: '1X2', selection }];
+  const home = await createBet(request, { betText: '', dutchId: d, odds: 2, stake: 50, result: 'won', legs: leg('Home') });
+  const draw = await createBet(request, { betText: '', dutchId: d, odds: 4, stake: 25, legs: leg('Draw') });
+  await page.goto('/history');
+  await page.getByLabel('Search bets').fill(tag);
+  const row = page.locator(`[data-dutch-id="${d}"]`);
+  await expect(row.getByTestId('dutch-stake')).toHaveText('R$ 75,00');
+  await row.getByRole('button', { name: 'Edit dutch' }).click();
+
+  const dialog = page.getByRole('dialog', { name: 'Edit dutch' });
+  await expect(dialog.getByLabel('Selection 1 name')).toHaveValue('Home');
+  await expect(dialog.getByLabel('Selection 1 odds')).toHaveValue('2.00');
+  await expect(dialog.getByLabel('Selection 2 stake')).toHaveValue('25');
+  await expect(dialog.getByLabel('Placed date')).toHaveValue('01/01/2000');
+  // split 1: odds "+150" (= 2.50) and stake 60
+  await dialog.getByLabel('Selection 1 odds').fill('+150');
+  await dialog.getByLabel('Selection 1 stake').fill('60');
+  // remove split 2 (Draw), add Away @3.5 for 20
+  await dialog.getByRole('button', { name: 'Remove selection 2' }).click();
+  await dialog.getByRole('button', { name: '+ Add split' }).click();
+  await dialog.getByLabel('Selection 2 name').fill('Away');
+  await dialog.getByLabel('Selection 2 odds').fill('3.5');
+  await dialog.getByLabel('Selection 2 stake').fill('20');
+  await expect(dialog.getByTestId('dutch-form-total')).toHaveText('R$ 80,00');
+  await dialog.getByRole('button', { name: 'Save changes' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole('status')).toContainText('Dutch saved: 1 updated, 1 added, 1 removed');
+
+  await expect
+    .poll(async () => {
+      const all = (await (await request.get('/api/bets')).json()) as { id: string; dutchId: string | null; odds: number; stake: number; result: string; legs: { selection: string; game: string }[] }[];
+      return all
+        .filter((b) => b.dutchId === d)
+        .map((b) => [b.id === home.id ? 'home' : b.id === draw.id ? 'draw' : 'new', b.legs[0]!.selection, b.odds, b.stake, b.result, b.legs[0]!.game])
+        .sort();
+    })
+    .toEqual([
+      ['home', 'Home', 2.5, 60, 'won', `${tag} A x B`],
+      ['new', 'Away', 3.5, 20, 'pending', `${tag} A x B`],
+    ]);
+  // History: still one dutch row, new total, Home still won
+  await expect(row.getByTestId('dutch-stake')).toHaveText('R$ 80,00');
+  await expect(row).toContainText('Home / Away');
+  await expect(row.getByTestId('result')).toHaveText('Pending');
+  await expect(page.getByTestId('history-summary')).toContainText('1 of');
+  // dashboard recent bets shows the edited dutch too (locally: on the live site real bets push a 2000-dated one out of the last 20)
+  if (!LIVE) {
+    await page.goto('/');
+    await expect(page.locator(`[data-dutch-id="${d}"]`).getByTestId('dutch-stake')).toHaveText('R$ 80,00');
+  }
+});

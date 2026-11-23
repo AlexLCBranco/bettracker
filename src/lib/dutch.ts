@@ -156,6 +156,8 @@ export interface DutchDraftRow {
   stake: number;
   /** null = same book as the row above (the first row: the last-used book). */
   book: string | null;
+  /** Editing a logged dutch (BT-12): the bet this row saves over; none = a split added in the edit. */
+  betId?: string;
 }
 
 export interface DutchDraft {
@@ -191,6 +193,21 @@ const distinct = (xs: string[]) => xs.map((x) => x.trim()).filter((x, i, a) => x
 
 /** Duplicate a dutch: the same selections, odds, stakes, books, games and markets, dated today, to log as a new dutch. */
 export function duplicateDutchDraft(bets: Bet[], today = todayISO()): DutchDraft {
+  return { ...draftOf(bets), placedDate: formatDate(today), gameDate: formatDate(today) };
+}
+
+/** Edit a logged dutch (BT-12): its draft as saved (dates included), each row tied to its bet. */
+export function editDutchDraft(bets: Bet[]): DutchDraft {
+  const d = draftOf(bets);
+  return {
+    ...d,
+    rows: d.rows.map((r, i) => ({ ...r, betId: bets[i]!.id })),
+    placedDate: formatDate(bets.map((b) => b.placedDate).sort()[0]!),
+    gameDate: formatDate(bets.map((b) => b.gameDate).sort()[0]!),
+  };
+}
+
+function draftOf(bets: Bet[]): Omit<DutchDraft, 'placedDate' | 'gameDate'> {
   const sharedNames = sharedLegNames(bets);
   const isShared = (sel: string) => sharedNames.some((n) => isLeg(sel, n));
   const pick = (l: Leg): DraftLeg => ({ selection: l.selection, odds: l.odds, game: l.game, market: l.market });
@@ -208,8 +225,6 @@ export function duplicateDutchDraft(bets: Bet[], today = todayISO()): DutchDraft
     games: distinct(allLegs.map((l) => l.game)),
     markets: distinct(allLegs.map((l) => l.market)),
     situation: bets[0]!.situation,
-    placedDate: formatDate(today),
-    gameDate: formatDate(today),
   };
 }
 
@@ -324,4 +339,41 @@ export async function logDraft(
   }
   onSaved?.(bets);
   return { ok: true, bets };
+}
+
+export interface DutchEditPlan {
+  /** Splits that still exist: saved over their bet, result, cash-out, analysis and leg results kept. */
+  updates: { id: string; patch: BetInput }[];
+  /** Splits added in the edit: new pending bets in the same dutch. */
+  creates: BetInput[];
+  /** Bets whose split was removed. */
+  deletes: string[];
+}
+
+/**
+ * What saving an edited dutch does (BT-12): each row with a bet updates that bet in place (same dutch id; its result,
+ * cash-out, analysis and the results of legs that are still there are kept), a new row adds a pending bet, a removed
+ * row deletes its bet.
+ */
+export function planDutchEdit(d: DutchDraft, original: Bet[], lastBook: string, dutchId: string, today = todayISO()): { ok: true; plan: DutchEditPlan } | { ok: false; error: string } {
+  const v = draftToBets(d, lastBook, dutchId, today);
+  if (!v.ok) return v;
+  const byId = new Map(original.map((b) => [b.id, b]));
+  const plan: DutchEditPlan = { updates: [], creates: [], deletes: [] };
+  for (const [i, input] of v.value.entries()) {
+    const old = d.rows[i]!.betId ? byId.get(d.rows[i]!.betId!) : undefined;
+    if (!old) {
+      plan.creates.push(input);
+      continue;
+    }
+    const legs = input.legs.map((l, k) => {
+      if (input.type === 'solo') return { ...l, result: old.result };
+      const same = old.legs.find((o) => isLeg(o.selection, l.selection)) ?? (old.legs.length === input.legs.length ? old.legs[k] : undefined);
+      return { ...l, result: same?.result ?? 'pending' };
+    });
+    plan.updates.push({ id: old.id, patch: { ...input, result: old.result, cashout: old.cashout, preAnalysis: old.preAnalysis, postAnalysis: old.postAnalysis, legs } });
+  }
+  const kept = new Set(d.rows.map((r) => r.betId).filter(Boolean));
+  plan.deletes = original.filter((b) => !kept.has(b.id)).map((b) => b.id);
+  return { ok: true, plan };
 }
