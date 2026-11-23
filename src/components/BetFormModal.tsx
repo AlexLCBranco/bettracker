@@ -6,6 +6,7 @@ import { emptyLeg, formFromBet, formToBet, newForm, nextForm, type BetForm, type
 import { formatMoney, MONEY_SYMBOL, oddsFromText, parseNumber, potentialReturn } from '@/lib/money';
 import { BET_TYPES, RESULT_LABEL, RESULTS, SITUATIONS, type Bet } from '@/lib/types';
 import { clashText, teamClashes } from '@/lib/clash';
+import { quickAddLegs } from '@/lib/quickadd';
 import { useApp } from './AppProvider';
 import { Autocomplete } from './Autocomplete';
 import { MoneySelect } from './Money';
@@ -223,7 +224,14 @@ function FormBody() {
                 </button>
               </div>
             ))}
-            {f.legs.length === 0 && <p className="text-xs text-zinc-500">No legs: total odds only. Add 2 or more legs to track each one.</p>}
+            {f.legs.length === 0 &&
+              (quickAddLegs(f.betText) ? (
+                <p className="text-xs text-zinc-500">No legs: total odds only. Add 2 or more legs to track each one.</p>
+              ) : (
+                <p className="text-xs text-amber-300" data-testid="no-legs-solo">
+                  No legs: saved as a Solo. Add 2 or more legs, or write the bet text as {'"a + b"'}.
+                </p>
+              ))}
             {f.legs.length === 1 && (
               <p className="text-xs text-amber-300" data-testid="one-leg">
                 One leg is a Solo bet: add another leg, or it is saved as a Solo.

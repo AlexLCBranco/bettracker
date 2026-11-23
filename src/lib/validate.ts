@@ -1,6 +1,7 @@
 // Checks and normalizes a bet coming from a client (create, update, import). Shared by server and form.
 
 import { isValidISODate } from './dates';
+import { isReallySolo } from './quickadd';
 import { tidyBet } from './tidy';
 import { BET_TYPES, MONEY, RESULTS, SITUATIONS, type BetInput, type Leg, type Money, type Result } from './types';
 
@@ -53,8 +54,8 @@ export function validateBet(raw: unknown): Validated {
 
   if (type === 'combination') {
     legs = legs.filter((l) => l.sport || l.game || l.market || l.selection || l.odds != null);
-    // BT-17: a combination with one leg is really a solo bet
-    if (legs.length === 1) type = 'solo';
+    // BT-17: a combination with one leg is really a solo bet; BT-25: so is one with no legs, unless its text is "a + b"
+    if (isReallySolo(type, legs, str(r.betText))) type = 'solo';
   }
   if (type === 'solo') {
     // A solo bet is one leg that mirrors the bet's odds and result.

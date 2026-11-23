@@ -5,15 +5,6 @@ Item IDs are BT-1, BT-2, ... (never reused; BT is this repo's prefix, unique acr
 
 ## Ready
 
-### BT-25 — Easier way to add or change the game of a logged bet
-**In short:** Setting or changing the game on a bet that is already logged takes one click on the game, for single bets, combinations and dutches.
-
-- Today: a bet row edits only its first leg's game inline; a dutch row's game text is not editable at all (only through Edit dutch or by expanding and editing leg by leg).
-- Proposed (owner has not confirmed the details yet, ask him if unsure): clicking the game on any row opens one small game editor with autocomplete of recent games. A row with one game: one field, applied to every leg / split that has that game or none. A row with several games: one field per distinct game, plus the legs with no game.
-- "no game" rows show an obvious "add game" target, not just muted text.
-- Bug to reproduce first (owner, 2026-11-23, v0.16.0): on the "no game" row "Jokic 6 4Q pts" (Combo ×0, live, Old Book) he tried to add the game from the table and could not. Find out why with Playwright before redesigning.
-- Owner's ask: double click on the game (or on "no game") starts editing it, on every row type. Add an e2e test that adds a game to a "no game" bet this way.
-
 ### BT-26 — One "Bets" page: merge Dashboard, History and Settle, with a table that does not cut text
 **In short:** The site becomes three pages (Bets, Analytics, Dutch tool); Bets is one full-width table with stats on top, and bet text is no longer cut with "…".
 

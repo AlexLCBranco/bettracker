@@ -1134,7 +1134,7 @@ test('BT-23: Bet History grouped by day, one pill per row, one sub-line, splits 
   await expect(bet('solo won').getByRole('button', { name: 'Edit Game', exact: true })).toHaveText('Celtics @ Warriors');
   await expect(bet('solo won').getByTestId('game-date')).toHaveText('game 4 Jan 2000');
   await expect(bet('lost combo').getByTestId('combo-games')).toHaveText('Celtics @ Warriors+1');
-  await expect(bet('paper').getByRole('button', { name: 'Edit Game', exact: true })).toHaveText('no game');
+  await expect(bet('paper').getByRole('button', { name: 'Edit Game', exact: true })).toHaveText('+ add game');
 
   // Type: plain text, LIVE only when live
   await expect(bet('lost combo').getByTestId('type')).toHaveText('Combo ×2');
@@ -1218,4 +1218,74 @@ test('BT-24: the ⋯ menu opens fully visible on dutch and bet rows, stays while
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
   }
+});
+
+test('BT-25: double click on the game edits it on every row type; "no game" bets get "+ add game"; a legless Combo is a Solo', async ({ page, request, tag }) => {
+  const book = `${tag} Book`;
+  const day = { placedDate: '2000-01-02', gameDate: '2000-01-02', book };
+  // the owner's row: saved as a Combo with no legs, live, Old Book
+  const jokic = await createBet(request, { ...day, type: 'combination', legs: [], situation: 'live', book: 'Old Book', betText: `${tag} Jokic 6 4Q pts` });
+  const combo = await createBet(request, {
+    ...day,
+    type: 'combination',
+    odds: 4,
+    betText: `${tag} combo`,
+    legs: [{ game: 'Celtics vs Warriors', selection: 'Celtics', odds: 2 }, { game: 'Lakers vs Nets', selection: 'Lakers', odds: 2 }, { selection: 'Tatum 25 pts', odds: 1.5 }],
+  });
+  const d = `${tag}-g`.replace(/[^A-Za-z0-9_-]/g, '');
+  for (const sel of ['Home', 'Away']) await createBet(request, { ...day, betText: '', dutchId: d, legs: [{ game: `${tag} A vs B`, selection: sel, odds: 2 }] });
+  const legsOf = async (id: string) => (await betsTagged(request, tag)).find((b) => b.id === id)!;
+
+  await page.goto('/history');
+  await page.getByLabel('Search bets').fill(tag);
+  await page.getByLabel('Search bets').blur();
+
+  // the legless "Combo" shows as the Solo it is, with an obvious "+ add game"
+  const row = page.locator(`[data-bet-id="${jokic.id}"]`);
+  await expect(row.getByTestId('type')).toHaveText('SoloLIVE');
+  const add = row.getByRole('button', { name: 'Edit Game' });
+  await expect(add).toHaveText('+ add game');
+  await add.dblclick();
+  const editor = page.getByRole('dialog', { name: 'Edit game' });
+  const box = editor.getByRole('combobox', { name: 'Game' });
+  await expect(box).toBeFocused();
+  await box.fill('Nuggets @ Lakers');
+  await box.press('Enter');
+  await expect(editor).toBeHidden();
+  await expect(row.getByRole('button', { name: 'Edit Game' })).toHaveText('Nuggets @ Lakers');
+  await expect.poll(async () => legsOf(jokic.id)).toMatchObject({ type: 'solo', situation: 'live', book: 'Old Book', legs: [{ game: 'Nuggets vs Lakers' }] });
+
+  // a single click does not start editing; a double click does, and Esc cancels
+  await row.getByRole('button', { name: 'Edit Game' }).click();
+  await expect(editor).toBeHidden();
+  await row.getByRole('button', { name: 'Edit Game' }).dblclick();
+  await expect(editor.getByRole('combobox', { name: 'Game' })).toHaveValue('Nuggets @ Lakers');
+  await page.keyboard.press('Escape');
+  await expect(editor).toBeHidden();
+
+  // a combination with two games and a leg with none: one box per game plus one for the leg with no game
+  await page.locator(`[data-bet-id="${combo.id}"]`).getByRole('button', { name: 'Edit Game' }).dblclick();
+  await expect(editor.getByRole('combobox')).toHaveCount(3);
+  await expect(editor.getByRole('combobox', { name: 'Game 1' })).toHaveValue('Celtics @ Warriors');
+  await expect(editor.getByRole('combobox', { name: 'Game 2' })).toHaveValue('Lakers @ Nets');
+  await editor.getByRole('combobox', { name: 'Legs with no game' }).fill('Celtics @ Warriors');
+  await editor.getByRole('button', { name: 'Save' }).click();
+  await expect.poll(async () => (await legsOf(combo.id)).legs.map((l) => l.game)).toEqual(['Celtics vs Warriors', 'Lakers vs Nets', 'Celtics vs Warriors']);
+
+  // a dutch: its one game changed on every split at once
+  const dutch = page.locator(`[data-dutch-id="${d}"]`);
+  await dutch.getByRole('button', { name: 'Edit Game' }).dblclick();
+  await editor.getByRole('combobox', { name: 'Game' }).fill(`${tag} C @ D`);
+  await editor.getByRole('combobox', { name: 'Game' }).press('Enter');
+  await expect.poll(async () => (await betsTagged(request, tag)).filter((b) => b.dutchId === d).map((b) => b.legs[0]!.game)).toEqual([`${tag} C vs D`, `${tag} C vs D`]);
+
+  // a leg row: double click on its game
+  await page.locator(`[data-bet-id="${combo.id}"]`).getByRole('button', { name: 'Show legs' }).click();
+  const leg2 = page.getByRole('button', { name: 'Edit Leg 2 game' });
+  await leg2.click();
+  await expect(page.getByRole('combobox', { name: 'Leg 2 game' })).toHaveCount(0);
+  await leg2.dblclick();
+  await page.getByRole('combobox', { name: 'Leg 2 game' }).fill('Knicks @ Heat');
+  await page.getByRole('combobox', { name: 'Leg 2 game' }).press('Enter');
+  await expect.poll(async () => (await legsOf(combo.id)).legs.map((l) => l.game)).toEqual(['Celtics vs Warriors', 'Knicks vs Heat', 'Celtics vs Warriors']);
 });

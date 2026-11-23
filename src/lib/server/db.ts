@@ -4,6 +4,7 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { Bet, BetInput, Leg } from '../types';
 import type { ImportBet } from '../transfer';
+import { asSolo } from '../games';
 
 // Turso (libSQL) in production: TURSO_DATABASE_URL + TURSO_AUTH_TOKEN. Locally and in tests: a SQLite file,
 // data/local.db unless TURSO_DATABASE_URL says otherwise (e.g. file:data/e2e.db).
@@ -74,8 +75,9 @@ async function migrate(c: Client): Promise<void> {
 const s = (v: unknown) => (v == null ? '' : String(v));
 const n = (v: unknown) => (v == null ? null : Number(v));
 
+/** BT-25: a legless "combination" saved before it was detected reads as the solo it is (asSolo). */
 function rowToBet(r: Row, legs: Leg[]): Bet {
-  return {
+  return asSolo({
     id: s(r.id),
     book: s(r.book),
     placedDate: s(r.placed_date),
@@ -94,7 +96,7 @@ function rowToBet(r: Row, legs: Leg[]): Bet {
     money: r.money === 'hypothetical' ? 'hypothetical' : 'real',
     createdAt: s(r.created_at),
     updatedAt: s(r.updated_at),
-  };
+  });
 }
 
 function rowToLeg(r: Row): Leg {

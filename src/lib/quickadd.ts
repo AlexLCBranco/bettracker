@@ -2,7 +2,7 @@
 // Rule-based only. Comma or dot decimals. Odds in any format (BT-16): "@-114", "@+220", "@5/2", "@1,3", always stored as decimal.
 
 import { oddsFromText } from './money';
-import type { Money } from './types';
+import type { BetType, Money } from './types';
 
 export type QuickAdd =
   | { ok: true; stake: number; odds: number; betText: string; money?: Money }
@@ -56,3 +56,10 @@ export function quickAddLegs(betText: string): string[] | null {
   const parts = betText.split(/\s+\+\s+/).map((s) => s.trim()).filter(Boolean);
   return parts.length >= 2 ? parts : null;
 }
+
+/**
+ * A "combination" with fewer than 2 legs is really a solo bet (owner, 2026-11-23: "Jokic 6 4Q pts" saved as a
+ * Combo with no legs). The one exception: no legs but a bet text joining 2+ selections with " + ", a combination
+ * whose legs were not entered.
+ */
+export const isReallySolo = (type: BetType, legs: unknown[], betText: string) => type === 'combination' && legs.length < 2 && (legs.length === 1 || !quickAddLegs(betText));

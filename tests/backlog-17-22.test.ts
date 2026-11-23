@@ -17,8 +17,9 @@ describe('BT-17: a combination with one leg is a solo bet', () => {
     expect(v).toMatchObject({ ok: true, value: { type: 'solo', legs: [{ sport: 'NBA', game: 'Celtics vs Warriors', selection: 'Tatum 25+ pts', odds: 1.9, result: 'pending' }] } });
   });
 
-  it('no legs or two legs stay a combination', () => {
-    expect(validateBet(raw({ type: 'combination' }))).toMatchObject({ ok: true, value: { type: 'combination', legs: [] } });
+  it('two legs, or no legs with an "a + b" text, stay a combination (BT-25: no legs otherwise is a solo)', () => {
+    expect(validateBet(raw({ type: 'combination', betText: 'a + b' }))).toMatchObject({ ok: true, value: { type: 'combination', legs: [] } });
+    expect(validateBet(raw({ type: 'combination' }))).toMatchObject({ ok: true, value: { type: 'solo' } });
     expect(validateBet(raw({ type: 'combination', legs: [{ selection: 'A' }, { selection: 'B' }] }))).toMatchObject({ ok: true, value: { type: 'combination' } });
   });
 

@@ -15,6 +15,7 @@ import { comboHits, dutchHits, missesTitle } from '@/lib/hits';
 import { tidyText, type NameCasing } from '@/lib/tidy';
 import { settleDutchRow, undoLast, type DutchRowAction, type SettleChange, type SettleState } from '@/lib/settle';
 import { DutchSettleButtons } from './DutchSettle';
+import { GameTarget } from './GameEditor';
 import { isTyping } from './Shell';
 import { betTone, groupTone, resultTone } from '@/lib/tone';
 import { TONE_BADGE, TONE_EDGE, TONE_TEXT } from './tone';
@@ -306,7 +307,9 @@ function DutchRow({ bets, dutchId, expanded, toggle, settle }: { bets: Bet[]; du
         <Chevron expanded={expanded} noun="bets" onClick={toggle} />
       </td>
       <td className={`${CELL} text-zinc-200`}>
-        <GamesText legs={legs} names={nameCasing} />
+        <GameTarget bets={bets} hasGame={legGames(legs).length > 0}>
+          <GamesText legs={legs} names={nameCasing} />
+        </GameTarget>
         <GameSub
           sport={sport || undefined}
           markets={legMarkets(legs)}
@@ -431,10 +434,16 @@ function BetRow({ b, expanded, toggle, split }: { b: Bet; expanded: boolean; tog
         </td>
         <td className={`${CELL} ${nested ? 'pl-3' : ''}`}>
           {solo ? (
-            <Cell bare truncate="max-w-full" kind="text" field="game" sport={b.legs[0]?.sport} value={b.legs[0]?.game ?? ''} display={displayGame(b.legs[0]?.game ?? '', names)} empty="no game" label="Game" onSave={(v) => saveLeg(0, { game: v })} />
+            <GameTarget bets={[b]} hasGame={!!b.legs[0]?.game}>
+              <span className="block truncate" title={displayGame(b.legs[0]?.game ?? '', names)}>
+                {displayGame(b.legs[0]?.game ?? '', names)}
+              </span>
+            </GameTarget>
           ) : (
             <div className="text-zinc-300" title={b.legs.length ? undefined : 'No legs entered: ✎ Edit to add them'}>
-              <GamesText legs={b.legs} names={names} />
+              <GameTarget bets={[b]} hasGame={legGames(b.legs).length > 0}>
+                <GamesText legs={b.legs} names={names} />
+              </GameTarget>
             </div>
           )}
           <GameSub
@@ -532,7 +541,7 @@ function BetRow({ b, expanded, toggle, split }: { b: Bet; expanded: boolean; tog
                 <Connector last={i === b.legs.length - 1 && (!nested || split.last)} />
               </td>
               <td className={`${CELL} pl-3`}>
-                <Cell bare truncate="max-w-full" kind="text" field="game" sport={l.sport} value={l.game} display={displayGame(l.game, names)} empty="no game" label={`Leg ${i + 1} game`} onSave={(v) => saveLeg(i, { game: v })} />
+                <Cell bare truncate="max-w-full" kind="text" field="game" sport={l.sport} value={l.game} display={displayGame(l.game, names)} empty="no game" dbl label={`Leg ${i + 1} game`} onSave={(v) => saveLeg(i, { game: v })} />
                 <div className={SUB}>
                   <Cell bare truncate="max-w-full" kind="text" field="sport" value={l.sport} label={`Leg ${i + 1} sport`} onSave={(v) => saveLeg(i, { sport: v })} />
                 </div>
@@ -614,6 +623,8 @@ type CellProps = {
   /** Extra classes and tooltip on the shown value (H$ stakes, BT-14). */
   extraClass?: string;
   title?: string;
+  /** BT-25: starts editing on a double click (games), not a single one. */
+  dbl?: boolean;
 } & (
   | { kind: 'text'; field: Field; sport?: string }
   | { kind: 'number' }
@@ -660,7 +671,8 @@ function Cell(props: CellProps) {
         aria-label={`Edit ${props.label}`}
         title={props.title ?? (props.truncate && shown ? shown : undefined)}
         className={`-mx-1 ${props.inline ? 'inline-block' : 'block'} min-h-4 cursor-text rounded px-1 hover:bg-zinc-800 ${props.bare || props.extraClass ? '' : 'text-zinc-200'} ${props.truncate ? `${props.truncate} truncate` : ''} ${props.extraClass ?? ''}`}
-        onClick={start}
+        onClick={props.dbl ? undefined : start}
+        onDoubleClick={props.dbl ? start : undefined}
         onKeyDown={(e) => e.key === 'Enter' && start()}
       >
         {shown || <span className={props.empty ? 'text-zinc-600' : 'text-zinc-700'}>{props.empty ?? '-'}</span>}

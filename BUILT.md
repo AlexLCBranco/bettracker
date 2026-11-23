@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-23
+- BT-25 — Easier way to add or change the game of a logged bet (v0.17.0)
+  Double click on the game of any row (single, combination, dutch, leg) opens a small game editor with recent games (one box per game, plus one for legs with no game); bets with no game show a "+ add game" button; a "Combo" with no legs (unless its text is "a + b") is a Solo.
 - BT-24 — Fix the dutch "⋯" menu glitch (v0.16.1)
   The ⋯ menu on bet and dutch rows opens in full above the rows below it, stays open while the mouse is on it, opens upward near the bottom of the window, and no longer closes at once after typing in the search box.
 - BT-23 — Bet History redesign: clearer and prettier (v0.16.0)
