@@ -53,9 +53,11 @@ package.json's version shows in the bottom-right corner (`SiteVersion` in `src/c
 
 ## Feature backlog, built list and ideas
 
-**Pull first.** The owner's other Claude sessions push backlog items straight to GitHub. At the start of every
-session, and before reading or answering anything about the backlog, a BT-n item, `BUILT.md` or `IDEAS.md`, run
-`git pull --ff-only`. If the pull fails (local changes, diverged branch), say so instead of answering from a stale copy.
+**Read the lists from `main` on GitHub, never from your local checkout or branch.** The owner's other Claude
+sessions push backlog items straight to `main`, and Claude Code sessions run on a branch made at session start, so
+`git pull` there does NOT bring in items added later. Run `git fetch origin main`, then read with
+`git show origin/main:FEATURE_BACKLOG.md` (same for `BUILT.md` and `IDEAS.md`). Before building, merge `origin/main`
+into your branch.
 
 Three lists, never mixed:
 - `FEATURE_BACKLOG.md`: planned work only. Nothing built is ever in it. Item IDs are BT-1, BT-2, ... (never reused).
