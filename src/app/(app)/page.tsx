@@ -1,83 +1,348 @@
 'use client';
 
-import Link from 'next/link';
-import { useMemo, type ReactNode } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Fragment, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useApp } from '@/components/AppProvider';
+import { Autocomplete } from '@/components/Autocomplete';
 import { BetTable } from '@/components/BetTable';
-import { ProfitChart } from '@/components/ProfitChart';
+import { DateField } from '@/components/BetFormModal';
+import { DataTransfer } from '@/components/DataTransfer';
+import { useMoneyScope } from '@/components/Money';
+import { isTyping } from '@/components/Shell';
+import { useSettle } from '@/components/useSettle';
+import { parseDateInput, todayISO } from '@/lib/dates';
+import { countBets } from '@/lib/dutch';
+import { filterBets, NO_FILTERS, type Filters } from '@/lib/filters';
 import { formatMoney } from '@/lib/money';
 import { byMoney } from '@/lib/scope';
-import { MoneyScopeSwitch, useMoneyScope } from '@/components/Money';
+import { settleQueue, SETTLE_KEYS, sharedLegOf } from '@/lib/settle';
 import { formatPercent, summarize } from '@/lib/stats';
+import { RESULT_LABEL, RESULTS, type Bet } from '@/lib/types';
+import { isTab, moveKey, nextKey, rowKeys, tabBets, tabDays, TAB_LABEL, TABS, type Tab } from '@/lib/view';
 
-const RECENT = 20;
+export default function BetsPage() {
+  // the tab is in the URL (?tab=settle), read on the client
+  return (
+    <Suspense fallback={<p className="py-10 text-center text-sm text-zinc-500">Loading…</p>}>
+      <Bets />
+    </Suspense>
+  );
+}
 
-export default function Dashboard() {
-  const { bets, loaded } = useApp();
-  // BT-14: stats and chart count one money (Real by default); the recent bets list shows every bet, each in its own money
-  const [scope, setScope] = useMoneyScope();
-  const counted = useMemo(() => byMoney(bets, scope), [bets, scope]);
-  const s = useMemo(() => summarize(counted), [counted]);
+const HELP: [string, string][] = [
+  ['Click', 'Select a row'],
+  ['Double click', 'Edit a cell'],
+  ['↑ ↓', 'Move the selection'],
+  ['W L V', 'Won, lost, void'],
+  ['C', 'Cash-out (type the amount)'],
+  ['H J', 'Half-won, half-lost'],
+  ['1-9', 'Dutch: toggle a split that won'],
+  ['Enter', 'Dutch: confirm (toggled won, rest lost)'],
+  ['0', 'Dutch: none won'],
+  ['S', 'Dutch: shared leg lost'],
+  ['Z', 'Undo the last settle'],
+  ['N', 'New bet'],
+  ['?', 'Show these keys'],
+];
+
+const DUTCH_KEYS_HELP = 'A dutch settles with 1-9 to toggle the splits that won, then Enter; 0 (none won), V (void all) or S (shared leg lost).';
+
+/**
+ * BT-26: the home page. Stats strip, one row of filters, All / Pending / To settle tabs and the bet table. Settling
+ * works from the keyboard on the selected row in any tab, as fast as the old Settle queue: after a settle the next row
+ * is selected.
+ */
+function Bets() {
+  const { bets: all, loaded, suggestFor, form, dutchForm, notify } = useApp();
+  const [scope] = useMoneyScope();
+  const params = useSearchParams();
+  const router = useRouter();
+  const tabParam = params.get('tab');
+  const tab: Tab = isTab(tabParam) ? tabParam : 'all';
+  const setTab = (t: Tab) => router.replace(t === 'all' ? '/' : `/?tab=${t}`, { scroll: false });
+
+  const [f, setF] = useState<Filters>(NO_FILTERS);
+  const [fromText, setFromText] = useState('');
+  const [toText, setToText] = useState('');
+  const set = <K extends keyof Filters>(k: K, v: Filters[K]) => setF((x) => ({ ...x, [k]: v }));
+  const active = JSON.stringify(f) !== JSON.stringify(NO_FILTERS) || fromText || toText;
+
+  const today = todayISO();
+  const scoped = useMemo(() => byMoney(all, scope), [all, scope]);
+  const filtered = useMemo(() => filterBets(scoped, { ...f, money: '', from: parseDateInput(fromText) ?? '', to: parseDateInput(toText) ?? '' }), [scoped, f, fromText, toText]);
+  const days = useMemo(() => tabDays(filtered, tab, today), [filtered, tab, today]);
+  const shown = useMemo(() => tabBets(days), [days]);
+  const keys = useMemo(() => rowKeys(days), [days]);
+  const counts = useMemo(() => ({ pending: rowKeys(tabDays(filtered, 'pending', today)).length, settle: settleQueue(filtered, today).length }), [filtered, today]);
+  const s = summarize(shown);
+  const totalCount = countBets(scoped).count;
+
+  // selection: a row key, or a dutch split's "bet:<id>"; the To settle tab starts on its first row, like the old queue
+  const [picked, setPicked] = useState<string | null>(null);
+  const byId = useMemo(() => new Map(shown.map((b) => [b.id, b])), [shown]);
+  const valid = (k: string | null) => !!k && (keys.includes(k) || (k.startsWith('bet:') && byId.has(k.slice(4))));
+  const selected = valid(picked) ? picked : tab === 'settle' ? (keys[0] ?? null) : null;
+  // ↑ ↓ from a split move from its dutch
+  const navKey = (k: string | null) => {
+    const b = k?.startsWith('bet:') ? byId.get(k.slice(4)) : undefined;
+    return b?.dutchId && !keys.includes(k!) ? `dutch:${b.dutchId}` : k;
+  };
+  const keysRef = useRef(keys);
+  const selRef = useRef(selected);
+  useEffect(() => {
+    keysRef.current = keys;
+    selRef.current = selected;
+  });
+  const settle = useSettle({
+    settled: (k) => {
+      if (selRef.current !== k) return;
+      const next = nextKey(keysRef.current, k);
+      if (next) setPicked(next);
+    },
+    restored: (k) => setPicked(k),
+  });
+
+  const [help, setHelp] = useState(false);
+  const handler = useRef<(e: KeyboardEvent) => void>(() => {});
+  useEffect(() => {
+    handler.current = (e) => {
+      if (form || dutchForm || isTyping(e) || e.ctrlKey || e.metaKey || e.altKey) return;
+      if ((e.target as HTMLElement | null)?.closest?.('[role=dialog], [role=menu]')) return;
+      const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+      if (k === '?') {
+        e.preventDefault();
+        return setHelp((h) => !h);
+      }
+      if (k === 'ArrowDown' || k === 'ArrowUp') {
+        e.preventDefault();
+        return setPicked(moveKey(keys, navKey(selected), k === 'ArrowDown' ? 1 : -1));
+      }
+      if (k === 'Escape') {
+        if (help) setHelp(false);
+        else setPicked(null);
+        return;
+      }
+      if (k === 'z') {
+        e.preventDefault();
+        return settle.undo();
+      }
+      if (!selected) return;
+      if (selected.startsWith('dutch:')) {
+        const dutchId = selected.slice(6);
+        const bets = shown.filter((b) => b.dutchId === dutchId);
+        const pending = bets.filter((b) => b.result === 'pending');
+        if (!pending.length) return;
+        if (/^[1-9]$/.test(k)) {
+          e.preventDefault();
+          if (Number(k) <= pending.length) settle.toggleWinner(dutchId, Number(k) - 1);
+        } else if (k === 'Enter') {
+          e.preventDefault();
+          settle.settleDutch(dutchId, bets, settle.winners(dutchId));
+        } else if (k === '0') {
+          e.preventDefault();
+          settle.settleDutch(dutchId, bets, 'none');
+        } else if (k === 'v') {
+          e.preventDefault();
+          settle.settleDutch(dutchId, bets, 'void');
+        } else if (k === 's') {
+          e.preventDefault();
+          const sl = sharedLegOf({ kind: 'dutch', key: dutchId, dutchId, bets, pending });
+          if ('error' in sl) notify(sl.error, 'error');
+          else settle.settleDutch(dutchId, bets, 'shared');
+        } else if (k in SETTLE_KEYS) {
+          e.preventDefault();
+          notify(DUTCH_KEYS_HELP, 'error');
+        }
+        return;
+      }
+      const b: Bet | undefined = byId.get(selected.slice(4));
+      if (!b || !(k in SETTLE_KEYS)) return;
+      e.preventDefault();
+      if (b.result !== 'pending') return notify(`Already settled (${RESULT_LABEL[b.result]}): change it on its result pill`, 'error');
+      if (k === 'c') settle.startCashout(b.id);
+      else settle.settleBet(b, SETTLE_KEYS[k]!);
+    };
+  });
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => handler.current(e);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  useEffect(() => {
+    if (selected) document.querySelector(`[data-key="${selected}"]`)?.scrollIntoView({ block: 'nearest' });
+  }, [selected]);
+
   const fmt = (n: number, signed = false) => formatMoney(n, scope, signed);
-  const tone = (n: number) => (n > 0 ? 'text-emerald-400' : n < 0 ? 'text-red-400' : 'text-white');
+  const tone = (n: number) => (n > 0 ? 'text-emerald-400' : n < 0 ? 'text-red-400' : 'text-zinc-200');
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-bold">Bet Tracker</h1>
-          <p className="text-sm text-zinc-400">
-            Monitor your betting performance and history. Press <kbd>N</kbd> for a new bet.
-          </p>
-        </div>
-        <MoneyScopeSwitch scope={scope} onChange={setScope} />
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5" data-testid="stats">
-        <Stat label="Net Profit/Loss" testId="stat-net" value={<span className={tone(s.netProfit)}>{fmt(s.netProfit, true)}</span>} sub={`on ${fmt(s.settledStake)} settled`} />
-        <Stat label="ROI %" testId="stat-roi" value={<span className={tone(s.roi ?? 0)}>{formatPercent(s.roi, true)}</span>} sub="net profit / settled stake" />
-        <Stat label="Total Wagered" testId="stat-wagered" value={fmt(s.totalWagered)} sub={`${s.betCount} ${s.betCount === 1 ? 'bet' : 'bets'}`} />
-        <Stat label="Win Rate" testId="stat-winrate" value={formatPercent(s.winRate)} sub={`${s.wins}W / ${s.losses}L`} />
+    <div className="space-y-3">
+      <h1 className="sr-only">Bets</h1>
+      <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-400" data-testid="stats">
+        <Stat label="Net" testId="stat-net" value={<span className={tone(s.netProfit)}>{fmt(s.netProfit, true)}</span>} sub={`on ${fmt(s.settledStake)} settled`} />
+        <Stat label="ROI" testId="stat-roi" value={<span className={tone(s.roi ?? 0)}>{formatPercent(s.roi, true)}</span>} />
+        <Stat label="Wagered" testId="stat-wagered" value={fmt(s.totalWagered)} sub={`${s.betCount} of ${totalCount} ${totalCount === 1 ? 'bet' : 'bets'}`} />
+        <Stat label="Win rate" testId="stat-winrate" value={formatPercent(s.winRate)} sub={`${s.wins}W / ${s.losses}L`} />
         <Stat
-          label="Pending Bets"
+          label="Pending"
           testId="stat-pending"
           value={
-            <Link href="/settle" className="hover:underline">
+            <button className="hover:underline" onClick={() => setTab('settle')} title="Open the To settle tab">
               {s.pendingCount}
-            </Link>
+            </button>
           }
           sub={fmt(s.pendingAmount)}
         />
       </div>
 
-      <section className="card p-5">
-        <h2 className="mb-3 font-semibold">Performance Over Time</h2>
-        <ProfitChart bets={counted} money={scope} />
-      </section>
+      <div className="flex items-end gap-2" data-testid="filters">
+        <F label="From" w="w-28">
+          <DateField value={fromText} onChange={setFromText} aria-label="From date" />
+        </F>
+        <F label="To" w="w-28">
+          <DateField value={toText} onChange={setToText} aria-label="To date" />
+        </F>
+        <F label="Book" w="min-w-0 flex-1">
+          <Autocomplete value={f.book} onChange={(v) => set('book', v)} getSuggestions={(q) => suggestFor('book', q)} aria-label="Filter book" />
+        </F>
+        <F label="Sport" w="min-w-0 flex-1">
+          <Autocomplete value={f.sport} onChange={(v) => set('sport', v)} getSuggestions={(q) => suggestFor('sport', q)} aria-label="Filter sport" />
+        </F>
+        <F label="Type" w="w-32">
+          <select className="field" value={f.type} onChange={(e) => set('type', e.target.value as Filters['type'])} aria-label="Filter type">
+            <option value="">All</option>
+            <option value="solo">Solo</option>
+            <option value="combination">Combination</option>
+            <option value="dutch">Dutch</option>
+          </select>
+        </F>
+        <F label="Situation" w="w-28">
+          <select className="field" value={f.situation} onChange={(e) => set('situation', e.target.value as Filters['situation'])} aria-label="Filter situation">
+            <option value="">All</option>
+            <option value="pregame">Pregame</option>
+            <option value="live">Live</option>
+          </select>
+        </F>
+        <F label="Result" w="w-28">
+          <select className="field" value={f.result} onChange={(e) => set('result', e.target.value as Filters['result'])} aria-label="Filter result">
+            <option value="">All</option>
+            {RESULTS.map((r) => (
+              <option key={r} value={r}>
+                {RESULT_LABEL[r]}
+              </option>
+            ))}
+          </select>
+        </F>
+        <F label="Search" w="min-w-0 flex-[1.5]">
+          <input className="field" value={f.text} onChange={(e) => set('text', e.target.value)} placeholder="bet, game, selection" aria-label="Search bets" />
+        </F>
+        <button
+          className="btn"
+          disabled={!active}
+          onClick={() => {
+            setF(NO_FILTERS);
+            setFromText('');
+            setToText('');
+          }}
+        >
+          Clear
+        </button>
+        <Popover label="Export and import" icon="⋯">
+          <DataTransfer vertical />
+        </Popover>
+        <Popover label="Keyboard shortcuts" icon="?" open={help} onOpen={setHelp}>
+          <dl className="grid w-72 grid-cols-[6rem_1fr] gap-x-3 gap-y-1 text-xs" data-testid="key-help">
+            {HELP.map(([k, l]) => (
+              <Fragment key={k}>
+                <dt>
+                  <kbd>{k}</kbd>
+                </dt>
+                <dd className="text-zinc-300">{l}</dd>
+              </Fragment>
+            ))}
+          </dl>
+        </Popover>
+      </div>
 
-      <section className="card p-5">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-semibold">Bet History</h2>
-          {bets.length > RECENT && (
-            <Link href="/history" className="text-sm text-emerald-400 hover:underline">
-              All bets →
-            </Link>
-          )}
-        </div>
-        {loaded ? <BetTable bets={bets} limit={RECENT} /> : <p className="py-10 text-center text-sm text-zinc-500">Loading…</p>}
+      <div role="tablist" aria-label="Show" className="flex items-center gap-1 border-b border-zinc-800">
+        {TABS.map((t) => (
+          <button
+            key={t}
+            role="tab"
+            aria-selected={tab === t}
+            className={`-mb-px border-b-2 px-3 py-1.5 text-sm ${tab === t ? 'border-emerald-500 font-semibold text-white' : 'border-transparent text-zinc-400 hover:text-white'}`}
+            onClick={() => setTab(t)}
+          >
+            {TAB_LABEL[t]}
+            {t === 'pending' && counts.pending > 0 && <span className="ml-1.5 text-xs text-zinc-500">{counts.pending}</span>}
+            {t === 'settle' && counts.settle > 0 && (
+              <span className="ml-1.5 rounded-full bg-amber-500 px-1.5 py-0.5 text-xs font-bold text-black" data-testid="settle-count">
+                {counts.settle}
+              </span>
+            )}
+          </button>
+        ))}
+        {settle.canUndo && <span className="ml-auto text-xs text-zinc-500">Z undoes the last settle</span>}
+      </div>
+
+      <section className="card px-2 pb-2">
+        {loaded ? (
+          <BetTable
+            days={days}
+            selected={selected}
+            select={setPicked}
+            settle={settle}
+            empty={tab === 'settle' ? 'Nothing to settle.' : tab === 'pending' ? 'No pending bets.' : all.length ? 'No bets match these filters.' : undefined}
+          />
+        ) : (
+          <p className="py-10 text-center text-sm text-zinc-500">Loading…</p>
+        )}
       </section>
     </div>
   );
 }
 
-function Stat({ label, value, sub, testId }: { label: string; value: ReactNode; sub: string; testId: string }) {
+function Stat({ label, value, sub, testId }: { label: string; value: ReactNode; sub?: string; testId: string }) {
   return (
-    <div className="card p-4" data-testid={testId}>
-      <div className="text-xs text-zinc-400">{label}</div>
-      <div className="mt-1 text-2xl font-bold tabular-nums" data-testid={`${testId}-value`}>
+    <div className="flex items-baseline gap-1.5" data-testid={testId}>
+      <span>{label}</span>
+      <span className="text-sm font-semibold tabular-nums text-zinc-100" data-testid={`${testId}-value`}>
         {value}
+      </span>
+      {sub && <span className="text-zinc-500">{sub}</span>}
+    </div>
+  );
+}
+
+function F({ label, w, children }: { label: string; w: string; children: ReactNode }) {
+  return (
+    <label className={`flex flex-col gap-0.5 ${w}`}>
+      <span className="text-[11px] text-zinc-500">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+/** A small button with a panel under it (the "⋯" export menu, the "?" keys). Stays mounted, so an import keeps its file box. */
+function Popover({ label, icon, children, open: controlled, onOpen }: { label: string; icon: string; children: ReactNode; open?: boolean; onOpen?(o: boolean): void }) {
+  const [own, setOwn] = useState(false);
+  const open = controlled ?? own;
+  const setOpen = onOpen ?? setOwn;
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => !box.current?.contains(e.target as Node) && setOpen(false);
+    document.addEventListener('mousedown', away);
+    return () => document.removeEventListener('mousedown', away);
+  }, [open, setOpen]);
+  return (
+    <div ref={box} className="relative">
+      <button className="btn w-9 justify-center" aria-label={label} title={label} aria-expanded={open} onClick={() => setOpen(!open)}>
+        {icon}
+      </button>
+      <div role="dialog" aria-label={label} hidden={!open} className="absolute right-0 top-full z-40 mt-1 rounded-md border border-zinc-700 bg-zinc-900 p-3 shadow-xl">
+        {children}
       </div>
-      <div className="mt-0.5 text-xs text-zinc-500">{sub}</div>
     </div>
   );
 }

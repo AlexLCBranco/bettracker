@@ -12,7 +12,7 @@ import { Autocomplete } from './Autocomplete';
  * when it has focus) opens a small editor with one box per game, recent games suggested; Enter or a click elsewhere
  * saves, Esc cancels. A row with no game shows a "+ add game" button that opens it with one click.
  */
-export function GameTarget({ bets, children, hasGame, className = '' }: { bets: Bet[]; children: ReactNode; hasGame: boolean; className?: string }) {
+export function GameTarget({ bets, children, hasGame, className = '', inline }: { bets: Bet[]; children: ReactNode; hasGame: boolean; className?: string; inline?: boolean }) {
   const { openEdit } = useApp();
   const [open, setOpen] = useState<Place | null>(null);
   const anchor = useRef<HTMLSpanElement>(null);
@@ -31,7 +31,7 @@ export function GameTarget({ bets, children, hasGame, className = '' }: { bets: 
           tabIndex={0}
           aria-label="Edit Game"
           title="Double click to change the game"
-          className={`-mx-1 block min-w-0 cursor-text rounded px-1 hover:bg-zinc-800 ${className}`}
+          className={`-mx-1 ${inline ? 'inline' : 'block min-w-0'} cursor-text rounded px-1 hover:bg-zinc-800 ${className}`}
           onDoubleClick={start}
           onKeyDown={(e) => e.key === 'Enter' && start()}
           data-testid="game-target"
@@ -39,7 +39,7 @@ export function GameTarget({ bets, children, hasGame, className = '' }: { bets: 
           {children}
         </span>
       ) : (
-        <span ref={anchor} className="inline-flex">
+        <span ref={anchor} className="inline-flex align-baseline">
           <button
             type="button"
             aria-label="Edit Game"

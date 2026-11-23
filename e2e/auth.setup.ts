@@ -7,6 +7,6 @@ setup('log in', async ({ page }) => {
   await expect(page).toHaveURL(/\/login/);
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Log in' }).click();
-  await expect(page.getByRole('link', { name: 'Dashboard' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Bets', exact: true })).toBeVisible();
   await page.context().storageState({ path: 'e2e/.auth/state.json' });
 });

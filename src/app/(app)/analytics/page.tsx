@@ -8,7 +8,8 @@ import { formatDate } from '@/lib/dates';
 import { dutchHitReport } from '@/lib/hits';
 import { formatMoney, formatOdds, type MoneyScope } from '@/lib/money';
 import { byMoney } from '@/lib/scope';
-import { MoneyScopeSwitch, useMoneyScope } from '@/components/Money';
+import { useMoneyScope } from '@/components/Money';
+import { ProfitChart } from '@/components/ProfitChart';
 import { formatPercent } from '@/lib/stats';
 
 type SortKey = 'natural' | 'bets' | 'wagered' | 'profit' | 'roi' | 'winRate';
@@ -26,7 +27,7 @@ const tone = (n: number | null) => (n == null || n === 0 ? 'text-zinc-400' : n >
 export default function AnalyticsPage() {
   const { bets: all, loaded } = useApp();
   // BT-14: real and hypothetical money never mix unless "Both" is picked
-  const [scope, setScope] = useMoneyScope();
+  const [scope] = useMoneyScope();
   const bets = useMemo(() => byMoney(all, scope), [all, scope]);
   const [dim, setDim] = useState<Dimension>('sport');
   const [sort, setSort] = useState<SortKey>('natural');
@@ -50,8 +51,13 @@ export default function AnalyticsPage() {
           <h1 className="text-2xl font-bold">Analytics</h1>
           <p className="text-sm text-zinc-400">Where your profit comes from. Profit, ROI and win rate count settled bets only.</p>
         </div>
-        <MoneyScopeSwitch scope={scope} onChange={setScope} />
       </div>
+
+      {/* BT-26: moved here from the dashboard */}
+      <section className="card p-5">
+        <h2 className="mb-3 font-semibold">Performance Over Time</h2>
+        <ProfitChart bets={bets} money={scope} />
+      </section>
 
       <section className="card p-5">
         <div role="tablist" aria-label="Break down by" className="mb-4 flex flex-wrap gap-2">

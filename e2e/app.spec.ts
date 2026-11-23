@@ -100,24 +100,26 @@ test('combination with legs: total odds kept as entered, legs expand in the tabl
   await expect(page.getByTestId('leg-row')).toHaveCount(2);
 });
 
-test('settle queue: W, Z undo, C with amount', async ({ page, request, tag }) => {
+test('To settle tab: W settles the selected row and selects the next, Z undoes, C asks the amount', async ({ page, request, tag }) => {
   const a = await createBet(request, { betText: `${tag} first`, gameDate: '2000-01-01', placedDate: '2000-01-01' });
   const b = await createBet(request, { betText: `${tag} second`, gameDate: '2000-01-02', placedDate: '2000-01-02' });
-  await page.goto('/settle');
-  const rows = page.getByTestId('queue-row');
-  await expect(rows.first()).toContainText(`${tag} first`);
-  await expect(page.locator('[data-testid=queue-row][data-active]')).toContainText(`${tag} first`);
+  await page.goto('/?tab=settle');
+  await page.getByLabel('Search bets').fill(tag);
+  await page.getByLabel('Search bets').blur();
+  const selected = page.locator('[data-testid=bet-row][data-selected]');
+  await expect(page.getByTestId('bet-row').first()).toContainText(`${tag} first`);
+  await expect(selected).toContainText(`${tag} first`);
 
   await page.keyboard.press('w');
-  await expect(page.locator('[data-testid=queue-row][data-active]')).toContainText(`${tag} second`);
+  await expect(selected).toContainText(`${tag} second`);
   await expect.poll(async () => (await betsTagged(request, tag)).find((x) => x.id === a.id)?.result).toBe('won');
 
   await page.keyboard.press('z');
-  await expect(page.locator('[data-testid=queue-row][data-active]')).toContainText(`${tag} first`);
+  await expect(selected).toContainText(`${tag} first`);
   await expect.poll(async () => (await betsTagged(request, tag)).find((x) => x.id === a.id)?.result).toBe('pending');
 
   await page.keyboard.press('ArrowDown');
-  await expect(page.locator('[data-testid=queue-row][data-active]')).toContainText(`${tag} second`);
+  await expect(selected).toContainText(`${tag} second`);
   await page.keyboard.press('c');
   await page.getByLabel('Cash-out amount').fill('14,50');
   await page.getByLabel('Cash-out amount').press('Enter');
@@ -129,7 +131,7 @@ test('history: inline edit a cell, one-click result, duplicate', async ({ page, 
   await page.goto('/history');
   await page.getByLabel('Search bets').fill(tag);
   const row = page.locator(`[data-bet-id="${created.id}"]`);
-  await row.getByRole('button', { name: 'Edit Book' }).click();
+  await row.getByRole('button', { name: 'Edit Book' }).dblclick();
   await row.getByLabel('Book').fill(`${tag} New Book`);
   await row.getByLabel('Book').press('Enter');
   await expect(row).toContainText(`${tag} New Book`);
@@ -147,12 +149,18 @@ test('history: inline edit a cell, one-click result, duplicate', async ({ page, 
   expect(await betsTagged(request, tag)).toHaveLength(2);
 });
 
-test('nav pending badge links to the settle queue', async ({ page, request, tag }) => {
+test('nav badge opens the To settle tab; old /history and /settle addresses land on Bets', async ({ page, request, tag }) => {
   await createBet(request, { betText: `${tag} due` });
-  await page.goto('/');
+  await page.goto('/analytics');
   await expect(page.getByTestId('due-count')).toBeVisible();
-  await page.getByRole('link', { name: /Settle/ }).click();
-  await expect(page).toHaveURL(/\/settle$/);
+  await page.getByTestId('due-count').click();
+  await expect(page).toHaveURL(/\/\?tab=settle$/);
+  await expect(page.getByRole('tab', { name: /To settle/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('navigation').getByRole('link')).toHaveText(['Bets', /^\d+$/, 'Analytics', 'Dutch tool']);
+  await page.goto('/history');
+  await expect(page).toHaveURL(/\/$/);
+  await page.goto('/settle');
+  await expect(page).toHaveURL(/\/\?tab=settle$/);
 });
 
 test('version: corner label matches /version.json and package.json', async ({ page, request }) => {
@@ -167,8 +175,8 @@ test('version: corner label matches /version.json and package.json', async ({ pa
 test('logged out: pages redirect to login and the API refuses', async ({ browser, baseURL }) => {
   const ctx = await browser.newContext({ baseURL, storageState: { cookies: [], origins: [] } });
   const page = await ctx.newPage();
-  await page.goto('/history');
-  await expect(page).toHaveURL(/\/login\?next=%2Fhistory/);
+  await page.goto('/analytics');
+  await expect(page).toHaveURL(/\/login\?next=%2Fanalytics/);
   expect((await ctx.request.get('/api/bets')).status()).toBe(401);
   await page.getByLabel('Password').fill('wrong password');
   await page.getByRole('button', { name: 'Log in' }).click();
@@ -236,7 +244,7 @@ test('analytics: breakdown by sport and odds range, and the combination that los
 
 test('betting tool: dutching splits the stake so every selection returns the same, and remembers it', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('link', { name: 'Betting Tool' }).click();
+  await page.getByRole('link', { name: 'Dutch tool' }).click();
   await expect(page).toHaveURL(/\/betting-tool$/);
   await expect(page.getByTestId('dutch-error')).toHaveText('Enter odds for at least two selections.');
 
@@ -282,7 +290,8 @@ test('export JSON and CSV, then import: restores a deleted bet exactly, leaves e
   });
   const solo = await createBet(request, { betText: `${tag} solo`, stake: 25 });
 
-  await page.goto('/history');
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Export and import' }).click();
   const [json] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Export JSON' }).click()]);
   expect(json.suggestedFilename()).toMatch(/^bettracker-\d{4}-\d{2}-\d{2}\.json$/);
   const exported = JSON.parse(readFileSync(await json.path(), 'utf8')) as { format: string; bets: { id: string }[] };
@@ -361,33 +370,30 @@ test('dutch: odds in any format, log as linked bets, one group row, settle with 
   expect(Math.round(logged.reduce((s, b) => s + b.stake, 0) * 100)).toBe(10000);
   expect(logged.every((b) => b.result === 'pending' && b.type === 'solo' && b.gameDate === '2000-01-01')).toBe(true);
 
-  // History: one group row that expands to its three bets
-  await page.goto('/history');
+  // Bets: one dutch row with its three splits under it
+  await page.goto('/');
   await page.getByLabel('Search bets').fill(tag);
   const group = page.getByTestId('dutch-row');
   await expect(group).toHaveCount(1);
   await expect(group.getByTestId('dutch-stake')).toHaveText('R$ 100,00');
-  await expect(page.getByTestId('bet-row')).toHaveCount(0);
-  await group.getByRole('button', { name: 'Show bets' }).click();
+  await expect(page.locator('[data-testid=bet-row]:not([data-nested])')).toHaveCount(0);
   await expect(page.locator('[data-testid=bet-row][data-nested]')).toHaveCount(3);
-  await expect(page.getByTestId('history-summary')).toContainText(/^1 of \d+ bets/);
+  await expect(page.getByTestId('stat-wagered')).toContainText(/1 of \d+ bets?/);
 
-  // Settle: the dutch is one item; 2 toggles Draw as won, Enter confirms (the others lost); Z undoes the whole group
-  await page.goto('/settle');
-  const item = page.getByTestId('queue-row').filter({ hasText: `${tag} BookA` });
-  await expect(item).toHaveCount(1);
-  await expect(item.getByTestId('queue-dutch-bet')).toHaveCount(3);
-  await item.click();
+  // To settle: the dutch is one row; 2 toggles Draw as won, Enter confirms (the others lost); Z undoes the whole group
+  await page.getByRole('tab', { name: /To settle/ }).click();
+  await expect(group).toHaveCount(1);
+  await group.getByTestId('bet-text').click();
   await page.keyboard.press('2');
-  await expect(item.locator('[data-testid=queue-dutch-bet][data-won]')).toHaveText(/Draw/);
+  await expect(page.getByRole('button', { name: /Toggle won/, pressed: true })).toHaveAccessibleName(/Draw/);
   await page.keyboard.press('Enter');
   const results = async () => Object.fromEntries((await betsTagged(request, tag)).map((b) => [b.legs[0]!.selection, b.result]));
   await expect.poll(results).toEqual({ Home: 'lost', Draw: 'won', Away: 'lost' });
-  await expect(item).toHaveCount(0);
+  await expect(group).toHaveCount(0);
   await page.keyboard.press('z');
   await expect.poll(results).toEqual({ Home: 'pending', Draw: 'pending', Away: 'pending' });
-  await expect(item).toHaveCount(1);
-  await item.click();
+  await expect(group).toHaveCount(1);
+  await group.getByTestId('bet-text').click();
   await page.keyboard.press('2');
   await page.keyboard.press('Enter');
   await expect.poll(results).toEqual({ Home: 'lost', Draw: 'won', Away: 'lost' });
@@ -395,11 +401,11 @@ test('dutch: odds in any format, log as linked bets, one group row, settle with 
   // Stats: one bet, one win, money bet by bet (Draw stake × 4 − 100)
   const draw = (await betsTagged(request, tag)).find((b) => b.legs[0]!.selection === 'Draw')!;
   const net = Math.round((draw.stake * 4 - 100) * 100) / 100;
-  await page.goto('/history');
-  await page.getByLabel('Search bets').fill(tag);
-  await expect(page.getByTestId('history-summary')).toContainText('1 of ');
-  await expect(page.getByTestId('history-summary')).toContainText('win rate 100.0% (1W/0L)');
-  await expect(page.getByTestId('history-summary')).toContainText(`+R$ ${net.toFixed(2).replace('.', ',')}`);
+  await page.getByRole('tab', { name: 'All' }).click();
+  await expect(page.getByTestId('stat-wagered')).toContainText('1 of ');
+  await expect(page.getByTestId('stat-winrate')).toContainText('100.0%');
+  await expect(page.getByTestId('stat-winrate')).toContainText('1W / 0L');
+  await expect(page.getByTestId('stat-net-value')).toHaveText(`+R$ ${net.toFixed(2).replace('.', ',')}`);
   await expect(page.getByTestId('dutch-row').getByTestId('result')).toHaveText('Won');
 });
 
@@ -465,19 +471,18 @@ test('dutch of combinations: shared leg, estimated and typed total, logged as co
   await page.getByLabel('Search bets').fill(tag);
   const group = page.getByTestId('dutch-row');
   await expect(group).toHaveCount(1);
-  await group.getByRole('button', { name: 'Show bets' }).click();
   const nested = page.locator('[data-testid=bet-row][data-nested]');
   await expect(nested).toHaveCount(2);
   await nested.first().getByRole('button', { name: 'Show legs' }).click();
   await expect(page.getByTestId('leg-row')).toHaveCount(2);
 
   // Settle: both won with 1, 2, Enter; their legs are marked won. Z undoes; then S = shared leg lost
-  await page.goto('/settle');
-  const item = page.getByTestId('queue-row').filter({ hasText: `${tag} Book` });
-  await item.click();
+  await page.getByRole('tab', { name: /To settle/ }).click();
+  const item = page.getByTestId('dutch-row');
+  await item.getByTestId('bet-text').click();
   await page.keyboard.press('1');
   await page.keyboard.press('2');
-  await expect(item.locator('[data-testid=queue-dutch-bet][data-won]')).toHaveCount(2);
+  await expect(page.getByRole('button', { name: /Toggle won/, pressed: true })).toHaveCount(2);
   await page.keyboard.press('Enter');
   const state = async () => (await betsTagged(request, tag)).sort((a, b) => a.betText.localeCompare(b.betText)).map((b) => [b.result, ...b.legs.map((l) => l.result)]);
   await expect.poll(state).toEqual([
@@ -490,7 +495,7 @@ test('dutch of combinations: shared leg, estimated and typed total, logged as co
     ['pending', 'pending', 'pending'],
     ['pending', 'pending', 'pending'],
   ]);
-  await item.click();
+  await item.getByTestId('bet-text').click();
   await page.keyboard.press('s');
   await expect.poll(state).toEqual([
     ['lost', 'pending', 'lost'],
@@ -528,9 +533,10 @@ test('dutch hit count: the owner example settled three ways shows 0 of 2, 0 of 2
   };
 
   // 1: Celtics lose, settled from the queue with S
-  await page.goto('/settle');
-  const item = page.getByTestId('queue-row').filter({ hasText: `${tag} Book1` });
-  await item.click();
+  await page.goto('/?tab=settle');
+  await page.getByLabel('Search bets').fill(tag);
+  const item = page.getByTestId('dutch-row').filter({ hasText: `${tag} Book1` });
+  await item.getByTestId('bet-text').click();
   await page.keyboard.press('s');
   await expect(item).toHaveCount(0);
 
@@ -539,9 +545,9 @@ test('dutch hit count: the owner example settled three ways shows 0 of 2, 0 of 2
   // 3: only McCain short; first settle Mitchell alone so the queue shows the partly settled badge
   expect((await settle(three[1]!.id, 'won', ['won', 'won'], three)).ok()).toBe(true);
   await page.reload();
-  const partly = page.getByTestId('queue-row').filter({ hasText: `${tag} Book3` });
-  await expect(partly.getByTestId('hit-count')).toHaveText('1/1 · 1 pending');
-  await expect(partly.getByTestId('hit-count')).toHaveClass(/zinc/);
+  await page.getByLabel('Search bets').fill(tag);
+  const partly = page.getByTestId('dutch-row').filter({ hasText: `${tag} Book3` });
+  await expect(partly.getByTestId('result-sub')).toHaveText('1 of 2 splits hit');
   expect((await settle(three[0]!.id, 'lost', ['lost', 'won'], three)).ok()).toBe(true);
 
   await page.goto('/history');
@@ -560,9 +566,8 @@ test('dutch hit count: the owner example settled three ways shows 0 of 2, 0 of 2
   await expect(row(3).getByTestId('result-sub')).toHaveText('1 of 2 splits hit');
 
   // expanded: each split its own result pill, the lost leg marked
-  await row(3).getByRole('button', { name: 'Show bets' }).click();
-  await expect(page.locator('[data-testid=bet-row][data-nested] [data-testid=result]')).toHaveText(['Lost', 'Won']);
-  await page.locator('[data-testid=bet-row][data-nested]').first().getByRole('button', { name: 'Show legs' }).click();
+  await expect(page.locator(`[data-split-of="${three[0]!.dutchId}"] [data-testid=result]`)).toHaveText(['Lost', 'Won']);
+  await page.locator(`[data-split-of="${three[0]!.dutchId}"]`).first().getByRole('button', { name: 'Show legs' }).click();
   await expect(page.locator('[data-testid=leg-row][data-lost]')).toHaveCount(1);
   await expect(page.locator('[data-testid=leg-row][data-lost]')).toContainText('McCain 25 pts');
 
@@ -682,7 +687,6 @@ test('log dutch: Game(s) and Market(s) as chips, picked per leg (owner example),
   await expect(group.getByTestId('several-games')).toHaveText('+1');
   await expect(group.getByTestId('several-games')).toHaveAttribute('title', `${tag} CLE @ BOS, ${tag} NYK @ MIA`);
   await expect(group.getByTestId('several-markets')).toHaveText('2 markets');
-  await group.getByRole('button', { name: 'Show bets' }).click();
   // each bet: one game, two markets
   await expect(page.locator('[data-testid=bet-row][data-nested]').first().getByTestId('several-markets')).toHaveText('2 markets');
 });
@@ -801,7 +805,7 @@ test('BT-16: odds in any format in the full form, quick-add and History cells, s
   // History inline odds cell: "5/2" saves 3.5 and shows 3.50
   await page.getByLabel('Search bets').fill(tag);
   const row = page.getByTestId('bet-row').filter({ hasText: `${tag} minus` });
-  await row.getByRole('button', { name: 'Edit Odds' }).click();
+  await row.getByRole('button', { name: 'Edit Odds' }).dblclick();
   await row.getByLabel('Odds').fill('5/2');
   await expect(row.getByTestId('odds-hint')).toContainText('→ 3.50');
   await row.getByLabel('Odds').press('Enter');
@@ -817,16 +821,16 @@ for (const width of [1366, 1920]) {
     await createBet(request, { betText: `${tag} combo`, type: 'combination', odds: 4, legs: [{ sport: 'Football', game: 'A x B', selection: 'A', odds: 2 }, { sport: 'Basketball', game: 'C x D', selection: 'C', odds: 2 }] });
     const d = `${tag}-d`;
     for (const sel of ['Home', 'Draw', 'Away']) await createBet(request, { betText: '', dutchId: d.replace(/[^A-Za-z0-9_-]/g, ''), odds: 3, legs: [{ sport: 'Football', game: `${tag} long game name x another long name`, selection: sel }] });
-    for (const path of ['/history', '/']) {
+    for (const path of ['/']) {
       await page.goto(path);
-      if (path === '/history') await page.getByLabel('Search bets').fill(tag);
+      await page.getByLabel('Search bets').fill(tag);
       await expect(page.getByTestId('bet-row').first()).toBeVisible();
       const scroll = page.getByTestId('bet-table-scroll');
       const { sw, cw } = await scroll.evaluate((el) => ({ sw: el.scrollWidth, cw: el.clientWidth }));
       expect(sw, `${path}: table scrolls sideways`).toBeLessThanOrEqual(cw);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
       const tableBox = (await page.getByTestId('bet-table').boundingBox())!;
-      const rows = page.locator('[data-testid="bet-row"], [data-testid="dutch-row"]').filter({ hasText: tag });
+      const rows = page.locator('[data-testid="bet-row"]:not([data-nested]), [data-testid="dutch-row"]').filter({ hasText: tag });
       for (const row of await rows.all()) {
         const btn = row.getByRole('button', { name: /^(Edit|More dutch actions)$/ });
         const box = (await btn.boundingBox())!;
@@ -834,10 +838,8 @@ for (const width of [1366, 1920]) {
         // BT-23: and inside the table (a pending dutch's settle buttons are the widest)
         expect(box.x + box.width, `${path}: a row's buttons stick out of the table`).toBeLessThanOrEqual(tableBox.x + tableBox.width + 0.5);
       }
-      if (path === '/history') {
-        // long text is cut, the full text is on hover
-        await expect(page.getByRole('button', { name: 'Edit Bet' }).filter({ hasText: 'over under' })).toHaveAttribute('title', `${tag} ${long}`);
-      }
+      // BT-26: long text is no longer cut: it wraps
+      await expect(page.getByRole('button', { name: 'Edit Bet' }).filter({ hasText: 'over under' })).toHaveText(`${tag} ${long}`);
     }
   });
 }
@@ -884,8 +886,7 @@ test('BT-13: wins green, losses red, half amber, pending grey; a lost combinatio
   await expect(dutch).toHaveAttribute('data-tone', 'win');
   await expect(dutch.getByTestId('profit').locator('span')).toHaveClass(/font-semibold/);
   await expect(dutch.getByTestId('profit')).toHaveText('+R$ 10,00');
-  await dutch.getByRole('button', { name: 'Show bets' }).click();
-  await expect(page.locator('[data-testid=bet-row][data-nested] [data-testid=result]')).toHaveText(['Won', 'Lost']);
+  await expect(page.locator(`[data-split-of="${d}"] [data-testid=result]`)).toHaveText(['Won', 'Lost']);
 });
 
 test('BT-12: edit a logged dutch: change odds and stake, add a split, remove a split; results kept, History and dashboard follow', async ({ page, request, tag }) => {
@@ -932,9 +933,9 @@ test('BT-12: edit a logged dutch: change odds and stake, add a split, remove a s
     ]);
   // History: still one dutch row, new total, Home still won
   await expect(row.getByTestId('dutch-stake')).toHaveText('R$ 80,00');
-  await expect(row).toContainText('Home / Away');
+  await expect(page.locator(`[data-split-of="${d}"] [data-testid=bet-text]`)).toHaveText([/Home/, /Away/]);
   await expect(row.getByTestId('result')).toHaveText('Pending');
-  await expect(page.getByTestId('history-summary')).toContainText('1 of');
+  await expect(page.getByTestId('stat-wagered')).toContainText('1 of');
   // dashboard recent bets shows the edited dutch too (locally: on the live site real bets push a 2000-dated one out of the last 20)
   if (!LIVE) {
     await page.goto('/');
@@ -967,36 +968,25 @@ test('BT-14: hypothetical money (H$): quick-add and full form, never in Real tot
   await expect(dialog).toBeHidden();
   await expect.poll(async () => (await betsTagged(request, tag)).find((b) => b.betText.endsWith('form'))?.money).toBe('hypothetical');
 
-  // History: H$ in the stake cell; the Money filter
+  // Bets: Real (the default) never shows or counts H$; the top bar's switch picks Hypothetical or Both
   await page.getByLabel('Search bets').fill(tag);
+  const money = page.getByRole('banner').getByRole('radiogroup', { name: 'Money shown' });
+  const net = page.getByTestId('stat-net-value');
+  await expect(money.getByRole('radio', { name: 'Real R$' })).toHaveAttribute('aria-checked', 'true');
+  await expect(page.locator(`[data-bet-id="${hypo.id}"]`)).toHaveCount(0);
+  await expect(net).toHaveText('+R$ 100,00');
+  await expect(page.getByTestId('stat-wagered')).toContainText('1 of');
+  await money.getByRole('radio', { name: 'Both' }).click();
   await expect(page.locator(`[data-bet-id="${hypo.id}"]`).getByRole('button', { name: 'Edit Stake' })).toHaveText('H$ 1.000,00');
   await expect(page.locator(`[data-bet-id="${hypo.id}"]`).getByTestId('profit')).toHaveText('+H$ 2.000,00');
-  await page.getByLabel('Filter money').selectOption('hypothetical');
+  await expect(net).toHaveText('+R$+H$ 2.100,00');
+  await money.getByRole('radio', { name: 'Hypothetical H$' }).click();
   await expect(page.locator(`[data-bet-id="${real.id}"]`)).toHaveCount(0);
   await expect(page.locator('[data-money="hypothetical"]').filter({ hasText: tag })).toHaveCount(3);
-  await expect(page.getByTestId('history-summary')).toContainText('+H$ 2.000,00');
-  await page.getByLabel('Filter money').selectOption('real');
-  await expect(page.getByTestId('history-summary')).toContainText('1 of');
-  await expect(page.getByTestId('history-summary')).toContainText('+R$ 100,00');
+  await expect(net).toHaveText('+H$ 2.000,00');
+  await expect(page.getByTestId('stat-wagered-value')).toHaveText('H$ 1.070,00');
 
-  // dashboard: Real by default never counts H$; Hypothetical / Both switch the totals (remembered)
-  await page.goto('/');
-  const net = page.getByTestId('stat-net-value');
-  await expect(page.getByRole('radio', { name: 'Real R$' })).toHaveAttribute('aria-checked', 'true');
-  await expect(net).toContainText('R$');
-  await expect(net).not.toContainText('H$');
-  await page.getByRole('radio', { name: 'Hypothetical H$' }).click();
-  await expect(net).toContainText('H$');
-  if (!LIVE) {
-    await expect(net).toHaveText('+H$ 2.000,00');
-    await expect(page.getByTestId('stat-wagered-value')).toHaveText('H$ 1.070,00');
-    await page.getByRole('radio', { name: 'Real R$' }).click();
-    await expect(net).toHaveText('+R$ 100,00');
-    await page.getByRole('radio', { name: 'Both' }).click();
-    await expect(net).toHaveText('+R$+H$ 2.100,00');
-  }
-  // Analytics shares the switch
-  await page.getByRole('radio', { name: 'Hypothetical H$' }).click();
+  // Analytics shares the switch (remembered)
   await page.goto('/analytics');
   await expect(page.getByRole('radio', { name: 'Hypothetical H$' })).toHaveAttribute('aria-checked', 'true');
   await expect(page.getByTestId('cell-wagered').first()).toContainText('H$');
@@ -1025,7 +1015,8 @@ test('BT-17–22: combo rows with legs and counts, same styling on every row, ti
   const one = await createBet(request, { betText: `${tag} one`, type: 'combination', legs: [{ selection: 'Only leg' }] });
   expect(one.type).toBe('solo');
 
-  await page.goto('/history');
+  await page.goto('/');
+  await page.getByRole('radio', { name: 'Both' }).click();
   await page.getByLabel('Search bets').fill(tag);
   const c = page.locator(`[data-bet-id="${combo.id}"]`);
   const s = page.locator(`[data-bet-id="${solo.id}"]`);
@@ -1036,7 +1027,7 @@ test('BT-17–22: combo rows with legs and counts, same styling on every row, ti
   await expect(c.getByTestId('combo-games')).toHaveText(`${tag}Celtics @ ${tag}Warriors+1`);
   await expect(c).toContainText('NBA');
   await expect(c.getByTestId('result-sub')).toHaveText('lost by Lakers W');
-  await expect(page.locator(`[data-bet-id="${one.id}"]`).getByRole('button', { name: 'Edit Type' })).toHaveText('Solo');
+  await expect(page.locator(`[data-bet-id="${one.id}"]`).getByTestId('type')).toHaveCount(0); // a Solo has no type tag
 
   // BT-18: same profit weight, same stake colour (H$ violet), same won-row tint; W/L/V only on unsettled rows
   for (const row of [c, s, dutch]) await expect(row.getByTestId('profit').locator('span')).toHaveClass(/font-semibold/);
@@ -1047,7 +1038,8 @@ test('BT-17–22: combo rows with legs and counts, same styling on every row, ti
   await expect(page.locator(`[data-bet-id="${one.id}"]`).getByRole('button', { name: 'Mark Won' })).toBeVisible();
 
   // BT-19: no "Dutch" chip in the Bet column; won with 1/2 hit is green
-  await expect(dutch.locator('td').nth(2)).toHaveText('Home / Away');
+  await expect(dutch.getByTestId('bet-text')).toHaveText('Dutch ×2');
+  await expect(page.locator(`[data-split-of="${d}"] [data-testid=bet-text]`)).toHaveText(['Home', 'Away']);
   await expect(dutch.getByTestId('result-sub')).toHaveText('1 of 2 splits hit');
 
   // BT-20: units and games tidy, proper names, odds as paid, full text on hover
@@ -1080,7 +1072,7 @@ test('BT-17–22: combo rows with legs and counts, same styling on every row, ti
   await page.keyboard.press('Escape');
 });
 
-test('BT-23: Bet History grouped by day, one pill per row, one sub-line, splits under their dutch, fits 1366px', async ({ page, request, tag }) => {
+test('BT-23 / BT-26: bets grouped by day, one pill per row, the muted line, splits under their dutch', async ({ page, request, tag }) => {
   await page.setViewportSize({ width: 1366, height: 900 });
   const book = `${tag} Book`;
   const day = { placedDate: '2000-01-03', gameDate: '2000-01-03', book };
@@ -1107,68 +1099,60 @@ test('BT-23: Bet History grouped by day, one pill per row, one sub-line, splits 
   await createBet(request, { ...day, betText: `${tag} live one`, situation: 'live' });
   await createBet(request, { placedDate: '2000-01-04', gameDate: '2000-01-04', book, betText: `${tag} next day` });
 
-  await page.goto('/history');
+  await page.goto('/');
+  await page.getByRole('banner').getByRole('radio', { name: 'Both' }).click(); // the paper bet is H$
   await page.getByLabel('Search bets').fill(tag);
-  await expect(page.locator('[data-testid=bet-row], [data-testid=dutch-row]')).toHaveCount(7);
+  const top = page.locator('[data-testid=bet-row]:not([data-nested]), [data-testid=dutch-row]');
+  await expect(top).toHaveCount(7);
 
-  // no Date column; a header per day with its bets (a dutch once) and net per money
-  await expect(page.getByRole('columnheader')).toHaveText(['', 'Game', 'Bet', 'Book', 'Stake', 'Odds', 'Type', '+/-', 'Result', 'Actions']);
+  // a header per day with its bets (a dutch once) and net per money
   await expect(page.getByTestId('day-label')).toHaveText(['Tue, 4 Jan 2000', 'Mon, 3 Jan 2000']);
   await expect(page.getByTestId('day-totals')).toHaveText(['1 bet', '6 bets · +R$ 100,00 · -H$ 50,00']);
   await expect(page.getByTestId('day-net-hypothetical')).toHaveClass(/violet/);
 
   // one pill per row, no row tint
-  for (const row of await page.locator('[data-testid=bet-row], [data-testid=dutch-row]').all()) {
+  await page.mouse.move(0, 0);
+  for (const row of await top.all()) {
     await expect(row.getByTestId('result')).toHaveCount(1);
     expect(await row.evaluate((e) => getComputedStyle(e).backgroundColor)).toBe('rgba(0, 0, 0, 0)');
   }
   const bet = (text: string) => page.getByTestId('bet-row').filter({ hasText: `${tag} ${text}` });
   const dutch = page.locator(`[data-dutch-id="${d}"]`);
 
-  // the sub-line under the pill, same wording everywhere
+  // the result sub-line, on the muted line
   await expect(dutch.getByTestId('result-sub')).toHaveText('1 of 2 splits hit');
   await expect(bet('lost combo').getByTestId('result-sub')).toHaveText('lost by Celtics ML');
   await expect(bet('open combo').getByTestId('result-sub')).toHaveText('1 of 2 legs hit');
   await expect(bet('solo won').getByTestId('result-sub')).toHaveCount(0);
 
-  // Game: "Away @ Home", a +1 chip, "no game", the game date when it is another day
+  // game: "Away @ Home", a +1 chip, "+ add game", the game date when it is another day
   await expect(bet('solo won').getByRole('button', { name: 'Edit Game', exact: true })).toHaveText('Celtics @ Warriors');
   await expect(bet('solo won').getByTestId('game-date')).toHaveText('game 4 Jan 2000');
   await expect(bet('lost combo').getByTestId('combo-games')).toHaveText('Celtics @ Warriors+1');
   await expect(bet('paper').getByRole('button', { name: 'Edit Game', exact: true })).toHaveText('+ add game');
 
-  // Type: plain text, LIVE only when live
+  // type tags: Combo ×n, Dutch ×n, LIVE only when live
   await expect(bet('lost combo').getByTestId('type')).toHaveText('Combo ×2');
   await expect(dutch.getByTestId('type')).toHaveText('Dutch ×2');
-  await expect(bet('live one').getByTestId('type')).toHaveText('SoloLIVE');
+  await expect(bet('live one').getByTestId('live-tag')).toBeVisible();
   await expect(bet('solo won').getByTestId('live-tag')).toHaveCount(0);
 
   // actions: ✎ and ⋯ on hover only, W / L / V always on a pending row
   const actions = bet('live one').getByTestId('row-actions');
-  await page.mouse.move(0, 0);
   await expect(actions).toHaveCSS('opacity', '0');
   await expect(bet('live one').getByRole('button', { name: 'Mark Won' })).toBeVisible();
   await bet('live one').hover();
   await expect(actions).toHaveCSS('opacity', '1');
 
-  // the dutch opens to "Split 1", "Split 2" with a connector; book and type equal to the dutch's are hidden
-  const chevron = dutch.getByRole('button', { name: 'Show bets' });
-  expect((await chevron.boundingBox())!.width).toBeGreaterThanOrEqual(24);
-  await chevron.click();
-  const splits = page.locator('[data-testid=bet-row][data-nested]');
+  // the dutch's splits under it, "Split 1", "Split 2" with a connector; a book equal to the dutch's is not repeated
+  const splits = page.locator(`[data-split-of="${d}"]`);
   await expect(splits.getByTestId('split-label')).toHaveText(['Split 1', 'Split 2']);
   await expect(splits.getByTestId('connector')).toHaveCount(2);
-  await expect(splits.getByTestId('book-hidden')).toHaveCount(2);
-  await expect(splits.getByTestId('type')).toHaveText(['', '']);
+  await expect(splits.getByTestId('book')).toHaveCount(0);
   await expect(splits.getByTestId('result')).toHaveText(['Won', 'Lost']);
 
-  // sticky header, no sideways scroll at 1366px
-  await expect(page.getByRole('columnheader', { name: 'Game' })).toHaveCSS('position', 'sticky');
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  const { sw, cw } = await page.getByTestId('bet-table-scroll').evaluate((el) => ({ sw: el.scrollWidth, cw: el.clientWidth }));
-  expect(sw).toBeLessThanOrEqual(cw);
-  await page.mouse.move(0, 0);
-  await page.screenshot({ path: 'test-results/bt-23-history-1366.png', fullPage: true });
+  // sticky header
+  await expect(page.getByRole('columnheader', { name: 'Bet' })).toHaveCSS('position', 'sticky');
 });
 
 test('BT-24: the ⋯ menu opens fully visible on dutch and bet rows, stays while the mouse is on it, items clickable', async ({ page, request, tag }) => {
@@ -1244,7 +1228,8 @@ test('BT-25: double click on the game edits it on every row type; "no game" bets
 
   // the legless "Combo" shows as the Solo it is, with an obvious "+ add game"
   const row = page.locator(`[data-bet-id="${jokic.id}"]`);
-  await expect(row.getByTestId('type')).toHaveText('SoloLIVE');
+  await expect(row.getByTestId('type')).toHaveCount(0);
+  await expect(row.getByTestId('live-tag')).toBeVisible();
   const add = row.getByRole('button', { name: 'Edit Game' });
   await expect(add).toHaveText('+ add game');
   await add.dblclick();
@@ -1290,4 +1275,154 @@ test('BT-25: double click on the game edits it on every row type; "no game" bets
   await page.getByRole('combobox', { name: 'Leg 2 game' }).fill('Knicks @ Heat');
   await page.getByRole('combobox', { name: 'Leg 2 game' }).press('Enter');
   await expect.poll(async () => (await legsOf(combo.id)).legs.map((l) => l.game)).toEqual(['Celtics vs Warriors', 'Knicks vs Heat', 'Celtics vs Warriors']);
+});
+
+/** BT-26: throwaway bets with long text: a 3-split dutch of combinations, a long single (live), a combination. */
+async function longBets(request: Parameters<typeof createBet>[0], tag: string) {
+  const long = 'Nikola Jokic over 27.5 points and over 12.5 rebounds and over 9.5 assists in the fourth quarter only';
+  const d = `${tag}-long`.replace(/[^A-Za-z0-9_-]/g, '');
+  const day = { placedDate: '2000-01-03', gameDate: '2000-01-03', book: `${tag} Book with a long name` };
+  for (const [i, s] of ['Denver Nuggets moneyline', 'Los Angeles Lakers +6.5 alternate spread', 'Golden State Warriors team total over 118.5'].entries())
+    await createBet(request, {
+      ...day,
+      dutchId: d,
+      type: 'combination',
+      odds: 3 + i,
+      stake: 30 + i,
+      betText: `${tag} ${s} + ${long}`,
+      legs: [
+        { sport: 'NBA', game: 'Denver Nuggets vs Los Angeles Lakers', market: 'Moneyline', selection: s, odds: 1.8 },
+        { sport: 'NBA', game: 'Denver Nuggets vs Los Angeles Lakers', market: 'Player props', selection: long, odds: 2 },
+      ],
+    });
+  const single = await createBet(request, { ...day, situation: 'live', betText: `${tag} ${long} ${long}`, legs: [{ sport: 'NBA', game: 'Boston Celtics vs Golden State Warriors', market: 'Player props', selection: 'x' }] });
+  const combo = await createBet(request, {
+    ...day,
+    type: 'combination',
+    odds: 5.5,
+    result: 'lost',
+    betText: `${tag} combo ${long}`,
+    legs: [
+      { sport: 'NBA', game: 'Celtics vs Warriors', selection: 'Celtics ML', odds: 2, result: 'lost' },
+      { sport: 'NBA', game: 'Lakers vs Nets', selection: long, odds: 2, result: 'won' },
+    ],
+  });
+  return { d, single, combo };
+}
+
+for (const width of [1366, 1920])
+  test(`BT-26: Bets table at ${width}px: bet text never cut, no sideways scroll, numbers aligned on every row type`, async ({ page, request, tag }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const { d, single, combo } = await longBets(request, tag);
+    await page.goto('/');
+    await page.getByLabel('Search bets').fill(tag);
+    const dutch = page.locator(`[data-dutch-id="${d}"]`);
+    const splits = page.locator('[data-testid=bet-row][data-nested]');
+    await expect(dutch).toBeVisible();
+    await expect(splits).toHaveCount(3); // a dutch shows its splits, stacked
+    await page.locator(`[data-bet-id="${combo.id}"]`).getByRole('button', { name: 'Show legs' }).click();
+    await expect(page.getByTestId('leg-row')).toHaveCount(2);
+
+    // columns: the Bet cell takes the width; Game, Book and Type are no longer columns
+    await expect(page.getByRole('columnheader')).toHaveText(['', 'Bet', 'Stake', 'Odds', '+/-', 'Result', 'Actions']);
+
+    // no bet text cut: every bet line fits (it wraps instead)
+    const cut = await page.getByTestId('bet-text').evaluateAll((els) => els.filter((e) => e.scrollWidth > e.clientWidth).map((e) => e.textContent));
+    expect(cut).toEqual([]);
+    const tall = await page.locator(`[data-bet-id="${single.id}"]`).getByTestId('bet-text').evaluate((e) => e.getBoundingClientRect().height);
+    expect(tall).toBeGreaterThan(30); // the long single wrapped onto 2+ lines
+    // "…" only on the muted line, and then with the full text on hover
+    for (const sub of await page.getByTestId('bet-sub').all()) {
+      const { cutOff, title } = await sub.evaluate((e) => ({ cutOff: e.scrollWidth > e.clientWidth, title: e.getAttribute('title') ?? '' }));
+      if (cutOff) expect(title.length).toBeGreaterThan(20);
+    }
+
+    // no sideways scroll
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+    // Stake, Odds, +/- end at the same x, and Result starts at the same x, on a single, a combination, a dutch and its splits
+    const rows = [page.locator(`[data-bet-id="${single.id}"]`), page.locator(`[data-bet-id="${combo.id}"]`), dutch, splits.nth(0), splits.nth(2)];
+    for (const col of ['stake', 'odds', 'profit']) {
+      const rights = await Promise.all(rows.map((r) => r.locator(`[data-col=${col}]`).evaluate((e) => Math.round(e.getBoundingClientRect().right))));
+      expect(new Set(rights).size, `${col}: ${rights}`).toBe(1);
+    }
+    const lefts = await Promise.all(rows.map((r) => r.getByTestId('result').evaluate((e) => Math.round(e.getBoundingClientRect().left))));
+    expect(new Set(lefts).size, `result: ${lefts}`).toBe(1);
+
+    // each split's own stake and odds on its line; the dutch's total and combined odds on its summary line
+    await expect(splits.locator('[data-col=stake]')).toHaveText(['R$ 30,00', 'R$ 31,00', 'R$ 32,00']);
+    await expect(splits.locator('[data-col=odds]')).toHaveText(['3.00', '4.00', '5.00']);
+    await expect(dutch.getByTestId('dutch-stake')).toHaveText('R$ 93,00');
+    await page.mouse.move(0, 0);
+    await page.screenshot({ path: `test-results/bt-26-bets-${width}.png`, fullPage: true });
+  });
+
+test('BT-26: settle three bets in a row from the To settle tab with the keyboard only', async ({ page, request, tag }) => {
+  const single = await createBet(request, { betText: `${tag} single`, placedDate: '2000-01-01', gameDate: '2000-01-01' });
+  const combo = await createBet(request, { betText: `${tag} combo`, type: 'combination', odds: 4, placedDate: '2000-01-02', gameDate: '2000-01-02', legs: [{ selection: 'A', odds: 2 }, { selection: 'B', odds: 2 }] });
+  const d = `${tag}-k`.replace(/[^A-Za-z0-9_-]/g, '');
+  for (const sel of ['Home', 'Away']) await createBet(request, { betText: '', dutchId: d, placedDate: '2000-01-03', gameDate: '2000-01-03', legs: [{ selection: `${tag} ${sel}`, odds: 2 }] });
+  const selected = page.locator('[data-selected][data-key]').first();
+
+  await page.goto('/?tab=settle');
+  await page.getByLabel('Search bets').fill(tag);
+  await page.getByLabel('Search bets').blur();
+  // the first row is selected, oldest first
+  await expect(selected).toHaveAttribute('data-key', `bet:${single.id}`);
+  await page.keyboard.press('w');
+  await expect(selected).toHaveAttribute('data-key', `bet:${combo.id}`);
+  await page.keyboard.press('l');
+  await expect(selected).toHaveAttribute('data-key', `dutch:${d}`);
+  await page.keyboard.press('2');
+  await expect(page.getByRole('button', { name: /Toggle won/, pressed: true })).toHaveCount(1);
+  await page.keyboard.press('Enter');
+  await expect(page.getByText('Nothing to settle.')).toBeVisible();
+  const byText = async () => Object.fromEntries((await betsTagged(request, tag)).map((b) => [b.betText.replace(`${tag} `, '') || b.legs[0]!.selection.replace(`${tag} `, ''), b.result]));
+  await expect.poll(byText).toEqual({ single: 'won', combo: 'lost', Home: 'lost', Away: 'won' });
+  // Z undoes the last one (the dutch), which comes back selected
+  await page.keyboard.press('z');
+  await expect(selected).toHaveAttribute('data-key', `dutch:${d}`);
+  await expect.poll(byText).toEqual({ single: 'won', combo: 'lost', Home: 'pending', Away: 'pending' });
+});
+
+test('BT-26: one Bets page: stats strip, filters with ⋯ and ?, tabs, the money switch in the top bar, the chart on Analytics', async ({ page, request, tag }) => {
+  await createBet(request, { betText: `${tag} won`, result: 'won', stake: 100, odds: 2 });
+  await createBet(request, { betText: `${tag} paper`, money: 'hypothetical', stake: 50 });
+  await createBet(request, { betText: `${tag} later`, placedDate: '2099-01-01', gameDate: '2099-01-01' });
+  await page.goto('/');
+  await page.getByLabel('Search bets').fill(tag);
+  const money = page.getByRole('banner').getByRole('radiogroup', { name: 'Money shown' });
+  await money.getByRole('radio', { name: 'Real R$' }).click();
+
+  // Real only: the H$ bet is not shown; the strip follows filters and tab
+  await expect(page.getByTestId('bet-row')).toHaveCount(2);
+  await expect(page.getByTestId('stat-net-value')).toHaveText('+R$ 100,00');
+  await expect(page.getByTestId('stat-wagered')).toContainText('2 of');
+  await money.getByRole('radio', { name: 'Both' }).click();
+  await expect(page.getByTestId('bet-row')).toHaveCount(3);
+  await money.getByRole('radio', { name: 'Real R$' }).click();
+
+  // tabs: Pending, To settle (game date today or earlier: the 2099 bet is not due)
+  await page.getByRole('tab', { name: /Pending/ }).click();
+  await expect(page).toHaveURL(/\?tab=pending$/);
+  await expect(page.getByTestId('bet-row')).toHaveCount(1);
+  await expect(page.getByTestId('bet-row')).toContainText('later');
+  await page.getByRole('tab', { name: /To settle/ }).click();
+  await expect(page.getByText('Nothing to settle.')).toBeVisible();
+  await page.getByRole('tab', { name: 'All' }).click();
+
+  // ⋯ holds export / import; ? shows the keys
+  await page.getByRole('button', { name: 'Export and import' }).click();
+  await expect(page.getByRole('button', { name: 'Export JSON' })).toBeVisible();
+  await page.getByRole('button', { name: 'Keyboard shortcuts' }).click();
+  await expect(page.getByTestId('key-help')).toContainText('Dutch: toggle a split that won');
+
+  // full window width
+  const table = await page.getByTestId('bet-table').boundingBox();
+  expect(table!.width).toBeGreaterThan(page.viewportSize()!.width - 80);
+
+  // Analytics: the chart, and the same money switch
+  await page.getByRole('link', { name: 'Analytics' }).click();
+  await expect(page.getByRole('heading', { name: 'Performance Over Time' })).toBeVisible();
+  await expect(page.getByRole('banner').getByRole('radio', { name: 'Real R$' })).toHaveAttribute('aria-checked', 'true');
 });

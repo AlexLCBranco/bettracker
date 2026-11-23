@@ -10,6 +10,7 @@ import { BUILD_INFO } from '@/lib/build-info';
 import { AppProvider, useApp } from './AppProvider';
 import { BetFormModal } from './BetFormModal';
 import { DutchFormModal } from './DutchFormModal';
+import { MoneyScopeSwitch, useMoneyScope } from './Money';
 import { QuickAdd } from './QuickAdd';
 
 export function Shell({ children }: { children: ReactNode }) {
@@ -27,12 +28,11 @@ export function isTyping(e: KeyboardEvent): boolean {
   return t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName);
 }
 
+// BT-26: three pages; Dashboard, History and Settle are the Bets page
 const LINKS = [
-  { href: '/', label: 'Dashboard' },
-  { href: '/betting-tool', label: 'Betting Tool' },
-  { href: '/history', label: 'History' },
+  { href: '/', label: 'Bets' },
   { href: '/analytics', label: 'Analytics' },
-  { href: '/settle', label: 'Settle' },
+  { href: '/betting-tool', label: 'Dutch tool' },
 ];
 
 function Frame({ children }: { children: ReactNode }) {
@@ -40,6 +40,7 @@ function Frame({ children }: { children: ReactNode }) {
   const path = usePathname();
   const due = useMemo(() => settleQueue(bets, todayISO()).length, [bets]);
   const pending = useMemo(() => countBets(bets).pending, [bets]);
+  const [scope, setScope] = useMoneyScope();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -56,7 +57,7 @@ function Frame({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col">
       <header className="sticky top-0 z-30 border-b border-zinc-800 bg-black/90 backdrop-blur">
-        <div className="mx-auto flex max-w-[1400px] items-center gap-6 px-4 py-3">
+        <div className="flex h-14 items-center gap-5 px-4">
           <Link href="/" className="flex items-center gap-2 font-bold">
             <span className="grid h-8 w-8 place-items-center rounded-lg bg-white text-black">↗</span>
             BetTracker
@@ -64,21 +65,25 @@ function Frame({ children }: { children: ReactNode }) {
           <div className="flex-1">
             <QuickAdd />
           </div>
+          {/* BT-26: one Real / Hypothetical / Both switch for every page */}
+          <MoneyScopeSwitch scope={scope} onChange={setScope} />
           <nav className="flex items-center gap-4 text-sm">
             {LINKS.map((l) => (
-              <Link key={l.href} href={l.href} className={path === l.href ? 'font-semibold text-white' : 'text-zinc-400 hover:text-white'}>
-                {l.label}
-                {l.href === '/settle' && due > 0 && (
-                  <span className="ml-1.5 rounded-full bg-amber-500 px-1.5 py-0.5 text-xs font-bold text-black" data-testid="due-count" title={`${due} to settle (game date today or earlier); ${pending} pending in all`}>
+              <span key={l.href} className="inline-flex items-center">
+                <Link href={l.href} className={path === l.href ? 'font-semibold text-white' : 'text-zinc-400 hover:text-white'}>
+                  {l.label}
+                </Link>
+                {l.href === '/' && due > 0 && (
+                  <Link href="/?tab=settle" className="ml-1.5 rounded-full bg-amber-500 px-1.5 py-0.5 text-xs font-bold text-black" data-testid="due-count" aria-label={`${due} to settle`} title={`${due} to settle (game date today or earlier); ${pending} pending in all`}>
                     {due}
-                  </span>
+                  </Link>
                 )}
-              </Link>
+              </span>
             ))}
           </nav>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 py-6">
+      <main className="w-full flex-1 px-4 pb-8 pt-3">
         {loadError ? <p className="rounded-md border border-red-800 bg-red-950 p-4 text-sm text-red-300">Could not load bets: {loadError}</p> : children}
       </main>
       <BetFormModal />

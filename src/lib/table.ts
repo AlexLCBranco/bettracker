@@ -26,11 +26,11 @@ export interface DayGroup {
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-/** Rows cut into runs of one day, in the order given (a new header whenever the date changes). */
-export function dayGroups(rows: BetRow[]): DayGroup[] {
+/** Rows cut into runs of one day, in the order given (a new header whenever the date changes); by bet date unless told. */
+export function dayGroups(rows: BetRow[], dateOf: (r: BetRow) => string = rowDate): DayGroup[] {
   const out: DayGroup[] = [];
   for (const r of rows) {
-    const date = rowDate(r);
+    const date = dateOf(r);
     let g = out[out.length - 1];
     if (!g || g.date !== date) out.push((g = { date, rows: [], count: 0, nets: [] }));
     g.rows.push(r);

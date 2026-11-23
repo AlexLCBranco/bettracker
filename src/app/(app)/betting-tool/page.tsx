@@ -176,8 +176,8 @@ function Tool() {
             Dutch logged: {showLogged.count} bets, {formatBRL(showLogged.stake)}
           </span>
           <span className="text-emerald-700">·</span>
-          <Link href="/history" className="underline hover:text-white">
-            View in History
+          <Link href="/" className="underline hover:text-white">
+            View in Bets
           </Link>
           <span className="text-emerald-700">·</span>
           <button

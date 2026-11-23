@@ -17,6 +17,11 @@ const dirty = !process.env.VERCEL_GIT_COMMIT_SHA && !process.env.GITHUB_SHA && g
 const version = (JSON.parse(readFileSync('package.json', 'utf8')) as { version: string }).version;
 
 const nextConfig: NextConfig = {
+  // BT-26: History and Settle are now the Bets page (/) and its To settle tab
+  redirects: async () => [
+    { source: '/history', destination: '/', permanent: false },
+    { source: '/settle', destination: '/?tab=settle', permanent: false },
+  ],
   env: {
     NEXT_PUBLIC_APP_VERSION: version,
     NEXT_PUBLIC_APP_COMMIT: sha ? `${sha}${dirty ? '+' : ''}` : 'dev',

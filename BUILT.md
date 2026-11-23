@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-23
+- BT-26 — One "Bets" page: Dashboard, History and Settle merged, a table that does not cut text (v0.18.0)
+  The site is Bets, Analytics and Dutch tool, full window width, with one Real / Hypothetical / Both switch in the top bar; Bets has a stats strip, one row of filters (Export / Import under "⋯", keys under "?"), All / Pending / To settle tabs, and a table whose bet text wraps, whose numbers line up on every row type, whose dutches show their splits, where a click selects a row, the settle keys work on it in any tab and a double click edits.
 - BT-25 — Easier way to add or change the game of a logged bet (v0.17.0)
   Double click on the game of any row (single, combination, dutch, leg) opens a small game editor with recent games (one box per game, plus one for legs with no game); bets with no game show a "+ add game" button; a "Combo" with no legs (unless its text is "a + b") is a Solo.
 - BT-24 — Fix the dutch "⋯" menu glitch (v0.16.1)
