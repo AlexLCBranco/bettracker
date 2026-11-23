@@ -1,0 +1,158 @@
+// BT-31: the proposal maths and the generator's hard rules, with fixed seeds.
+import { describe, expect, it } from 'vitest';
+import { DEFAULT_TIERS, type PPLeg, type PPTier } from '@/lib/pp';
+import { appearances, generate, majorLevels, placeholderShares, placeLine, preview, propose, rng, roles, startingScheme, type PPScheme } from '@/lib/ppBuilder';
+
+const leg = (id: string, tier: string, odds: number, game = `${id} game`): PPLeg => ({ id, sport: '', game, market: '', selection: id, odds, tier, result: 'pending', actual: '', note: '' });
+const scheme = (over: Partial<PPScheme> = {}): PPScheme => ({ count: 20, target: 20, bandMin: 15, bandMax: 30, majorShares: [50], shotCount: 2, noSameGame: false, avoidPairs: false, seed: 7, ...over });
+
+// the owner's shape: one major-major around 2, majors, PP shots
+const pool = [
+  leg('mm', 'mm', 2),
+  ...['m1', 'm2', 'm3', 'm4', 'm5', 'm6'].map((id, i) => leg(id, 'major', 1.6 + i * 0.1)),
+  ...['s1', 's2', 's3', 's4', 's5', 's6', 's7', 's8', 's9', 's10'].map((id, i) => leg(id, 'shot', 2.5 + (i % 4) * 0.5)),
+];
+const batch = { legs: pool, tiers: DEFAULT_TIERS, stake: 5 };
+
+describe('roles and starting scheme', () => {
+  it('first tier on every PP, last tier fixed, the ones between are Major levels', () => {
+    const tiers: PPTier[] = [...DEFAULT_TIERS.slice(0, 2), { id: 'm2', name: 'Major 2' }, DEFAULT_TIERS[2]!];
+    expect([...roles(tiers).entries()]).toEqual([
+      ['mm', { role: 'every', level: 0 }],
+      ['major', { role: 'share', level: 0 }],
+      ['m2', { role: 'share', level: 1 }],
+      ['shot', { role: 'fixed', level: 0 }],
+    ]);
+    expect(majorLevels(tiers)).toBe(2);
+  });
+  it('placeholders: Majors 50% (lower levels less), PP shots on 2 PPs each', () => {
+    expect(placeholderShares(3)).toEqual([50, 40, 30]);
+    expect(startingScheme({ tiers: DEFAULT_TIERS, targetOdds: 20, scheme: null }, null)).toMatchObject({ majorShares: [50], shotCount: 2, target: 20, bandMin: 15, bandMax: 30, noSameGame: false, avoidPairs: false });
+  });
+  it('the last batch’s scheme is the start of the next one (fitted to its levels, its own target)', () => {
+    const last = { count: 30, majorShares: [60], shotCount: 3, bandMin: 12, bandMax: 40, noSameGame: true, target: 25 };
+    const tiers: PPTier[] = [...DEFAULT_TIERS.slice(0, 2), { id: 'm2', name: 'Major 2' }, DEFAULT_TIERS[2]!];
+    expect(startingScheme({ tiers, targetOdds: 18, scheme: null }, last)).toMatchObject({ count: 30, majorShares: [60, 60], shotCount: 3, bandMin: 12, bandMax: 40, noSameGame: true, target: 18 });
+  });
+  it('appearances per leg', () => {
+    const a = appearances(pool, DEFAULT_TIERS, scheme({ count: 20, majorShares: [45] }));
+    expect([a.get('mm'), a.get('m1'), a.get('s1')]).toEqual([20, 9, 2]);
+  });
+});
+
+describe('proposal', () => {
+  it('about one PP shot per PP, and the Major share that puts the average PP on the target', () => {
+    const p = propose(batch, scheme());
+    expect(p.short).toBe(false);
+    expect(p.scheme.count).toBe(20); // 2 × 10 shot legs
+    expect(p.average).toBeCloseTo(20, 0);
+    expect(p.scheme.majorShares[0]).toBeGreaterThan(0);
+    expect(p.scheme.majorShares[0]).toBeLessThan(100);
+    expect(p.message).toContain('20 PPs');
+  });
+  it('keeps the ratio between Major levels', () => {
+    const tiers: PPTier[] = [...DEFAULT_TIERS.slice(0, 2), { id: 'm2', name: 'Major 2' }, DEFAULT_TIERS[2]!];
+    const legs = [...pool, leg('x1', 'm2', 1.5), leg('x2', 'm2', 1.5)];
+    const p = propose({ legs, tiers }, scheme({ majorShares: [50, 25] }));
+    expect(p.scheme.majorShares[1]! / p.scheme.majorShares[0]!).toBeCloseTo(0.5, 1);
+  });
+  it('says plainly when the pool cannot reach the target, with what is missing', () => {
+    const p = propose({ legs: [leg('mm', 'mm', 1.5), leg('m1', 'major', 1.3)], tiers: DEFAULT_TIERS }, scheme());
+    expect(p.short).toBe(true);
+    expect(p.message).toMatch(/cannot reach 20\.00.*average PP is 1\.95.*missing about ×10\.26/);
+  });
+  it('says so when the major-majors alone are over the target', () => {
+    const p = propose({ legs: [leg('mm', 'mm', 25), leg('m1', 'major', 1.5)], tiers: DEFAULT_TIERS }, scheme());
+    expect(p.message).toContain('no Majors are needed');
+  });
+  it('an empty pool', () => expect(propose({ legs: [], tiers: DEFAULT_TIERS }, scheme()).short).toBe(true));
+});
+
+describe('generator hard rules (fixed seeds)', () => {
+  for (const seed of [1, 2, 3, 42, 999]) {
+    it(`seed ${seed}: major-majors on every PP, a leg at most once per PP, no identical PPs, band respected`, () => {
+      const s = scheme({ seed, majorShares: [40] });
+      const g = generate(batch, s);
+      expect(g.tickets).toHaveLength(20 - g.dropped);
+      const keys = new Set<string>();
+      for (const t of g.tickets) {
+        expect(t.legIds[0]).toBe('mm');
+        expect(new Set(t.legIds).size).toBe(t.legIds.length);
+        const key = [...t.legIds].sort().join(',');
+        expect(keys.has(key)).toBe(false);
+        keys.add(key);
+        const odds = t.legIds.reduce((p, id) => p * pool.find((l) => l.id === id)!.odds, 1);
+        expect(odds).toBeLessThanOrEqual(30 + 1e-9);
+        expect(t.placed).toBe(false);
+      }
+      expect(g.tickets.map((t) => t.number)).toEqual(g.tickets.map((_, i) => i + 1));
+    });
+  }
+  it('the same seed gives the same PPs; another seed others', () => {
+    expect(generate(batch, scheme({ seed: 5 })).tickets).toEqual(generate(batch, scheme({ seed: 5 })).tickets);
+    expect(generate(batch, scheme({ seed: 5 })).tickets).not.toEqual(generate(batch, scheme({ seed: 6 })).tickets);
+  });
+  it('every leg reaches its appearances where the numbers allow; the PP shots do', () => {
+    const g = generate(batch, scheme({ seed: 3, majorShares: [30] }));
+    const shots = g.shortfalls.filter((x) => x.legId.startsWith('s'));
+    expect(shots).toEqual([]);
+  });
+  it('reports the legs that fell short', () => {
+    // majors on 100% of PPs cannot fit under a band top of 30 with mm 2 and shots
+    const g = generate(batch, scheme({ seed: 3, majorShares: [100] }));
+    expect(g.shortfalls.length).toBeGreaterThan(0);
+    for (const x of g.shortfalls) expect(x.got).toBeLessThan(x.wanted);
+  });
+  it('no two identical PPs: a tiny pool drops what it cannot make different', () => {
+    const tiny = { legs: [leg('mm', 'mm', 2), leg('a', 'major', 8), leg('b', 'major', 9)], tiers: DEFAULT_TIERS };
+    const g = generate(tiny, scheme({ count: 10, majorShares: [100], shotCount: 0, seed: 1 }));
+    expect(g.tickets.length).toBe(2);
+    expect(g.dropped).toBe(8);
+  });
+  it('toggle: no two legs from the same game on one PP', () => {
+    const legs = [leg('mm', 'mm', 2, 'G0'), leg('a', 'major', 2, 'G1'), leg('b', 'major', 2.2, 'G1'), leg('c', 'major', 2.4, 'G2'), leg('d', 'shot', 3, 'G2'), leg('e', 'shot', 3, 'G3')];
+    const g = generate({ legs, tiers: DEFAULT_TIERS }, scheme({ count: 6, majorShares: [60], noSameGame: true, seed: 9 }));
+    for (const t of g.tickets) {
+      const games = t.legIds.map((id) => legs.find((l) => l.id === id)!.game);
+      expect(new Set(games).size).toBe(games.length);
+    }
+  });
+  it('toggle: avoid repeating the same pair of legs (fewer repeated pairs than without it)', () => {
+    const repeats = (avoidPairs: boolean) => {
+      let n = 0;
+      for (let seed = 1; seed <= 10; seed++) {
+        const g = generate(batch, scheme({ seed, avoidPairs }));
+        const seen = new Map<string, number>();
+        for (const t of g.tickets) for (const a of t.legIds) for (const b of t.legIds) if (a < b && a !== 'mm' && b !== 'mm') seen.set(`${a}|${b}`, (seen.get(`${a}|${b}`) ?? 0) + 1);
+        n += [...seen.values()].reduce((x, c) => x + c - 1, 0);
+      }
+      return n;
+    };
+    expect(repeats(true)).toBeLessThan(repeats(false));
+  });
+});
+
+describe('preview and place line', () => {
+  it('legs and odds per PP, outside the band, appearances, totals', () => {
+    const s = scheme({ seed: 2 });
+    const g = generate(batch, s);
+    const p = preview(batch, s, g);
+    expect(p.legs.min).toBeGreaterThanOrEqual(2);
+    expect(p.odds.max).toBeLessThanOrEqual(30 + 1e-9);
+    expect(p.totalStake).toBe(g.tickets.length * 5);
+    expect(p.appearances.find((a) => a.leg.id === 'mm')).toMatchObject({ wanted: 20, got: g.tickets.length });
+    expect(p.outside).toBe(g.tickets.filter((t) => t.legIds.reduce((x, id) => x * pool.find((l) => l.id === id)!.odds, 1) < 15).length);
+  });
+  it('an empty generation has zeros, never NaN', () => {
+    const p = preview(batch, scheme({ count: 0 }), { tickets: [], shortfalls: [], dropped: 0 });
+    expect(p).toMatchObject({ legs: { min: 0, avg: 0, max: 0 }, odds: { min: 0, avg: 0, max: 0 }, outside: 0, totalStake: 0, totalPotential: 0 });
+  });
+  it('copy-friendly line', () => expect(placeLine({ id: 't', number: 3, legIds: ['mm', 'm1'], placed: false, oddsOverride: null }, pool, 3.2)).toBe('PP 3 · mm + m1 · 3.20'));
+  it('rng is deterministic and in [0, 1)', () => {
+    const a = rng(1);
+    const xs = [a(), a(), a()];
+    const b = rng(1);
+    expect([b(), b(), b()]).toEqual(xs);
+    for (const x of xs) expect(x >= 0 && x < 1).toBe(true);
+  });
+});

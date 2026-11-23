@@ -24,37 +24,6 @@ Words the owner uses (keep them in the UI):
   works in volume. Before, it was done in Excalidraw with AIs inventing the scheme per batch, the history lived only
   in the bookmaker's app and vanished, and both building and following 100 PPs was the part that broke.
 
-### BT-31 — PP builder: scheme helper and ticket generator
-**In short:** Enter the legs and their tiers, and the app proposes how many PPs to make and how often each tier appears, then generates all the tickets and gives a checklist for placing them.
-
-Needs BT-30. No AI and no paid service: plain rules and arithmetic.
-
-- Step 1, pool: add legs with tier and odds (the BT-30 leg list in edit mode).
-- Step 2, scheme. The app proposes values from the pool and he can change every one of them:
-  - number of PPs;
-  - target odds per PP (default 20) and the accepted band around it (default 15 to 30);
-  - appearances per tier: Major-major = every PP (fixed); each Major level = a share of the PPs (higher level,
-    higher share); PP shot = a fixed number of PPs each.
-  - Live preview while he edits: legs per PP (min / average / max), estimated odds per PP (min / average / max),
-    how many PPs fall outside the band, appearances per leg, total stake and total potential return.
-  - The proposal: with the major-majors on every PP, pick the Major shares and PP-shot count so the average PP
-    lands on the target odds, and suggest the number of PPs that lets every leg get its appearances. If the pool
-    cannot reach the target (too few or too short-priced legs), say so plainly with what is missing.
-  - The last batch's scheme is the starting point for the next one. The owner's schemes changed from batch to
-    batch, so nothing here is hard-coded. He has NOT given default numbers: start with Majors 50%, PP shots 2 PPs
-    each, and treat those as placeholders he will tune.
-- Step 3, generate ("semi-random"): every PP starts with the major-majors, then is filled from Majors and PP shots
-  by random draw weighted by each leg's remaining appearances, until the PP is inside the odds band. Hard rules:
-  a leg at most once per PP, no two identical PPs, every leg reaches its appearances where the numbers allow
-  (report any leg that fell short). Toggles, off by default until he says otherwise: "no two legs from the same
-  game on one PP", "avoid repeating the same pair of legs". "Shuffle" regenerates; a seed keeps a result
-  reproducible for tests.
-- Step 4, place: the tickets as a checklist in generation order, each with its legs in a copy-friendly line and a
-  "placed" tick (keyboard: Space ticks and moves down), plus an optional box for the book's real odds.
-
-Tests: unit tests for the proposal maths and for the generator's hard rules with fixed seeds (appearances met, no
-duplicates, band respected, shortfalls reported); Playwright for pool → scheme → generate → tick placed.
-
 ### BT-32 — PP stats: per batch and across batches
 **In short:** See what the PP research actually says: how each tier and each leg did, which PPs died by one leg and which leg killed them, per batch and over time.
 

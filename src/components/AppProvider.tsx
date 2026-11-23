@@ -287,37 +287,48 @@ export function AppProvider({ children }: { children: ReactNode }) {
     batchesRef.current = batches;
   }, [batches]);
   const byPlaced = (a: PPBatch, b: PPBatch) => (a.placedDate !== b.placedDate ? (a.placedDate < b.placedDate ? 1 : -1) : a.createdAt < b.createdAt ? 1 : -1);
+  // BT-31: a batch's writes go one after another (ticking ~100 PPs, settling ~30 legs fast): a whole-batch PUT never
+  // overtakes a newer one, and only the newest write's answer is shown.
+  const ppQueue = useRef(new Map<string, Promise<unknown>>());
+  const [ppGate] = useState(latestGate);
+  const queued = useCallback(<T,>(batchId: string, run: () => Promise<T>): Promise<T> => {
+    const p = (ppQueue.current.get(batchId) ?? Promise.resolve()).catch(() => undefined).then(run);
+    ppQueue.current.set(batchId, p);
+    return p;
+  }, []);
   const saveBatch = useCallback(
     async (input: BatchInput, id?: string) => {
       const before = id ? batchesRef.current.find((b) => b.id === id) : undefined;
       if (before) setBatches((bs) => bs.map((b) => (b.id === id ? { ...b, ...input } : b)));
+      const token = id ? ppGate.begin(id) : 0;
       try {
         const saved = id
-          ? await write<PPBatch>(`/api/pp/${id}`, { method: 'PUT', body: JSON.stringify(input) })
+          ? await queued(id, () => write<PPBatch>(`/api/pp/${id}`, { method: 'PUT', body: JSON.stringify(input) }))
           : await write<PPBatch>('/api/pp', { method: 'POST', body: JSON.stringify(input) });
-        setBatches((bs) => [...bs.filter((b) => b.id !== saved.id), saved].sort(byPlaced));
+        if (!id || ppGate.isLatest(id, token)) setBatches((bs) => [...bs.filter((b) => b.id !== saved.id), saved].sort(byPlaced));
         return saved;
       } catch (e) {
-        if (before) setBatches((bs) => bs.map((b) => (b.id === id ? before : b)));
+        if (before && ppGate.isLatest(id!, token)) setBatches((bs) => bs.map((b) => (b.id === id ? before : b)));
         notify((e as Error).message, 'error');
         throw e;
       }
     },
-    [notify, write],
+    [notify, write, queued, ppGate],
   );
   const patchPPLeg = useCallback(
     async (batchId: string, legId: string, patch: Partial<Pick<PPLeg, 'result' | 'actual' | 'note'>>) => {
       const apply = (bs: PPBatch[], p: typeof patch) => bs.map((b) => (b.id === batchId ? { ...b, legs: b.legs.map((l) => (l.id === legId ? { ...l, ...p } : l)) } : b));
       const old = batchesRef.current.find((b) => b.id === batchId)?.legs.find((l) => l.id === legId);
       setBatches((bs) => apply(bs, patch));
+      ppGate.begin(batchId);
       try {
-        await write(`/api/pp/${batchId}/legs/${legId}`, { method: 'PATCH', body: JSON.stringify(patch) });
+        await queued(batchId, () => write(`/api/pp/${batchId}/legs/${legId}`, { method: 'PATCH', body: JSON.stringify(patch) }));
       } catch (e) {
         if (old) setBatches((bs) => apply(bs, { result: old.result, actual: old.actual, note: old.note }));
         notify((e as Error).message, 'error');
       }
     },
-    [notify, write],
+    [notify, write, queued, ppGate],
   );
   const removeBatch = useCallback(
     async (b: PPBatch) => {

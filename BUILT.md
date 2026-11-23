@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-23
+- BT-31 — PP builder: scheme helper and ticket generator (v0.25.0)
+  A batch's Build tab shows the pool by tier, a scheme (number of PPs, target and band, % of PPs per Major level, PPs per PP shot, two toggles) starting from the last batch's with a plain-words proposal ("Use proposal") and a live preview (legs and odds per PP, outside the band, appearances per leg, total stake and potential), generates the PPs semi-randomly from a seed (Shuffle draws again; legs that fell short are listed), and gives a placing checklist with copy-friendly lines, Space to tick and move down, and a box for the book's odds.
 - BT-30 — PP batches: leg pool, tickets, leg-first settling, archive (v0.24.0)
   A new "PP" page lists batches (won / alive / dead, one leg away, staked, returned); a batch is a pool of legs by tier (Major-major, Major, PP shot, levels can be added or renamed) plus its PPs, each leg is settled once with W / L / V (↑ ↓, T for actual and note, Z undo) and every PP follows, a leg that decides PPs is flagged and first in its tier, the Tickets view shows each PP with coloured leg chips, estimated or book odds, potential and status with filters and sorting, PPs can be added by hand, the batch is read-only until Edit, and placed PPs count in the bankroll and in export / import.
 - BT-33 — Bankroll: insert real, bonus and hypothetical money, and see what you have (v0.23.0)
