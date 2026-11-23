@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-23
+- BT-27 — Label chip and actual results on a bet (v0.19.0)
+  T on a selected row (or "+ label / result" on hover, or the full form) sets a label shown as a small uppercase chip and what actually happened ("McCain 25+ pts → 24 pts"); a lost combination lists every losing leg with its actual ("✗ Jokic 12+ ass 11 · ✗ Celtics ML 111-112") instead of the red "lost by" text, which no longer glues the market onto the leg and now finds legs that lost on dutch splits.
 - BT-26 — One "Bets" page: Dashboard, History and Settle merged, a table that does not cut text (v0.18.0)
   The site is Bets, Analytics and Dutch tool, full window width, with one Real / Hypothetical / Both switch in the top bar; Bets has a stats strip, one row of filters (Export / Import under "⋯", keys under "?"), All / Pending / To settle tabs, and a table whose bet text wraps, whose numbers line up on every row type, whose dutches show their splits, where a click selects a row, the settle keys work on it in any tab and a double click edits.
 - BT-25 — Easier way to add or change the game of a logged bet (v0.17.0)

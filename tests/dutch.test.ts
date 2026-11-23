@@ -107,7 +107,7 @@ describe('log as bets', () => {
     if (!r.ok) throw new Error(r.error);
     expect(r.value).toHaveLength(2);
     expect(r.value[0]).toMatchObject({ type: 'solo', result: 'pending', book: 'Betano', stake: 40, odds: 1 + 100 / 150, dutchId: 'dutch-1', situation: 'live', placedDate: '2026-11-22', gameDate: '2026-11-22' });
-    expect(r.value[0]!.legs).toEqual([{ sport: 'Football', game: 'A vs B', market: '1X2', selection: 'Home', odds: 1 + 100 / 150, result: 'pending' }]);
+    expect(r.value[0]!.legs).toEqual([{ sport: 'Football', game: 'A vs B', market: '1X2', selection: 'Home', odds: 1 + 100 / 150, result: 'pending', actual: '' }]);
     expect(r.value[1]!.dutchId).toBe('dutch-1');
   });
 

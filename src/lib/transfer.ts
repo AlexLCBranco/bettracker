@@ -67,7 +67,7 @@ export function parseImport(raw: unknown, now = new Date().toISOString()): Parse
 
 const CSV_COLUMNS = [
   'placed_date', 'game_date', 'book', 'type', 'situation', 'sport', 'game', 'market', 'selection', 'bet_text',
-  'stake', 'odds', 'result', 'cashout', 'profit', 'legs', 'pre_analysis', 'post_analysis', 'id', 'dutch_id', 'money',
+  'stake', 'odds', 'result', 'cashout', 'profit', 'legs', 'pre_analysis', 'post_analysis', 'id', 'dutch_id', 'money', 'label', 'actual',
 ] as const;
 
 function cell(v: string | number | null): string {
@@ -75,7 +75,7 @@ function cell(v: string | number | null): string {
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
-const joinLegs = (legs: Leg[], k: 'sport' | 'game' | 'market' | 'selection') => legs.map((l) => l[k]).filter(Boolean).join(' | ');
+const joinLegs = (legs: Leg[], k: 'sport' | 'game' | 'market' | 'selection' | 'actual') => legs.map((l) => l[k]).filter(Boolean).join(' | ');
 
 /** One row per bet; combination legs joined with " | ". Dates YYYY-MM-DD, dot decimals, UTF-8 with BOM (Excel). */
 export function toCSV(bets: Bet[]): string {
@@ -83,7 +83,7 @@ export function toCSV(bets: Bet[]): string {
     [
       b.placedDate, b.gameDate, b.book, b.type, b.situation,
       joinLegs(b.legs, 'sport'), joinLegs(b.legs, 'game'), joinLegs(b.legs, 'market'), joinLegs(b.legs, 'selection'), b.betText,
-      b.stake, b.odds, b.result, b.cashout, b.result === 'pending' ? null : profit(b), b.legs.length, b.preAnalysis, b.postAnalysis, b.id, b.dutchId, b.money,
+      b.stake, b.odds, b.result, b.cashout, b.result === 'pending' ? null : profit(b), b.legs.length, b.preAnalysis, b.postAnalysis, b.id, b.dutchId, b.money, b.label, joinLegs(b.legs, 'actual'),
     ].map(cell).join(','),
   );
   return '﻿' + [CSV_COLUMNS.join(','), ...rows].join('\r\n') + '\r\n';

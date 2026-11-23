@@ -19,6 +19,9 @@ import { betTone, groupTone, resultTone } from '@/lib/tone';
 import { TONE_BADGE, TONE_EDGE, TONE_TEXT } from './tone';
 import { betResultLine, betsText, displayGame, dutchResultLine, legGames, legMarkets, type DayGroup } from '@/lib/table';
 import type { Settler } from './useSettle';
+import { losingLegs, sharedLabel } from '@/lib/actuals';
+import { normalize } from '@/lib/autocomplete';
+import { Annotator, LabelChip, LossLine } from './Annotator';
 
 const QUICK_RESULTS: { r: Result; key: string; cls: string }[] = [
   { r: 'won', key: 'W', cls: 'hover:bg-emerald-600/40 text-emerald-400' },
@@ -133,8 +136,7 @@ function marketsPart(markets: string[]): Part {
   };
 }
 
-const resultLinePart = (text: string | null, lost?: boolean): Part =>
-  text ? { text, node: <span className={lost ? 'text-red-400/80' : 'text-zinc-400'} data-testid="result-sub">{text}</span> } : null;
+const resultLinePart = (text: string | null): Part => (text ? { text, node: <span className="text-zinc-400" data-testid="result-sub">{text}</span> } : null);
 
 interface TableProps {
   days: DayGroup[];
@@ -142,6 +144,9 @@ interface TableProps {
   selected: string | null;
   select(key: string): void;
   settle: Settler;
+  /** BT-27: the row whose label / actual editor is open (T), and how to open or close it. */
+  annotating: string | null;
+  annotate(key: string | null): void;
   empty?: string;
 }
 
@@ -151,7 +156,7 @@ interface TableProps {
  * two lines: the bet text (wraps, never cut) and a muted line with game, sport, market, book and tags. A dutch is a
  * summary row with one such block per split under it. A click selects a row (keyboard settling), a double click edits.
  */
-export function BetTable({ days, selected, select, settle, empty = 'No bets yet. Type one in the quick-add line above.' }: TableProps) {
+export function BetTable({ days, selected, select, settle, annotating, annotate, empty = 'No bets yet. Type one in the quick-add line above.' }: TableProps) {
   const [open, setOpen] = useState<Set<string>>(new Set());
   const toggle = (id: string) =>
     setOpen((s) => {
@@ -163,7 +168,7 @@ export function BetTable({ days, selected, select, settle, empty = 'No bets yet.
 
   if (!days.length) return <p className="py-10 text-center text-sm text-zinc-500">{empty}</p>;
   const th = 'sticky top-14 z-[2] bg-zinc-950 px-2 py-2 text-[11px] font-medium text-zinc-500 shadow-[inset_0_-1px_0_rgb(39_39_42)]';
-  const row = { open, toggle, selected, select, settle };
+  const row = { open, toggle, selected, select, settle, annotating, annotate };
 
   return (
     <div data-testid="bet-table-scroll">
@@ -230,9 +235,27 @@ function shared(bets: Bet[], pick: (b: Bet) => string) {
   return vals.length === 1 ? vals[0]! : vals.length > 1 ? 'Mixed' : '';
 }
 
-type RowProps = { open: Set<string>; toggle(id: string): void; selected: string | null; select(key: string): void; settle: Settler };
+type RowProps = { open: Set<string>; toggle(id: string): void; selected: string | null; select(key: string): void; settle: Settler; annotating: string | null; annotate(key: string | null): void };
 
-function DutchGroup({ bets, dutchId, open, toggle, selected, select, settle }: { bets: Bet[]; dutchId: string } & RowProps) {
+/** BT-27: "+ label / result", faint, on row hover (T on the selected row does the same). */
+function AnnotateButton({ onClick }: { onClick(): void }) {
+  return (
+    <button
+      className="rounded px-1 py-0.5 text-[11px] text-zinc-500 hover:bg-zinc-800 hover:text-white"
+      title="Label and actual result (T)"
+      aria-label="Label and actual result"
+      data-testid="annotate"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+    >
+      + label / result
+    </button>
+  );
+}
+
+function DutchGroup({ bets, dutchId, open, toggle, selected, select, settle, annotating, annotate }: { bets: Bet[]; dutchId: string } & RowProps) {
   const { removeDutch, openDutch, names: nameCasing } = useApp();
   const s = dutchSummary(bets);
   const tone = groupTone(s.outcome);
@@ -249,6 +272,11 @@ function DutchGroup({ bets, dutchId, open, toggle, selected, select, settle }: {
   const pending = bets.filter((b) => b.result === 'pending');
   const winners = settle.winners(dutchId);
   const book = shared(bets, (b) => b.book);
+  const label = sharedLabel(bets);
+  const annotateHere = () => {
+    select(key);
+    annotate(key);
+  };
   return (
     <>
       <tr className={ROW} data-testid="dutch-row" data-dutch-id={dutchId} data-key={key} data-selected={isSel || undefined} data-tone={tone} data-money={money} onClick={() => select(key)}>
@@ -256,6 +284,7 @@ function DutchGroup({ bets, dutchId, open, toggle, selected, select, settle }: {
         <td className={CELL}>
           <div className={`${TEXT} flex items-center gap-1.5`} data-testid="bet-text" title={names}>
             <span data-testid="type">Dutch ×{bets.length}</span>
+            {label && <LabelChip label={label} />}
             {live && <LiveTag />}
           </div>
           <SubLine
@@ -268,6 +297,7 @@ function DutchGroup({ bets, dutchId, open, toggle, selected, select, settle }: {
               resultLinePart(dutchResultLine(bets)),
             ]}
           />
+          {annotating === key && <Annotator kind="dutch" bets={bets} onClose={() => annotate(null)} />}
         </td>
         <td className={NUM} data-testid="dutch-stake" data-col="stake">
           <span className={money === 'hypothetical' ? HYPO : 'text-zinc-200'}>{formatMoney(s.stake, money)}</span>
@@ -293,6 +323,7 @@ function DutchGroup({ bets, dutchId, open, toggle, selected, select, settle }: {
               <DutchSettleButtons dutchId={dutchId} bets={bets} onSettle={(a) => settle.settleDutch(dutchId, bets, a)} />
             )}
             <span className={HOVER_ONLY} data-testid="row-actions">
+              {!pending.length && <AnnotateButton onClick={annotateHere} />}
               <IconButton label="Edit dutch" onClick={() => openDutch(editDutchDraft(bets), undefined, { dutchId, bets })}>
                 ✎
               </IconButton>
@@ -308,6 +339,7 @@ function DutchGroup({ bets, dutchId, open, toggle, selected, select, settle }: {
                       if (window.confirm(`Delete this dutch and its ${bets.length} bets (${formatMoney(s.stake, money)} in all: ${names})? This cannot be undone.`)) void removeDutch(dutchId);
                     },
                   },
+                  { label: 'Label / result', icon: '#', onClick: annotateHere },
                 ]}
               />
             </span>
@@ -323,7 +355,11 @@ function DutchGroup({ bets, dutchId, open, toggle, selected, select, settle }: {
           selected={selected}
           select={select}
           settle={settle}
+          annotating={annotating}
+          annotate={annotate}
           split={{
+            group: bets,
+            sharedLabel: label,
             index: i,
             last: i === bets.length - 1 && !open.has(b.id),
             dutchKey: key,
@@ -345,11 +381,14 @@ interface Split {
   /** The dutch's shared book and situation: a split shows its own only when they differ. */
   book: string;
   live: boolean;
+  /** Every bet of the dutch, and the label they all share (BT-27). */
+  group: Bet[];
+  sharedLabel: string;
   /** Its number key (1-9) while the dutch is pending: toggled = picked as a winner, Enter confirms. */
   pick: { n: number; on: boolean; toggle(): void } | null;
 }
 
-function BetRow({ b, open, toggle, selected, select, settle, split }: { b: Bet; split?: Split } & RowProps) {
+function BetRow({ b, open, toggle, selected, select, settle, split, annotating, annotate }: { b: Bet; split?: Split } & RowProps) {
   const { update, remove, openEdit, openNew, names } = useApp();
   const save = (patch: Partial<BetInput>) => update(b.id, patch).catch(() => undefined);
   const saveLeg = (i: number, patch: Partial<Leg>) => save({ legs: b.legs.map((l, j) => (j === i ? { ...l, ...patch } : l)) });
@@ -369,6 +408,15 @@ function BetRow({ b, open, toggle, selected, select, settle, split }: { b: Bet; 
   const leg0 = b.legs[0];
   const pending = b.result === 'pending';
   const returns = pending ? `Returns ${formatMoney(potentialReturn(b.stake, b.odds), b.money)} if it wins` : undefined;
+  // BT-27: the label chip (a split shows its own only when it differs from the dutch's), a solo's actual, losing legs
+  const chip = b.label && !(nested && normalize(b.label) === normalize(split.sharedLabel)) ? b.label : '';
+  const soloActual = solo ? (leg0?.actual ?? '') : '';
+  const losses = losingLegs(b, split?.group ?? []);
+  const flow = !!(chip || soloActual);
+  const annotateHere = () => {
+    select(key);
+    annotate(key);
+  };
   const setType = (v: string) => {
     if (v === 'combination' && b.legs.filter((l) => l.selection || l.game).length < 2) openEdit({ ...b, type: 'combination', legs: b.legs.filter((l) => l.selection || l.game || l.market) });
     else void save({ type: v as Bet['type'] });
@@ -409,10 +457,17 @@ function BetRow({ b, open, toggle, selected, select, settle, split }: { b: Bet; 
               ))}
             <div className={`min-w-0 flex-1 ${nested ? 'text-[13px]' : ''}`} data-testid="bet-text">
               {textOnLeg ? (
-                <Cell bare kind="text" field="selection" sport={leg0?.sport} value={leg0?.selection ?? ''} display={text} label="Bet" extraClass={TEXT} onSave={(v) => saveLeg(0, { selection: v })} />
+                <Cell bare flow={flow} kind="text" field="selection" sport={leg0?.sport} value={leg0?.selection ?? ''} display={text} label="Bet" extraClass={TEXT} onSave={(v) => saveLeg(0, { selection: v })} />
               ) : (
-                <Cell bare kind="text" field="betText" value={b.betText} display={text} label="Bet" extraClass={TEXT} empty="(no text)" onSave={(v) => save({ betText: v })} />
+                <Cell bare flow={flow} kind="text" field="betText" value={b.betText} display={text} label="Bet" extraClass={TEXT} empty="(no text)" onSave={(v) => save({ betText: v })} />
               )}
+              {soloActual && (
+                <span className="text-zinc-400" data-testid="actual">
+                  {' → '}
+                  {soloActual}
+                </span>
+              )}
+              {chip && <LabelChip label={chip} />}
             </div>
           </div>
           <SubLine
@@ -444,9 +499,11 @@ function BetRow({ b, open, toggle, selected, select, settle, split }: { b: Bet; 
                 ),
               },
               b.situation === 'live' && !(nested && split.live) && { text: 'LIVE', node: <LiveTag /> },
-              resultLinePart(betResultLine(b), b.result === 'lost' || b.result === 'half-lost'),
+              resultLinePart(betResultLine(b)),
             ]}
           </SubLine>
+          {losses.length > 0 && <LossLine entries={losses} />}
+          {annotating === key && <Annotator kind="bet" bet={b} group={split?.group ?? [b]} onClose={() => annotate(null)} />}
         </td>
         <Cell kind="number" testId="stake" value={String(b.stake)} display={formatMoney(b.stake, b.money)} extraClass={b.money === 'hypothetical' ? HYPO : undefined} title={[b.money === 'hypothetical' ? HYPO_TITLE : '', returns].filter(Boolean).join(' · ') || undefined} label="Stake" onSave={(v) => save({ stake: parseNumber(v) ?? b.stake })} right />
         <Cell kind="odds" testId="odds" value={formatOdds(b.odds)} label="Odds" onSave={(v) => save({ odds: oddsFromText(v) ?? b.odds })} right />
@@ -459,8 +516,12 @@ function BetRow({ b, open, toggle, selected, select, settle, split }: { b: Bet; 
         <td className={ACTIONS}>
           {settle.cashoutFor === b.id ? (
             <CashoutBox bet={b} onDone={(a) => settle.settleBet(b, 'cash-out', a)} onClose={settle.cancelCashout} />
+          ) : nested ? (
+            <span className={HOVER_ONLY} data-testid="row-actions">
+              <AnnotateButton onClick={annotateHere} />
+            </span>
           ) : (
-            !nested && (
+            (
               <span className="inline-flex items-center gap-0.5">
                 {/* BT-18 / BT-23: W / L / V always on unsettled bets (a settled one changes from its result pill) */}
                 {pending &&
@@ -470,6 +531,7 @@ function BetRow({ b, open, toggle, selected, select, settle, split }: { b: Bet; 
                     </button>
                   ))}
                 <span className={HOVER_ONLY} data-testid="row-actions">
+                  <AnnotateButton onClick={annotateHere} />
                   <IconButton label="Edit" onClick={() => openEdit(b)}>
                     ✎
                   </IconButton>
@@ -517,7 +579,13 @@ function BetRow({ b, open, toggle, selected, select, settle, split }: { b: Bet; 
                 <div className="flex items-start gap-1.5">
                   <span className="mt-px shrink-0 text-[10px] leading-4 text-zinc-500">Leg {i + 1}</span>
                   <div className="min-w-0 flex-1 [overflow-wrap:anywhere]" data-testid="bet-text">
-                    <Cell bare kind="text" field="selection" sport={l.sport} value={l.selection} display={tidyText(l.selection, names)} label={`Leg ${i + 1} selection`} extraClass="text-zinc-200" onSave={(v) => saveLeg(i, { selection: v })} />
+                    <Cell bare flow={!!l.actual} kind="text" field="selection" sport={l.sport} value={l.selection} display={tidyText(l.selection, names)} label={`Leg ${i + 1} selection`} extraClass="text-zinc-200" onSave={(v) => saveLeg(i, { selection: v })} />
+                    {l.actual && (
+                      <span className="text-zinc-400" data-testid="actual">
+                        {' → '}
+                        {l.actual}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <SubLine parts={[]}>
@@ -626,6 +694,8 @@ type CellProps = {
   bare?: boolean;
   /** Inline, inside the muted line. */
   inline?: boolean;
+  /** Inline in the bet text line, so an actual or a label chip can follow on the same line (BT-27). */
+  flow?: boolean;
   /** Muted text shown when there is no value (default "-"). */
   empty?: string;
   /** Extra classes and tooltip on the shown value (H$ stakes, BT-14). */
@@ -697,7 +767,7 @@ function Cell(props: CellProps) {
         tabIndex={0}
         aria-label={`Edit ${props.label}`}
         title={props.title ?? 'Double click to edit'}
-        className={`${props.inline ? '-mx-1 inline px-1' : props.right ? '-mr-1 block pr-1' : 'block'} min-h-4 cursor-text rounded hover:bg-zinc-800 ${props.bare || props.extraClass ? '' : 'text-zinc-200'} ${props.extraClass ?? ''}`}
+        className={`${props.inline ? '-mx-1 inline px-1' : props.flow ? 'inline' : props.right ? '-mr-1 block pr-1' : 'block'} min-h-4 cursor-text rounded hover:bg-zinc-800 ${props.bare || props.extraClass ? '' : 'text-zinc-200'} ${props.extraClass ?? ''}`}
         onDoubleClick={start}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {

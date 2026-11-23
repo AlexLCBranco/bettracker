@@ -721,7 +721,8 @@ test('dutch row: one-click settle buttons in History (Pick W… one split, Undo,
   // Pick W… with two splits: one button per split, one click settles
   await row.getByRole('button', { name: 'Dutch: pick winners' }).click();
   await page.getByRole('dialog', { name: 'Which splits won' }).getByRole('button', { name: /Mitchell 30 pts \+ Celtics W won/ }).click();
-  await expect.poll(state).toEqual({ 'McCain 25 pts + Celtics W': 'lost pending pending', 'Mitchell 30 pts + Celtics W': 'won won won' });
+  // BT-27: the shared Celtics W won on Mitchell's split, so McCain is the leg that lost
+  await expect.poll(state).toEqual({ 'McCain 25 pts + Celtics W': 'lost lost won', 'Mitchell 30 pts + Celtics W': 'won won won' });
   await expect(badge).toHaveText('1 of 2 splits hit');
   await expect(row.getByTestId('dutch-settle')).toHaveCount(0); // settled: buttons hidden, Undo shown
 
@@ -880,7 +881,7 @@ test('BT-13: wins green, losses red, half amber, pending grey; a lost combinatio
   await expect(page.locator(`[data-bet-id="${won.id}"] [data-testid="result"]`)).toHaveClass(/emerald/);
   await expect(page.locator(`[data-bet-id="${lost.id}"] [data-testid="result"]`)).toHaveClass(/red/);
   await expect(page.locator(`[data-bet-id="${pend.id}"] [data-testid="result"]`)).toHaveClass(/zinc/);
-  await expect(page.locator(`[data-bet-id="${combo.id}"] [data-testid="result-sub"]`)).toHaveText('lost by Celtics');
+  await expect(page.locator(`[data-bet-id="${combo.id}"] [data-testid="loss-line"]`)).toHaveText('✗ Celtics'); // BT-27: losing legs on their own line
   // the expanded combination: the lost leg red ✕, the won leg green ✓
   await page.locator(`[data-bet-id="${combo.id}"]`).getByRole('button', { name: 'Show legs' }).click();
   await expect(page.getByTestId('leg-row').filter({ hasText: 'Celtics' })).toHaveAttribute('data-tone', 'loss');
@@ -1030,7 +1031,7 @@ test('BT-17–22: combo rows with legs and counts, same styling on every row, ti
   await expect(c.getByRole('button', { name: 'Edit Type' })).toHaveText('Combo ×2');
   await expect(c.getByTestId('combo-games')).toHaveText(`${tag}Celtics @ ${tag}Warriors+1`);
   await expect(c).toContainText('NBA');
-  await expect(c.getByTestId('result-sub')).toHaveText('lost by Lakers W');
+  await expect(c.getByTestId('loss-line')).toHaveText('✗ Lakers W');
   await expect(page.locator(`[data-bet-id="${one.id}"]`).getByTestId('type')).toHaveCount(0); // a Solo has no type tag
 
   // BT-18: same profit weight, same stake colour (H$ violet), same won-row tint; W/L/V only on unsettled rows
@@ -1125,7 +1126,7 @@ test('BT-23 / BT-26: bets grouped by day, one pill per row, the muted line, spli
 
   // the result sub-line, on the muted line
   await expect(dutch.getByTestId('result-sub')).toHaveText('1 of 2 splits hit');
-  await expect(bet('lost combo').getByTestId('result-sub')).toHaveText('lost by Celtics ML');
+  await expect(bet('lost combo').getByTestId('loss-line')).toHaveText('✗ Celtics'); // BT-27: the selection only, no market
   await expect(bet('open combo').getByTestId('result-sub')).toHaveText('1 of 2 legs hit');
   await expect(bet('solo won').getByTestId('result-sub')).toHaveCount(0);
 
@@ -1180,7 +1181,7 @@ test('BT-24: the ⋯ menu opens fully visible on dutch and bet rows, stays while
       }),
     );
   for (const [row, button, items, open] of [
-    [page.locator(`[data-dutch-id="${d}"]`), 'More dutch actions', ['Duplicate dutch', 'Delete dutch'], 'Log dutch'],
+    [page.locator(`[data-dutch-id="${d}"]`), 'More dutch actions', ['Duplicate dutch', 'Delete dutch', 'Label / result'], 'Log dutch'],
     [page.locator(`[data-bet-id="${single.id}"]`), 'More actions', ['Duplicate', 'Delete'], 'New bet'],
   ] as const) {
     await row.hover();

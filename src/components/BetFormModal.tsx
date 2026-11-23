@@ -194,7 +194,7 @@ function FormBody() {
               </button>
             </div>
             {f.legs.map((l, i) => (
-              <div key={i} className="grid grid-cols-[repeat(4,minmax(0,1fr))_5rem_7rem_auto] items-end gap-2" data-testid="leg-row">
+              <div key={i} className="grid grid-cols-[repeat(4,minmax(0,1fr))_5rem_7rem_6rem_auto] items-end gap-2" data-testid="leg-row">
                 <L label={`Leg ${i + 1} sport`}>
                   <Autocomplete value={l.sport} onChange={(v) => setLeg(i, { sport: v })} getSuggestions={(q) => suggestFor('sport', q)} aria-label={`Leg ${i + 1} sport`} />
                 </L>
@@ -218,6 +218,9 @@ function FormBody() {
                       </option>
                     ))}
                   </select>
+                </L>
+                <L label="Actual">
+                  <input className="field" value={l.actual} onChange={(e) => setLeg(i, { actual: e.target.value })} placeholder="11, 111-112" aria-label={`Leg ${i + 1} actual`} />
                 </L>
                 <button type="button" className="btn mb-0.5 text-xs" aria-label={`Remove leg ${i + 1}`} onClick={() => set('legs', f.legs.filter((_, j) => j !== i))}>
                   ✕
@@ -243,6 +246,18 @@ function FormBody() {
         <L label="Bet text">
           <Autocomplete value={f.betText} onChange={(v) => set('betText', v)} getSuggestions={(q) => suggestFor('betText', q)} aria-label="Bet text" />
         </L>
+
+        {/* BT-27: a label chip and what actually happened (a combination's actuals are on its legs) */}
+        <div className="grid gap-3 md:grid-cols-2">
+          <L label="Label">
+            <Autocomplete value={f.label} onChange={(v) => set('label', v)} getSuggestions={(q) => suggestFor('label', q)} placeholder="lost by one" aria-label="Label" />
+          </L>
+          {f.type === 'solo' && (
+            <L label="What happened">
+              <input className="field" value={f.actual} onChange={(e) => set('actual', e.target.value)} placeholder="24 pts" aria-label="What happened" />
+            </L>
+          )}
+        </div>
 
         <div className="grid gap-3 md:grid-cols-2">
           <L label="Pre-bet analysis">

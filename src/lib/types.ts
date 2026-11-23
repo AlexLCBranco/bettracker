@@ -23,6 +23,8 @@ export interface Leg {
   /** Leg odds; for a solo bet always equal to the bet's odds. */
   odds: number | null;
   result: Result;
+  /** BT-27: what actually happened on this leg (a stat line "11", a score "111-112"); empty = not entered. */
+  actual: string;
 }
 
 export interface Bet {
@@ -47,6 +49,8 @@ export interface Bet {
   money: Money;
   /** Bets logged together as one dutch share this id (see src/lib/dutch.ts); null = not part of a dutch. */
   dutchId: string | null;
+  /** BT-27: one short free-text label ("lost by one"), shown uppercase as a chip; empty = none. */
+  label: string;
   /** ISO timestamps, used for "most recent" ordering. */
   createdAt: string;
   updatedAt: string;

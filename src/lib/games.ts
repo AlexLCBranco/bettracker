@@ -48,8 +48,8 @@ export function applyGames(bets: Bet[], fields: GameField[], values: string[]): 
   const out: { id: string; patch: Pick<BetInput, 'legs'> }[] = [];
   for (const b of bets) {
     let changed = false;
-    const legs = b.legs.map(({ sport, game, market, selection, odds, result }) => {
-      const l = { sport, game, market, selection, odds, result };
+    const legs = b.legs.map(({ sport, game, market, selection, odds, result, actual }) => {
+      const l = { sport, game, market, selection, odds, result, actual };
       const i = fields.findIndex((f) => f.covers.includes(key(l)));
       const v = values[i]?.trim();
       if (i < 0 || v == null || v === fields[i]!.value.trim()) return l;

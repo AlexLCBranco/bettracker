@@ -2,6 +2,7 @@
 // A dutch is one item: number keys toggle the splits that won, Enter confirms (the rest lose), 0 = none won,
 // V = void all, S = its shared leg lost (every split lost, that leg marked lost on each bet).
 
+import { withKnownLegs } from './actuals';
 import { groupRows, isLeg, sharedLegNames } from './dutch';
 import type { Bet, Leg, Result } from './types';
 
@@ -75,7 +76,7 @@ export interface SettleChange {
   legs?: Omit<Leg, 'id'>[];
 }
 
-const plainLegs = (b: Bet): Omit<Leg, 'id'>[] => b.legs.map((l) => ({ sport: l.sport, game: l.game, market: l.market, selection: l.selection, odds: l.odds, result: l.result }));
+const plainLegs = (b: Bet): Omit<Leg, 'id'>[] => b.legs.map((l) => ({ sport: l.sport, game: l.game, market: l.market, selection: l.selection, odds: l.odds, result: l.result, actual: l.actual }));
 const legsAs = (b: Bet, result: (l: Leg) => Result): Omit<Leg, 'id'>[] => plainLegs(b).map((l, i) => ({ ...l, result: result(b.legs[i]!) }));
 
 export interface UndoEntry {
@@ -93,6 +94,22 @@ export interface SettleState {
 export interface SettleStep {
   changes: SettleChange[];
   state: SettleState;
+}
+
+/**
+ * BT-27: after a settle, the legs whose result can now be worked out (a lost split's legs that won on a winning split,
+ * the last unknown leg of a lost combination) are set too, so every losing leg is listed on the row.
+ */
+function fillLegs(bets: Bet[], changes: SettleChange[]): SettleChange[] {
+  const after = bets.map((b) => {
+    const c = changes.find((x) => x.id === b.id);
+    return c ? { ...b, result: c.result, legs: c.legs ? c.legs.map((l, i) => ({ ...l, id: b.legs[i]?.id ?? String(i) })) : b.legs } : b;
+  });
+  return changes.map((c) => {
+    const b = after.find((x) => x.id === c.id);
+    const legs = b && withKnownLegs(b, after);
+    return legs ? { ...c, legs } : c;
+  });
 }
 
 /** The cursor stays on the same position, which now shows the next item (the settled one leaves the queue). */
@@ -127,7 +144,7 @@ export function settleAt(queue: QueueItem[], state: SettleState, result: Result,
   if (!item || item.kind !== 'bet' || result === 'pending') return null;
   if (result === 'cash-out' && (cashout == null || !(cashout >= 0))) return null;
   const bet = item.bet;
-  return step(queue, state, [bet], [{ id: bet.id, result, cashout: result === 'cash-out' ? cashout : null }]);
+  return step(queue, state, [bet], fillLegs([bet], [{ id: bet.id, result, cashout: result === 'cash-out' ? cashout : null }]));
 }
 
 /**
@@ -151,7 +168,7 @@ export function settleDutchAt(queue: QueueItem[], state: SettleState, winners: n
       ...(b.type === 'combination' && b.legs.length ? { legs: legsAs(b, () => 'won') } : {}),
     };
   });
-  return step(queue, state, item.pending, changes);
+  return step(queue, state, item.pending, fillLegs(item.bets, changes));
 }
 
 /** The one shared leg of the dutch under the cursor (S needs exactly one), or why S cannot be used. */
@@ -177,7 +194,7 @@ export function settleSharedLostAt(queue: QueueItem[], state: SettleState): Sett
     cashout: null,
     legs: legsAs(b, (l) => (isLeg(l.selection, shared.name) ? 'lost' : l.result)),
   }));
-  return step(queue, state, item.pending, changes);
+  return step(queue, state, item.pending, fillLegs(item.bets, changes));
 }
 
 /** Undoes the last settle (a whole dutch in one step): the changes that restore it, and the cursor back on it. */

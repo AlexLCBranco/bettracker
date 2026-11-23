@@ -22,7 +22,7 @@ describe('bet form', () => {
 
   it('solo: one leg that mirrors the bet odds and result', () => {
     const v = formToBet({ ...newForm(D, TODAY), stake: '10', odds: '1.8', result: 'won', game: 'Fla vs Pal' }, TODAY);
-    expect(v.ok && v.value.legs).toEqual([{ sport: 'Football', game: 'Fla vs Pal', market: '', selection: '', odds: 1.8, result: 'won' }]);
+    expect(v.ok && v.value.legs).toEqual([{ sport: 'Football', game: 'Fla vs Pal', market: '', selection: '', odds: 1.8, result: 'won', actual: '' }]);
   });
 
   it('combination: total odds as entered, never the product of the legs', () => {

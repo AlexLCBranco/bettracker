@@ -40,6 +40,7 @@ const HELP: [string, string][] = [
   ['Enter', 'Dutch: confirm (toggled won, rest lost)'],
   ['0', 'Dutch: none won'],
   ['S', 'Dutch: shared leg lost'],
+  ['T', 'Label and actual result'],
   ['Z', 'Undo the last settle'],
   ['N', 'New bet'],
   ['?', 'Show these keys'],
@@ -103,6 +104,8 @@ function Bets() {
   });
 
   const [help, setHelp] = useState(false);
+  // BT-27: the row whose label / actual editor is open; it never opens on its own (settling stays W / L / V)
+  const [annotating, setAnnotating] = useState<string | null>(null);
   const handler = useRef<(e: KeyboardEvent) => void>(() => {});
   useEffect(() => {
     handler.current = (e) => {
@@ -127,6 +130,10 @@ function Bets() {
         return settle.undo();
       }
       if (!selected) return;
+      if (k === 't') {
+        e.preventDefault();
+        return setAnnotating(selected);
+      }
       if (selected.startsWith('dutch:')) {
         const dutchId = selected.slice(6);
         const bets = shown.filter((b) => b.dutchId === dutchId);
@@ -292,6 +299,8 @@ function Bets() {
             selected={selected}
             select={setPicked}
             settle={settle}
+            annotating={annotating}
+            annotate={setAnnotating}
             empty={tab === 'settle' ? 'Nothing to settle.' : tab === 'pending' ? 'No pending bets.' : all.length ? 'No bets match these filters.' : undefined}
           />
         ) : (

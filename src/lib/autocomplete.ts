@@ -6,7 +6,7 @@
 import { bestSpelling, nameCasing, tidyGame, tidyNames, tidyUnits, type NameCasing } from './tidy';
 import type { Bet } from './types';
 
-export const FIELDS = ['book', 'sport', 'game', 'market', 'selection', 'betText'] as const;
+export const FIELDS = ['book', 'sport', 'game', 'market', 'selection', 'betText', 'label'] as const;
 export type Field = (typeof FIELDS)[number];
 
 interface Use {
@@ -37,7 +37,7 @@ export function betNames(bets: Bet[]): NameCasing {
 /** A value as suggested (BT-20): one game format, stat units in one form, known names cased properly. */
 function tidyValue(field: Field, value: string, names: NameCasing): string {
   const v = field === 'game' ? tidyGame(value) : field === 'selection' || field === 'market' || field === 'betText' ? tidyUnits(value.trim()) : value.trim();
-  return field === 'book' || field === 'sport' ? v : tidyNames(v, names);
+  return field === 'book' || field === 'sport' || field === 'label' ? v : tidyNames(v, names);
 }
 
 export function buildIndex(bets: Bet[]): SuggestIndex {
@@ -61,6 +61,7 @@ export function buildIndex(bets: Bet[]): SuggestIndex {
     const t = Date.parse(b.createdAt) || 0;
     add('book', b.book, t);
     add('betText', b.betText, t);
+    add('label', b.label ?? '', t);
     for (const l of b.legs) {
       const sport = normalize(l.sport);
       add('sport', l.sport, t);

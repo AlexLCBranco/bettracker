@@ -12,6 +12,8 @@ export interface LegForm {
   selection: string;
   odds: string;
   result: Result;
+  /** BT-27: what actually happened on the leg. */
+  actual: string;
 }
 
 export interface BetForm {
@@ -37,9 +39,12 @@ export interface BetForm {
   legs: LegForm[];
   /** Real (R$) or hypothetical (H$) money (BT-14). */
   money: Money;
+  /** BT-27: the bet's label and (solo) the actual result of its leg. */
+  label: string;
+  actual: string;
 }
 
-export const emptyLeg = (sport = ''): LegForm => ({ sport, game: '', market: '', selection: '', odds: '', result: 'pending' });
+export const emptyLeg = (sport = ''): LegForm => ({ sport, game: '', market: '', selection: '', odds: '', result: 'pending', actual: '' });
 
 export interface Defaults {
   book: string;
@@ -69,6 +74,8 @@ export function newForm(defaults: Defaults, today = todayISO()): BetForm {
     postAnalysis: '',
     legs: [],
     money: defaults.money ?? 'real',
+    label: '',
+    actual: '',
   };
 }
 
@@ -91,8 +98,10 @@ export function formFromBet(b: Bet): BetForm {
     betText: b.betText,
     preAnalysis: b.preAnalysis,
     postAnalysis: b.postAnalysis,
-    legs: b.type === 'combination' ? b.legs.map((l) => ({ sport: l.sport, game: l.game, market: l.market, selection: l.selection, odds: formatOdds(l.odds), result: l.result })) : [],
+    legs: b.type === 'combination' ? b.legs.map((l) => ({ sport: l.sport, game: l.game, market: l.market, selection: l.selection, odds: formatOdds(l.odds), result: l.result, actual: l.actual })) : [],
     money: b.money,
+    label: b.label,
+    actual: solo?.actual ?? '',
   };
 }
 
@@ -105,7 +114,9 @@ export function duplicateForm(b: Bet, today = todayISO()): BetForm {
     placedDate: formatDate(today),
     gameDate: formatDate(today),
     postAnalysis: '',
-    legs: b.type === 'combination' ? formFromBet(b).legs.map((l) => ({ ...l, result: 'pending' as Result })) : [],
+    label: '',
+    actual: '',
+    legs: b.type === 'combination' ? formFromBet(b).legs.map((l) => ({ ...l, result: 'pending' as Result, actual: '' })) : [],
   };
 }
 
@@ -123,6 +134,8 @@ export function nextForm(f: BetForm): BetForm {
     betText: '',
     preAnalysis: '',
     postAnalysis: '',
+    label: '',
+    actual: '',
     legs: f.type === 'combination' ? [] : [],
   };
 }
@@ -144,10 +157,10 @@ export function formToBet(f: BetForm, today = todayISO()): Validated {
   }
   const legs =
     f.type === 'solo'
-      ? [{ sport: f.sport, game: f.game, market: f.market, selection: f.selection, odds, result: f.result }]
+      ? [{ sport: f.sport, game: f.game, market: f.market, selection: f.selection, odds, result: f.result, actual: f.actual }]
       : f.legs.map((l) => {
           const lo = l.odds.trim() ? oddsFromText(l.odds) : null;
-          return { sport: l.sport, game: l.game, market: l.market, selection: l.selection, odds: l.odds.trim() && lo == null ? NaN : lo, result: l.result };
+          return { sport: l.sport, game: l.game, market: l.market, selection: l.selection, odds: l.odds.trim() && lo == null ? NaN : lo, result: l.result, actual: l.actual };
         });
   return validateBet({
     book: f.book,
@@ -164,5 +177,6 @@ export function formToBet(f: BetForm, today = todayISO()): Validated {
     betText: f.betText,
     legs,
     money: f.money,
+    label: f.label,
   });
 }

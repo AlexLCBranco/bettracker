@@ -295,7 +295,7 @@ export function draftToBets(d: DutchDraft, lastBook: string, dutchId: string, to
       ...d.shared.map((l, k) => ({ l, game: games.shared[k]!.value!, market: markets.shared[k]!.value! })),
     ];
     const combo = legs.length >= 2;
-    const leg = (x: (typeof legs)[number], selection: string, odds: number | null) => ({ sport: d.sport, game: x.game, market: x.market, selection, odds, result });
+    const leg = (x: (typeof legs)[number], selection: string, odds: number | null) => ({ sport: d.sport, game: x.game, market: x.market, selection, odds, result, actual: '' });
     const v = validateBet({
       book: books[i],
       placedDate,
@@ -372,11 +372,11 @@ export function planDutchEdit(d: DutchDraft, original: Bet[], lastBook: string, 
       continue;
     }
     const legs = input.legs.map((l, k) => {
-      if (input.type === 'solo') return { ...l, result: old.result };
+      if (input.type === 'solo') return { ...l, result: old.result, actual: old.legs[0]?.actual ?? '' };
       const same = old.legs.find((o) => isLeg(o.selection, l.selection)) ?? (old.legs.length === input.legs.length ? old.legs[k] : undefined);
-      return { ...l, result: same?.result ?? 'pending' };
+      return { ...l, result: same?.result ?? 'pending', actual: same?.actual ?? '' };
     });
-    plan.updates.push({ id: old.id, patch: { ...input, result: old.result, cashout: old.cashout, preAnalysis: old.preAnalysis, postAnalysis: old.postAnalysis, legs } });
+    plan.updates.push({ id: old.id, patch: { ...input, result: old.result, cashout: old.cashout, preAnalysis: old.preAnalysis, postAnalysis: old.postAnalysis, label: old.label, legs } });
   }
   const kept = new Set(d.rows.map((r) => r.betId).filter(Boolean));
   plan.deletes = original.filter((b) => !kept.has(b.id)).map((b) => b.id);

@@ -59,8 +59,8 @@ describe('dutch id in export and import', () => {
   it('CSV has dutch_id and money columns at the end', () => {
     const csv = toCSV([bet({ id: 'b1', dutchId: 'grp-1' }), bet({ id: 'b2' })]);
     const lines = csv.slice(1).split('\r\n');
-    expect(lines[0]!.endsWith(',id,dutch_id,money')).toBe(true);
-    expect(lines[1]!.endsWith(',b1,grp-1,real')).toBe(true);
-    expect(lines[2]!.endsWith(',b2,,real')).toBe(true);
+    expect(lines[0]!.endsWith(',id,dutch_id,money,label,actual')).toBe(true);
+    expect(lines[1]!.endsWith(',b1,grp-1,real,,')).toBe(true);
+    expect(lines[2]!.endsWith(',b2,,real,,')).toBe(true);
   });
 });

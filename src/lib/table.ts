@@ -57,26 +57,12 @@ export const displayGame = (game: string, names: NameCasing = new Map()) => tidy
 export const legGames = (legs: Pick<Leg, 'game'>[], names: NameCasing = new Map()) => [...new Set(legs.map((l) => displayGame(l.game, names)).filter(Boolean))];
 export const legMarkets = (legs: Pick<Leg, 'market'>[]) => [...new Set(legs.map((l) => l.market.trim()).filter(Boolean))];
 
-/** A leg named for "lost by": its selection, with its market when the selection does not already say it. */
-function legName(l: Pick<Leg, 'selection' | 'market' | 'game'>): string {
-  const sel = l.selection.trim();
-  const market = l.market.trim();
-  if (!sel) return displayGame(l.game) || 'leg';
-  return market && !sel.toLowerCase().includes(market.toLowerCase()) ? `${sel} ${market}` : sel;
-}
-
-const lost = (r: Bet['result']) => r === 'lost' || r === 'half-lost';
-
 /**
- * A bet row's one muted line under its result pill: a lost combination's killer legs ("lost by Celtics ML"), or a
- * won / pending combination's legs that hit ("2 of 3 legs hit", once a leg is settled). Null otherwise.
+ * A bet row's muted result text: a won / pending combination's legs that hit ("2 of 3 legs hit", once a leg is
+ * settled). A lost combination has none: its losing legs are listed on their own line instead (BT-27, losingLegs).
  */
 export function betResultLine(b: Bet): string | null {
   if (b.type !== 'combination') return null;
-  if (lost(b.result)) {
-    const killers = b.legs.filter((l) => lost(l.result)).map(legName);
-    return killers.length ? `lost by ${killers.join(', ')}` : null;
-  }
   if (b.result !== 'won' && b.result !== 'half-won' && b.result !== 'pending') return null;
   const h = comboHits(b);
   if (!h || h.splits === 0) return null;

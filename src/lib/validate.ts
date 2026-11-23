@@ -49,17 +49,17 @@ export function validateBet(raw: unknown): Validated {
     if (!RESULTS.includes(legResult)) return { ok: false, error: 'Leg result is not valid' };
     const legOdds = lr.odds == null || lr.odds === '' ? null : num(lr.odds);
     if (lr.odds != null && lr.odds !== '' && (legOdds == null || legOdds <= 1)) return { ok: false, error: 'Leg odds must be above 1' };
-    legs.push({ sport: str(lr.sport), game: str(lr.game), market: str(lr.market), selection: str(lr.selection), odds: legOdds, result: legResult });
+    legs.push({ sport: str(lr.sport), game: str(lr.game), market: str(lr.market), selection: str(lr.selection), odds: legOdds, result: legResult, actual: str(lr.actual).slice(0, 200) });
   }
 
   if (type === 'combination') {
-    legs = legs.filter((l) => l.sport || l.game || l.market || l.selection || l.odds != null);
+    legs = legs.filter((l) => l.sport || l.game || l.market || l.selection || l.odds != null || l.actual);
     // BT-17: a combination with one leg is really a solo bet; BT-25: so is one with no legs, unless its text is "a + b"
     if (isReallySolo(type, legs, str(r.betText))) type = 'solo';
   }
   if (type === 'solo') {
     // A solo bet is one leg that mirrors the bet's odds and result.
-    const l = legs[0] ?? { sport: '', game: '', market: '', selection: '', odds: null, result };
+    const l = legs[0] ?? { sport: '', game: '', market: '', selection: '', odds: null, result, actual: '' };
     legs = [{ ...l, odds, result }];
   }
 
@@ -83,6 +83,8 @@ export function validateBet(raw: unknown): Validated {
       legs: tidy.legs,
       dutchId,
       money,
+      // BT-27: one label per bet, kept as typed (shown uppercase)
+      label: str(r.label).replace(/\s+/g, ' ').slice(0, 60),
     },
   };
 }

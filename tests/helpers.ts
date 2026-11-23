@@ -3,7 +3,7 @@ import type { Bet, Leg } from '@/lib/types';
 let n = 0;
 
 export function leg(over: Partial<Leg> = {}): Leg {
-  return { id: `leg-${++n}`, sport: 'Basketball', game: 'Lakers vs Celtics', market: 'Moneyline', selection: 'Lakers', odds: 2, result: 'pending', ...over };
+  return { id: `leg-${++n}`, sport: 'Basketball', game: 'Lakers vs Celtics', market: 'Moneyline', selection: 'Lakers', odds: 2, result: 'pending', actual: '', ...over };
 }
 
 export function bet(over: Partial<Bet> = {}): Bet {
@@ -25,6 +25,7 @@ export function bet(over: Partial<Bet> = {}): Bet {
     legs: [leg()],
     dutchId: null,
     money: 'real',
+    label: '',
     createdAt: '2026-11-20T12:00:00.000Z',
     updatedAt: '2026-11-20T12:00:00.000Z',
     ...over,

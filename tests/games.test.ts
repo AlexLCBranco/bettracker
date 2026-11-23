@@ -5,7 +5,7 @@ import { validateBet } from '@/lib/validate';
 import type { Bet, Leg } from '@/lib/types';
 
 let n = 0;
-const leg = (over: Partial<Leg> = {}): Leg => ({ id: `l${++n}`, sport: '', game: '', market: '', selection: 'x', odds: null, result: 'pending', ...over });
+const leg = (over: Partial<Leg> = {}): Leg => ({ id: `l${++n}`, sport: '', game: '', market: '', selection: 'x', odds: null, result: 'pending', actual: '', ...over });
 const bet = (over: Partial<Bet> = {}): Bet => ({
   id: `b${++n}`,
   book: '',
@@ -22,6 +22,7 @@ const bet = (over: Partial<Bet> = {}): Bet => ({
   betText: '',
   legs: [leg()],
   money: 'real',
+  label: '',
   dutchId: null,
   createdAt: '',
   updatedAt: '',

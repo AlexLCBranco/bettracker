@@ -85,8 +85,8 @@ describe('draftToBets: combination splits', () => {
     const [combo, solo] = r.value;
     expect(combo).toMatchObject({ type: 'combination', odds: 4, stake: 50, betText: 'McCain 25 pts + Celtics W', dutchId: 'dx', result: 'pending' });
     expect(combo!.legs).toEqual([
-      { sport: 'Basketball', game: 'Celtics vs Cavs', market: 'Props', selection: 'McCain 25 pts', odds: 3.2, result: 'pending' },
-      { sport: 'Basketball', game: 'Celtics vs Cavs', market: 'Props', selection: 'Celtics W', odds: 1.3, result: 'pending' },
+      { sport: 'Basketball', game: 'Celtics vs Cavs', market: 'Props', selection: 'McCain 25 pts', odds: 3.2, result: 'pending', actual: '' },
+      { sport: 'Basketball', game: 'Celtics vs Cavs', market: 'Props', selection: 'Celtics W', odds: 1.3, result: 'pending', actual: '' },
     ]);
     expect(solo).toMatchObject({ type: 'solo', odds: 3.2, betText: '', dutchId: 'dx' });
     expect(solo!.legs).toHaveLength(1);
@@ -113,7 +113,7 @@ describe('draftToBets: combination splits', () => {
 // ---- Settle ----
 
 const TODAY = '2026-11-22';
-const noIds = (b: Bet) => b.legs.map((l) => ({ sport: l.sport, game: l.game, market: l.market, selection: l.selection, odds: l.odds, result: l.result }));
+const noIds = (b: Bet) => b.legs.map((l) => ({ sport: l.sport, game: l.game, market: l.market, selection: l.selection, odds: l.odds, result: l.result, actual: l.actual }));
 const comboBet = (i: number, own: string, over: Partial<Bet> = {}) =>
   bet({
     dutchId: 'dc',
@@ -134,18 +134,18 @@ function setup(): { queue: QueueItem[]; state: SettleState; bets: Bet[] } {
 }
 
 describe('settle: dutch with more than one winner', () => {
-  it('toggled splits win (their legs marked won), the rest lose with legs untouched; undo restores results and legs', () => {
+  it('toggled splits win (their legs marked won), the rest lose; BT-27: a lost split legs are filled in (shared leg won elsewhere, so its own leg lost); undo restores results and legs', () => {
     const { queue, state, bets } = setup();
     const r = settleDutchAt(queue, state, [0, 1])!;
     expect(r.changes.map((c) => c.result)).toEqual(['won', 'won', 'lost']);
     expect(r.changes[0]!.legs!.map((l) => l.result)).toEqual(['won', 'won']);
     expect(r.changes[1]!.legs!.map((l) => l.result)).toEqual(['won', 'won']);
-    expect(r.changes[2]!.legs).toBeUndefined();
+    expect(r.changes[2]!.legs!.map((l) => l.result)).toEqual(['lost', 'won']);
     const u = undoLast(r.state)!;
     expect(u.changes).toEqual([
       { id: bets[0]!.id, result: 'pending', cashout: null, legs: noIds(bets[0]!) },
       { id: bets[1]!.id, result: 'pending', cashout: null, legs: noIds(bets[1]!) },
-      { id: bets[2]!.id, result: 'pending', cashout: null },
+      { id: bets[2]!.id, result: 'pending', cashout: null, legs: noIds(bets[2]!) },
     ]);
     expect(u.state).toEqual({ cursor: 0, undo: [] });
   });

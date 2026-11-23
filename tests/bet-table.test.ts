@@ -38,13 +38,8 @@ describe('result sub-line', () => {
   const combo = (result: string, legs: string[], extra = {}) =>
     bet({ type: 'combination', result: result as never, legs: legs.map((r, i) => leg({ selection: ['Celtics', 'Lakers', 'Nets'][i], market: i === 0 ? 'ML' : '', result: r as never })), ...extra });
 
-  it('a lost combination names the leg that lost it, with its market', () => {
-    expect(betResultLine(combo('lost', ['lost', 'won']))).toBe('lost by Celtics ML');
-    expect(betResultLine(combo('lost', ['won', 'lost', 'lost']))).toBe('lost by Lakers, Nets');
-  });
-  it('the market is not repeated when the selection says it', () => {
-    const b = bet({ type: 'combination', result: 'lost', legs: [leg({ selection: 'McCain 25 pts', market: 'pts', result: 'lost' }), leg({ result: 'won' })] });
-    expect(betResultLine(b)).toBe('lost by McCain 25 pts');
+  it('BT-27: a lost combination has no "lost by" text (its losing legs get their own line)', () => {
+    expect(betResultLine(combo('lost', ['lost', 'won']))).toBeNull();
   });
   it('won or pending combination: legs hit, once one is settled', () => {
     expect(betResultLine(combo('won', ['won', 'won']))).toBe('2 of 2 legs hit');
