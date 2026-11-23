@@ -56,3 +56,22 @@ export function addDays(iso: string, days: number): string {
   const dt = new Date(y, m - 1, d + days, 12); // local noon: immune to DST jumps
   return todayISO(dt);
 }
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/** "2026-11-23" → "23 Nov"; the year added when it is not this year ("2 Jan 2000"). BT-23. */
+export function formatDayMonth(iso: string, today: string = todayISO()): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return '';
+  const s = `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]}`;
+  return m[1] === today.slice(0, 4) ? s : `${s} ${m[1]}`;
+}
+
+/** A day header: "Sun, 22 Nov" (year when not this year). The weekday by local calendar arithmetic. BT-23. */
+export function formatDayHeader(iso: string, today: string = todayISO()): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return '';
+  const day = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12).getDay();
+  return `${WEEKDAYS[day]}, ${formatDayMonth(iso, today)}`;
+}

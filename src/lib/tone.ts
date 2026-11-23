@@ -1,6 +1,6 @@
 // BT-13: one colour scheme for results everywhere. Green = won / profit, red = lost / loss, amber = partial
-// (half-won, half-lost, some splits hit), grey = pending or void. Every tone also has a sign, so it reads without
-// colour (screenshots, greyscale).
+// (half-won, half-lost, some splits hit), grey = pending or void. The result pill's text keeps it readable without
+// colour (BT-23).
 
 import type { GroupOutcome } from './dutch';
 import { profit } from './money';
@@ -40,11 +40,3 @@ export function groupTone(o: GroupOutcome): Tone {
   return o === 'won' ? 'win' : o === 'lost' ? 'loss' : o === 'even' ? 'neutral' : 'pending';
 }
 
-/** The sign shown next to a result, so it reads without colour. */
-export const TONE_SIGN: Record<Tone, string> = { win: '✓', loss: '✕', partial: '½', neutral: '–', pending: '…' };
-
-/** Legs of a lost combination that lost (the leg that killed it), by name. */
-export function losingLegs(b: Pick<Bet, 'legs' | 'type'>): string[] {
-  if (b.type !== 'combination') return [];
-  return b.legs.filter((l) => l.result === 'lost' || l.result === 'half-lost').map((l) => l.selection || l.game || 'leg');
-}

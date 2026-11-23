@@ -2,6 +2,10 @@
 
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
+## 2026-11-23
+- BT-23 — Bet History redesign: clearer and prettier (v0.16.0)
+  Bets sit under a header per day ("Sun, 22 Nov · 5 bets · +R$ 185,48"), each row has one result pill with at most one line under it ("1 of 2 splits hit", "lost by Celtics ML"), games read "Celtics @ Warriors +1", dutch splits open as "Split 1", "Split 2" joined to their dutch, and ✎ / ⋯ show on hover.
+
 ## 2026-11-22
 - BT-17 — Combo rows: legs, games and a leg count (v0.15.0)
   A Combo row shows its legs' games and league, a ▸ to open its legs (or "Add legs" when none were entered), "Combo · 2" in Type and a "1/2" legs-hit count; a combination with one leg is saved as a Solo, the form says so, and quick-add makes a Solo (or a Combo with legs for "a + b").

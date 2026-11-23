@@ -9,23 +9,15 @@ export const TONE_BADGE: Record<Tone, string> = {
   pending: 'bg-zinc-700/40 text-zinc-300',
 };
 
-/** Left edge of a table row per tone. */
+/** Thin left edge of a table row per tone (BT-23: with the result pill and the coloured +/-, the row's only signal). */
 export const TONE_EDGE: Record<Tone, string> = {
-  win: 'border-l-4 border-l-emerald-500',
-  loss: 'border-l-4 border-l-red-500',
-  partial: 'border-l-4 border-l-amber-400',
-  neutral: 'border-l-4 border-l-zinc-600',
-  pending: 'border-l-4 border-l-zinc-800',
+  win: 'border-l-[3px] border-l-emerald-500',
+  loss: 'border-l-[3px] border-l-red-500',
+  partial: 'border-l-[3px] border-l-amber-400',
+  neutral: 'border-l-[3px] border-l-zinc-600',
+  pending: 'border-l-[3px] border-l-zinc-800',
 };
 
-/** Faint row background per tone (settled rows only). */
-export const TONE_TINT: Record<Tone, string> = {
-  win: 'bg-emerald-500/[0.06]',
-  loss: 'bg-red-500/[0.07]',
-  partial: 'bg-amber-500/[0.05]',
-  neutral: '',
-  pending: '',
-};
 
 /** Text colour per tone (signs, profits, leg names). */
 export const TONE_TEXT: Record<Tone, string> = {

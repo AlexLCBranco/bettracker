@@ -73,7 +73,7 @@ function PickWinners({ pending, onPick, onClose }: { pending: Bet[]; onPick(winn
       ref={box}
       role="dialog"
       aria-label="Which splits won"
-      className="absolute right-0 top-full z-30 mt-1 w-72 space-y-2 rounded-md border border-zinc-700 bg-zinc-900 p-3 text-left text-xs shadow-xl"
+      className="absolute right-0 top-full z-30 mt-1 w-72 space-y-2 whitespace-normal rounded-md border border-zinc-700 bg-zinc-900 p-3 text-left text-xs shadow-xl"
       onKeyDown={(e) => {
         if (e.key === 'Escape') {
           e.preventDefault();
@@ -88,7 +88,7 @@ function PickWinners({ pending, onPick, onClose }: { pending: Bet[]; onPick(winn
       <div className="text-zinc-400">Which won? The rest lost.</div>
       {pending.length === 2 ? (
         pending.map((b, i) => (
-          <button key={b.id} className="btn w-full justify-start whitespace-normal text-left text-xs text-emerald-300" onClick={() => onPick([i])}>
+          <button key={b.id} className="btn flex w-full justify-start whitespace-normal text-left text-xs text-emerald-300" onClick={() => onPick([i])}>
             {betLabel(b)} won
           </button>
         ))
