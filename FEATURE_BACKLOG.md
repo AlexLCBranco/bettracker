@@ -183,3 +183,40 @@ the C key and the result pill, and `CashoutBox` (`src/components/BetTable.tsx`) 
 
 Tests: unit tests for parsing (amount, comma decimals, "%", toggle) and both conversions; Playwright for click C
 → type 70% → both values shown → Enter → row shows cash-out and profit → Z undoes.
+
+### BT-35 — Ladder: let the whole payout ride from one bet to the next, shown as rungs
+**In short:** A ladder starts from one stake, puts the whole payout of each win on the next bet (100 → 200 → 400 → ...), and shows as one row with its rungs until it loses or you take the money.
+
+Asked for by the owner on 2026-11-23: "I bet on something odds 2 with 100 and it hits, so now I bet on something
+odds 2 with the 200 and it hits, so now it's 400, and it keeps going." He called it a "ladder" (the usual name
+for it; keep "Ladder" and "rung" in the UI).
+
+The money mechanic already exists: a rollover chain (BT-29, `src/lib/rollover.ts`, `rolloverId`) is exactly
+"whole payout becomes the next bet's fixed stake, one row, first stake wagered, final payout − first stake as
+profit". Reuse the chain; do NOT build a second money model. What differs from a rollover shot:
+
+- **Purpose.** A shot chain is patched together to reach odds 1.80 and then stops. A ladder is planned from its
+  first bet and has no odds target: it goes on until a loss or until he takes the money. Store the kind on the
+  chain (shot / ladder) so the two never get mixed up; existing chains are shots.
+- **Starting one.** A "Ladder" choice when adding a bet (form and quick-add) makes that bet rung 1 of a new
+  ladder, with an optional goal: a number of rungs or a target amount (either can be left empty). A won plain
+  bet can also be turned into rung 1 afterwards ("Start ladder" next to "Bank").
+- **Climbing.** When a rung wins, the row offers "+ Next rung" (same as "+ Add leg": whole payout as the fixed
+  stake, same money type and book prefilled) and "Take R$ 400,00" (closes it as won at that amount). No Bank step
+  in between: a won rung of a ladder is banked automatically. A lost rung ends the ladder: loss = the first stake
+  only.
+- **Row.** One row, like a rollover, with a rung strip that never cuts text (taller row is fine):
+  "R$ 100 → 200 → 400 → next: 800 @ 2.00", each rung with its bet, odds and W / L / V, the current rung
+  highlighted, and "rung 3 of 5" or "R$ 400 of R$ 1.600" when a goal was set. Without a goal: "rung 3".
+  The Shot / Mini / Semi / Pepsi chip and the "needs 1.13+" text do not show on a ladder.
+- **Void / cash-out on a rung.** As a chain already treats them (void multiplies by 1, a cash-out by what it
+  returned): the ladder stays alive with that amount as the next stake.
+- **Counting.** One bet in counts and win rate, as a rollover: won when closed above the first stake, lost when a
+  rung loses, pending while open. Analytics gets a "Ladder" group next to "Rollover" with: ladders started,
+  average rungs climbed, best ladder, how many reached their goal, net profit.
+- Not confirmed by the owner (Claude's choices, change if he says otherwise): the goal being optional; no partial
+  take ("pull R$ 100 out and let the rest ride") in this version; ladders counting in the main totals like any bet.
+
+Tests: unit tests for the ladder kind (outcomes on win / loss / void / cash-out per rung, goal progress, take at a
+rung, counts and the Analytics group, shots unaffected); Playwright for start ladder → win → next rung → win →
+take → row shows the rungs and profit → Z undoes each step.
