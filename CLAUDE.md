@@ -3,7 +3,8 @@
 @AGENTS.md
 
 Personal bet tracker (single user, desktop first, dark theme, UI in English, currency BRL). Rebuild of the v0
-prototype at https://v0-gambling-app-nine.vercel.app/ (its layout and fields, not its code).
+prototype at https://v0-gambling-app-nine.vercel.app/ (not its code). v0 is the minimum bar ("at least as good as
+ v0"), not a layout to copy: pages may be redesigned freely.
 
 ## Stack
 
