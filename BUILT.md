@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-22
+- BT-6 — Dutch hit count: "1/2" badge and misses counted once (v0.7.0)
+  Every dutch shows a coloured hits/splits badge (green all, amber some, red none, grey while pending) with its distinct missed legs, a lost shared leg counted once; expanded dutches mark each split hit/miss and lost legs in red, and Analytics (Type) adds Dutch hits.
 - BT-5 — Dutch of combinations: splits with several legs and a shared leg (v0.6.0)
   In the Betting Tool a selection can have legs (+ leg) and shared legs are typed once, each split gets a total odds box prefilled from its legs (type the book's price over it), it is logged as a real combination bet, and the Settle page settles a dutch with several winners (1-9 toggle, Enter confirms) or a lost shared leg (S).
 - BT-4 — Dutch bets: log a dutch from the Betting Tool and track it as one group (v0.5.0)

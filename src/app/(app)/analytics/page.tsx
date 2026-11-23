@@ -5,6 +5,7 @@ import { useApp } from '@/components/AppProvider';
 import { ProfitText } from '@/components/BetTable';
 import { breakdown, comboReport, DIMENSION_LABEL, DIMENSIONS, type Dimension, type Row } from '@/lib/analytics';
 import { formatDate } from '@/lib/dates';
+import { dutchHitReport } from '@/lib/hits';
 import { formatBRL, formatOdds } from '@/lib/money';
 import { formatPercent } from '@/lib/stats';
 
@@ -33,6 +34,7 @@ export default function AnalyticsPage() {
   }, [rows, sort]);
   const maxAbsProfit = Math.max(...rows.map((r) => Math.abs(r.profit)), 0);
   const combos = useMemo(() => comboReport(bets), [bets]);
+  const hits = useMemo(() => dutchHitReport(bets), [bets]);
 
   if (!loaded) return <p className="py-10 text-center text-sm text-zinc-500">Loading…</p>;
 
@@ -89,6 +91,24 @@ export default function AnalyticsPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {dim === 'type' && hits.settled > 0 && (
+          <div className="mt-6" data-testid="dutch-hits">
+            <h3 className="mb-1 text-sm font-medium text-zinc-300">Dutch hits</h3>
+            <p className="mb-3 text-xs text-zinc-500">Settled dutches by how many of their selections hit (void selections left out).</p>
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <Tile label="All hit" value={String(hits.allHit)} sub={`of ${hits.settled} settled dutches`} testId="hits-all" />
+              <Tile label="Some hit" value={String(hits.someHit)} sub={formatPercent(hits.someHit / hits.settled)} testId="hits-some" />
+              <Tile label="None hit" value={String(hits.noneHit)} sub={formatPercent(hits.noneHit / hits.settled)} testId="hits-none" />
+              <Tile
+                label="Sunk by a shared leg alone"
+                value={String(hits.sunkByShared)}
+                sub={hits.noneHit ? `of the ${hits.noneHit} none-hit` : 'no none-hit dutches'}
+                testId="hits-shared"
+              />
+            </div>
           </div>
         )}
       </section>

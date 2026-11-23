@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '@/components/AppProvider';
+import { HitBadge } from '@/components/HitBadge';
 import { isTyping } from '@/components/Shell';
 import { formatDate, todayISO } from '@/lib/dates';
 import { betLabel, dutchSummary } from '@/lib/dutch';
@@ -334,7 +335,7 @@ function DutchLine(props: { it: Extract<QueueItem, { kind: 'dutch' }>; btn: stri
         <span className="text-right tabular-nums" title="Combined odds">
           @{formatOdds(s.combinedOdds)}
         </span>
-        <span />
+        <span className="text-right">{settled.length > 0 && <HitBadge bets={it.bets} />}</span>
         <span className="flex gap-1">
           <button className={`${btn} border border-emerald-700`} title="Confirm: toggled splits won, the rest lost (Enter)" aria-label="Settle dutch: confirm winners" onClick={click(winners)}>
             ↵ {winners.length ? `${winners.length} won` : 'none won'}

@@ -9,6 +9,8 @@ import { RESULT_LABEL, RESULTS, type Bet, type BetInput, type Leg, type Result }
 import type { Field } from '@/lib/autocomplete';
 import { useApp } from './AppProvider';
 import { Autocomplete } from './Autocomplete';
+import { HitBadge, SplitMarkTag } from './HitBadge';
+import { splitMark } from '@/lib/hits';
 
 const QUICK_RESULTS: { r: Result; key: string; cls: string }[] = [
   { r: 'won', key: 'W', cls: 'hover:bg-emerald-600/40 text-emerald-400' },
@@ -141,8 +143,11 @@ function DutchRow({ bets, dutchId, expanded, toggle }: { bets: Bet[]; dutchId: s
         <ProfitText value={s.profit} pending={s.outcome === 'pending'} />
       </td>
       <td className="whitespace-nowrap px-2 py-1.5">
-        <span className={`rounded px-2 py-0.5 text-xs font-medium ${o.cls}`} data-testid="result">
-          {o.label}
+        <span className="inline-flex items-start gap-1.5">
+          <span className={`rounded px-2 py-0.5 text-xs font-medium ${o.cls}`} data-testid="result">
+            {o.label}
+          </span>
+          <HitBadge bets={bets} />
         </span>
       </td>
       <td className="whitespace-nowrap px-2 py-1.5 text-right">
@@ -214,7 +219,10 @@ function BetRow({ b, expanded, toggle, nested }: { b: Bet; expanded: boolean; to
           <ProfitText value={profit(b)} pending={b.result === 'pending'} />
         </td>
         <td className="whitespace-nowrap px-2 py-1.5">
-          <ResultCell bet={b} onPick={(r) => settle(r)} />
+          <span className="inline-flex items-center gap-1.5">
+            <ResultCell bet={b} onPick={(r) => settle(r)} />
+            {nested && <SplitMarkTag mark={splitMark(b)} />}
+          </span>
         </td>
         <td className="whitespace-nowrap px-2 py-1.5 text-right">
           <span className="inline-flex gap-0.5">
@@ -242,7 +250,7 @@ function BetRow({ b, expanded, toggle, nested }: { b: Bet; expanded: boolean; to
       </tr>
       {expanded &&
         b.legs.map((l, i) => (
-          <tr key={l.id} className="border-b border-zinc-900 bg-zinc-950 text-xs" data-testid="leg-row">
+          <tr key={l.id} className={`border-b border-zinc-900 text-xs ${l.result === 'lost' || l.result === 'half-lost' ? 'bg-red-950/60 text-red-300' : 'bg-zinc-950'}`} data-testid="leg-row" data-lost={l.result === 'lost' || l.result === 'half-lost' || undefined}>
             <td />
             <td className="px-2 py-1 text-zinc-500" colSpan={2}>
               Leg {i + 1}

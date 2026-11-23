@@ -473,3 +473,84 @@ test('dutch of combinations: shared leg, estimated and typed total, logged as co
     ['lost', 'pending', 'lost'],
   ]);
 });
+
+test('dutch hit count: the owner example settled three ways shows 0/2 · 1 miss, 0/2 · 2 misses, 1/2 · 1 miss', async ({ page, request, tag }) => {
+  // three copies of McCain 25 pts + Celtics W / Mitchell 30 pts + Celtics W
+  const make = async (n: number) => {
+    const dutchId = `${tag}-${n}`;
+    const out = [];
+    for (const own of ['McCain 25 pts', 'Mitchell 30 pts']) {
+      out.push(
+        await createBet(request, {
+          dutchId,
+          type: 'combination',
+          odds: 4,
+          stake: 50,
+          book: `${tag} Book${n}`,
+          betText: `${tag} ${own} + Celtics W`,
+          legs: [
+            { selection: own, odds: 3.2 },
+            { selection: 'Celtics W', odds: 1.3 },
+          ],
+        }),
+      );
+    }
+    return out;
+  };
+  const [, two, three] = [await make(1), await make(2), await make(3)];
+  const settle = (id: string, result: string, legs: [string, string], bets: { id: string; legs: { selection: string; odds: number | null }[] }[]) => {
+    const b = bets.find((x) => x.id === id)!;
+    return request.patch(`/api/bets/${id}`, { data: { result, legs: b.legs.map((l, i) => ({ selection: l.selection, odds: l.odds, result: legs[i] })) } });
+  };
+
+  // 1: Celtics lose, settled from the queue with S
+  await page.goto('/settle');
+  const item = page.getByTestId('queue-row').filter({ hasText: `${tag} Book1` });
+  await item.click();
+  await page.keyboard.press('s');
+  await expect(item).toHaveCount(0);
+
+  // 2: Celtics win, McCain and Mitchell both short
+  for (const b of two) expect((await settle(b.id, 'lost', ['lost', 'won'], two)).ok()).toBe(true);
+  // 3: only McCain short; first settle Mitchell alone so the queue shows the partly settled badge
+  expect((await settle(three[1]!.id, 'won', ['won', 'won'], three)).ok()).toBe(true);
+  await page.reload();
+  const partly = page.getByTestId('queue-row').filter({ hasText: `${tag} Book3` });
+  await expect(partly.getByTestId('hit-count')).toHaveText('1/1 · 1 pending');
+  await expect(partly.getByTestId('hit-count')).toHaveClass(/zinc/);
+  expect((await settle(three[0]!.id, 'lost', ['lost', 'won'], three)).ok()).toBe(true);
+
+  await page.goto('/history');
+  await page.getByLabel('Search bets').fill(tag);
+  const row = (n: number) => page.getByTestId('dutch-row').filter({ hasText: `${tag} Book${n}` });
+  await expect(page.getByTestId('dutch-row')).toHaveCount(3);
+  await expect(row(1).getByTestId('hit-count')).toHaveText('0/2');
+  await expect(row(1).getByTestId('hit-count')).toHaveClass(/red/);
+  await expect(row(1).getByTestId('hit-misses')).toHaveText('1 miss');
+  await expect(row(1).getByTestId('hit-badge')).toHaveAttribute('title', '0/2 hit · Missed: Celtics W (shared)');
+  await expect(row(2).getByTestId('hit-count')).toHaveText('0/2');
+  await expect(row(2).getByTestId('hit-misses')).toHaveText('2 misses');
+  await expect(row(3).getByTestId('hit-count')).toHaveText('1/2');
+  await expect(row(3).getByTestId('hit-count')).toHaveClass(/amber/);
+  await expect(row(3).getByTestId('hit-misses')).toHaveText('1 miss');
+
+  // expanded: a mark per split, the lost leg in red
+  await row(3).getByRole('button', { name: 'Show bets' }).click();
+  await expect(page.getByTestId('split-mark')).toHaveText(['miss', 'hit']);
+  await page.locator('[data-testid=bet-row][data-nested]').first().getByRole('button', { name: 'Show legs' }).click();
+  await expect(page.locator('[data-testid=leg-row][data-lost]')).toHaveCount(1);
+  await expect(page.locator('[data-testid=leg-row][data-lost]')).toContainText('McCain 25 pts');
+
+  // all hit = bright green: flip McCain's split to won
+  expect((await settle(three[0]!.id, 'won', ['won', 'won'], three)).ok()).toBe(true);
+  await page.reload();
+  await page.getByLabel('Search bets').fill(tag);
+  await expect(row(3).getByTestId('hit-count')).toHaveText('2/2');
+  await expect(row(3).getByTestId('hit-count')).toHaveClass(/bg-emerald-500 /);
+
+  // Analytics, type view: the hit tiles count these (plus any real dutches on the live site)
+  await page.goto('/analytics');
+  await page.getByRole('tab', { name: 'Type' }).click();
+  await expect(page.getByTestId('dutch-hits')).toBeVisible();
+  for (const id of ['hits-all', 'hits-none', 'hits-shared']) expect(Number(await page.getByTestId(`${id}-value`).textContent())).toBeGreaterThanOrEqual(1);
+});
