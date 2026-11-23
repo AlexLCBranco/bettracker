@@ -33,14 +33,25 @@ Approach: no new bet type. A dutch is several ordinary solo bets that share a gr
   and neither at exactly 0; it is pending while any of its bets is pending. Update the win-rate rule in CLAUDE.md
   to say so.
 - Analytics "by type" gets a third value, Dutch (derived from `dutchId`, not stored in `type`).
-- American odds in the Betting Tool: each odds box accepts decimal or American, mixed freely in one dutch
-  (e.g. two selections at +220 and one at 1,3). Rule: a leading + or - means American (+220 = 1 + 220/100 =
-  3.20; -150 = 1 + 100/150 = 1.667); no sign means decimal, comma or dot, as today. American needs an absolute
-  value of 100 or more; anything else unreadable marks the row invalid, as bad odds do now. A row typed as
-  American shows its decimal value next to the box. The dutch maths and the logged bets always use the
-  unrounded decimal value (bets store decimal odds only). One shared parser in `src/lib/money.ts`, unit-tested
-  (+220, -150, +100, -100, 1,3, 1.3, "220" stays decimal 220, +50 invalid). Scope: Betting Tool only;
-  quick-add and the full form stay decimal.
+- Any odds format in the Betting Tool: each odds box accepts decimal, American, fractional, Hong Kong,
+  Indonesian, Malay or implied probability, mixed freely in one dutch (e.g. two selections at +220 and one at
+  1,3). Comma or dot decimals everywhere. Each row has a small format picker, default Auto; a row whose value is
+  not plain decimal shows its decimal value and the detected format next to the box.
+  - Auto rules, in this order: contains "/" = fractional (5/2 = 1 + 5/2 = 3.50); ends with "%" = implied
+    probability (40% = 100/40 = 2.50; must be above 0 and below 100); leading + or - with absolute value 100 or
+    more = American (+220 = 1 + 220/100 = 3.20; -150 = 1 + 100/150 = 1.667); leading + or - with absolute value
+    below 100 = Indonesian / Malay (positive x = 1 + x, negative x = 1 + 1/|x|: +1.50 = 2.50, -1.25 = 1.80,
+    -0.80 = 2.25); no sign and above 0 up to 1 = Hong Kong / Malay positive (0.85 = 1.85); no sign and above 1 =
+    decimal, as today.
+  - The picker overrides Auto with: Decimal, American, Fractional, Hong Kong, Indonesian, Malay, Probability %.
+    It is needed for the one case Auto cannot tell apart: Hong Kong odds above 1 (2.20 means decimal 3.20), which
+    Auto reads as decimal. With a format picked, the sign or symbol is optional where that format has a default
+    (American 220 = +220; Probability 40 = 40%). The pickers are remembered with the last calculation.
+  - Anything unreadable, or converting to 1 or less, marks the row invalid, as bad odds do now.
+  - The dutch maths and the logged bets always use the unrounded decimal value (bets store decimal odds only).
+  - One shared parser in `src/lib/money.ts`, unit-tested: every Auto rule and every picker value, comma and dot,
+    boundaries (+100, -100, +99, 1, 100%, 0%, 5/0), and "220" staying decimal 220 on Auto.
+  - Scope: Betting Tool only; quick-add and the full form stay decimal.
 - Tests: unit for the group win/loss rule and counts (incl. net profit exactly 0 and partly pending), the settle
   group actions and undo, export/import round trip with `dutchId`; db integration for the new column on an
   existing database; e2e: calculate, log as bets, see one group row, settle with a number key, check the stats.
