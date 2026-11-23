@@ -5,7 +5,7 @@ const LIVE = !!process.env.E2E_BASE_URL;
 
 test('quick-add saves a pending bet with comma decimals', async ({ page, request, tag }) => {
   await page.goto('/history');
-  await page.getByTestId('quick-add').fill(`150 @2,10 ${tag} lakers ml`);
+  await page.getByTestId('quick-add').fill(`R$150 @2,10 ${tag} lakers ml`); // R$: the table shows Real by default
   await page.getByTestId('quick-add').press('Enter');
   await expect(page.getByRole('status')).toContainText('Saved');
   await expect(page.getByTestId('quick-add')).toHaveValue('');
@@ -439,6 +439,7 @@ test('dutch of combinations: shared leg, estimated and typed total, logged as co
 
   await page.getByRole('button', { name: 'Log as bets' }).click();
   const dialog = page.getByRole('dialog', { name: 'Log dutch' });
+  await dialog.getByLabel('Money').selectOption('real'); // the table shows Real by default
   await expect(dialog.getByTestId('dutch-log-leg')).toHaveCount(2);
   await expect(dialog.getByTestId('dutch-log-shared')).toHaveCount(1);
   await dialog.getByLabel('Placed date').fill('01/01/2000');
@@ -637,6 +638,8 @@ test('log dutch: Game(s) and Market(s) as chips, picked per leg (owner example),
   await page.getByRole('button', { name: 'Log as bets' }).click();
 
   const dialog = page.getByRole('dialog', { name: 'Log dutch' });
+  // the form starts on the last-used money, which on the live site can be H$ (hidden under the Real switch)
+  await dialog.getByLabel('Money').selectOption('real');
   await dialog.getByLabel('Placed date').fill('01/01/2000');
   await dialog.getByLabel('Game date').fill('01/01/2000');
   await dialog.getByLabel('Selection 1 book').fill(`${tag} Book`);
@@ -786,6 +789,7 @@ test('BT-16: odds in any format in the full form, quick-add and History cells, s
   // full form: "-114" shows the hint, becomes 1.88 on blur, saves 1.88
   await page.getByRole('button', { name: 'Full form' }).click();
   const dialog = page.getByRole('dialog', { name: 'New bet' });
+  await dialog.getByLabel('Money').selectOption('real'); // the table shows Real by default
   await dialog.getByLabel('Stake').fill('100');
   await dialog.getByLabel('Odds').fill('-114');
   await expect(dialog.getByTestId('odds-hint')).toHaveText('-114 → 1.88 (American)');
@@ -797,7 +801,7 @@ test('BT-16: odds in any format in the full form, quick-add and History cells, s
   await expect.poll(async () => (await betsTagged(request, tag)).map((b) => b.odds)).toEqual([1.88]);
 
   // quick-add "+220"
-  await page.getByTestId('quick-add').fill(`50 @+220 ${tag} plus`);
+  await page.getByTestId('quick-add').fill(`R$50 @+220 ${tag} plus`);
   await page.getByTestId('quick-add').press('Enter');
   await expect(page.getByRole('status')).toContainText('@3.20');
   await expect.poll(async () => (await betsTagged(request, tag)).find((b) => b.betText.endsWith('plus'))?.odds).toBe(3.2);
@@ -1425,4 +1429,21 @@ test('BT-26: one Bets page: stats strip, filters with ⋯ and ?, tabs, the money
   await page.getByRole('link', { name: 'Analytics' }).click();
   await expect(page.getByRole('heading', { name: 'Performance Over Time' })).toBeVisible();
   await expect(page.getByRole('banner').getByRole('radio', { name: 'Real R$' })).toHaveAttribute('aria-checked', 'true');
+});
+
+test('BT-26: a split line selected with a click settles alone with W; ↓ moves on from its dutch', async ({ page, request, tag }) => {
+  const d = `${tag}-s`.replace(/[^A-Za-z0-9_-]/g, '');
+  const home = await createBet(request, { betText: '', dutchId: d, placedDate: '2000-01-02', gameDate: '2000-01-02', legs: [{ selection: `${tag} Home`, odds: 2 }] });
+  await createBet(request, { betText: '', dutchId: d, placedDate: '2000-01-02', gameDate: '2000-01-02', legs: [{ selection: `${tag} Away`, odds: 2 }] });
+  const after = await createBet(request, { betText: `${tag} after`, placedDate: '2000-01-01', gameDate: '2000-01-01' });
+  await page.goto('/');
+  await page.getByLabel('Search bets').fill(tag);
+  await page.getByLabel('Search bets').blur();
+  await page.locator(`[data-bet-id="${home.id}"]`).getByTestId('bet-sub').click();
+  await expect(page.locator(`[data-bet-id="${home.id}"]`)).toHaveAttribute('data-selected', 'true');
+  await page.keyboard.press('w');
+  await expect.poll(async () => (await betsTagged(request, tag)).find((b) => b.id === home.id)?.result).toBe('won');
+  await expect(page.locator(`[data-dutch-id="${d}"]`).getByTestId('result-sub')).toHaveText('1 of 2 splits hit');
+  await page.keyboard.press('ArrowDown');
+  await expect(page.locator(`[data-bet-id="${after.id}"]`)).toHaveAttribute('data-selected', 'true');
 });
