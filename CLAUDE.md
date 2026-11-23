@@ -53,6 +53,10 @@ package.json's version shows in the bottom-right corner (`SiteVersion` in `src/c
 
 ## Feature backlog, built list and ideas
 
+**Pull first.** The owner's other Claude sessions push backlog items straight to GitHub. At the start of every
+session, and before reading or answering anything about the backlog, a BT-n item, `BUILT.md` or `IDEAS.md`, run
+`git pull --ff-only`. If the pull fails (local changes, diverged branch), say so instead of answering from a stale copy.
+
 Three lists, never mixed:
 - `FEATURE_BACKLOG.md`: planned work only. Nothing built is ever in it. Item IDs are BT-1, BT-2, ... (never reused).
 - `BUILT.md`: shipped work only, newest first, under `## <YYYY-MM-DD>` headings, as `- BT-n — title (v<version>)`
