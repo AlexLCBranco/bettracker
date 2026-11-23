@@ -47,3 +47,30 @@ export async function listBets(request: Requester): Promise<SweepBet[]> {
   if (!r.ok()) throw new Error(`e2e cleanup: GET /api/bets returned ${r.status()}`);
   return (await r.json()) as SweepBet[];
 }
+
+// BT-33: money entries made by e2e tests carry the tag in their book or note (and are dated 2000-01-0x).
+export interface SweepEntry {
+  id: string;
+  book: string;
+  note: string;
+  date: string;
+  createdAt: string;
+}
+
+export const isE2eEntry = (e: SweepEntry): boolean => E2E_TEXT.test(e.book) || E2E_TEXT.test(e.note) || E2E_DATE.test(e.date);
+
+export async function listEntries(request: Requester): Promise<SweepEntry[]> {
+  const r = await request.get('/api/money');
+  if (!r.ok()) throw new Error(`e2e cleanup: GET /api/money returned ${r.status()}`);
+  return (await r.json()) as SweepEntry[];
+}
+
+/** Deletes money entries by id; a 404 (already gone) is fine. */
+export async function deleteEntryIds(request: Requester, ids: Iterable<string>): Promise<void> {
+  const failed: string[] = [];
+  for (const id of ids) {
+    const r = await request.delete(`/api/money/${id}`);
+    if (r.status() !== 200 && r.status() !== 404) failed.push(`${id} (${r.status()})`);
+  }
+  if (failed.length) throw new Error(`e2e cleanup: could not delete money entries ${failed.join(', ')}`);
+}

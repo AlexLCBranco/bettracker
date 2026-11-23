@@ -47,6 +47,7 @@ const HELP: [string, string][] = [
   ['T', 'Label and actual result'],
   ['Z', 'Undo the last settle'],
   ['N', 'New bet'],
+  ['M', 'Insert money (bankroll)'],
   ['?', 'Show these keys'],
 ];
 
@@ -58,7 +59,7 @@ const DUTCH_KEYS_HELP = 'A dutch settles with 1-9 to toggle the splits that won,
  * is selected.
  */
 function Bets() {
-  const { bets: all, loaded, suggestFor, form, dutchForm, notify } = useApp();
+  const { bets: all, loaded, suggestFor, form, dutchForm, moneyForm, notify } = useApp();
   const [scope] = useMoneyScope();
   const params = useSearchParams();
   const router = useRouter();
@@ -115,7 +116,7 @@ function Bets() {
   const handler = useRef<(e: KeyboardEvent) => void>(() => {});
   useEffect(() => {
     handler.current = (e) => {
-      if (form || dutchForm || isTyping(e) || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (form || dutchForm || moneyForm || isTyping(e) || e.ctrlKey || e.metaKey || e.altKey) return;
       if ((e.target as HTMLElement | null)?.closest?.('[role=dialog], [role=menu]')) return;
       const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
       if (k === '?') {
@@ -220,6 +221,15 @@ function Bets() {
         <Stat label="ROI" testId="stat-roi" value={<span className={tone(s.roi ?? 0)}>{formatPercent(s.roi, true)}</span>} />
         <Stat label="Wagered" testId="stat-wagered" value={fmt(s.totalWagered)} sub={`${s.betCount} of ${totalCount} ${totalCount === 1 ? 'bet' : 'bets'}`} />
         <Stat label="Win rate" testId="stat-winrate" value={formatPercent(s.winRate)} sub={`${s.wins}W / ${s.losses}L`} />
+        {/* BT-33: bonus bets: the bonus spent and the real money it turned into */}
+        {(s.bonusSpent > 0 || s.bonusPending > 0) && (
+          <Stat
+            label="Bonus"
+            testId="stat-bonus"
+            value={<span className="text-amber-300">{formatMoney(s.bonusSpent, 'bonus')}</span>}
+            sub={`spent · won ${formatMoney(s.bonusWon, 'real')} · converted ${formatPercent(s.bonusConverted)}${s.bonusPending > 0 ? ` · ${formatMoney(s.bonusPending, 'bonus')} pending` : ''}`}
+          />
+        )}
         <Stat
           label="Pending"
           testId="stat-pending"

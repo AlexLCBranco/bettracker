@@ -8,8 +8,12 @@ export type BetType = (typeof BET_TYPES)[number];
 
 export const SITUATIONS = ['pregame', 'live'] as const;
 
-/** BT-14: real money (R$) or hypothetical money (H$, "hypothetical dollars"): picks tracked but not placed. */
-export const MONEY = ['real', 'hypothetical'] as const;
+/**
+ * BT-14: real money (R$) or hypothetical money (H$, "hypothetical dollars"): picks tracked but not placed.
+ * BT-33: bonus money (B$), a book's bonus: a lost bonus bet costs no real money, a won one pays its winnings (never the
+ * stake) as REAL money (src/lib/money.ts).
+ */
+export const MONEY = ['real', 'bonus', 'hypothetical'] as const;
 export type Money = (typeof MONEY)[number];
 
 export type Situation = (typeof SITUATIONS)[number];
@@ -45,7 +49,7 @@ export interface Bet {
   betText: string;
   /** Solo: exactly 1. Combination: 0 (not entered) or 2+. */
   legs: Leg[];
-  /** Real (R$) or hypothetical (H$) money; hypothetical bets never mix into real totals (BT-14). */
+  /** Real (R$), bonus (B$, BT-33) or hypothetical (H$) money; hypothetical bets never mix into real totals (BT-14). */
   money: Money;
   /** Bets logged together as one dutch share this id (see src/lib/dutch.ts); null = not part of a dutch. */
   dutchId: string | null;

@@ -3,7 +3,7 @@
 // Money is bet by bet; counts (bets, pending, wins, losses) take a dutch as one bet (src/lib/dutch.ts).
 import { normalize } from './autocomplete';
 import { countBets } from './dutch';
-import { profit } from './money';
+import { profit, realStake } from './money';
 import { collapseRollovers } from './rollover';
 import type { Bet, Leg, Result } from './types';
 
@@ -106,9 +106,9 @@ export function breakdown(bets: Bet[], d: Dimension): Row[] {
       members.set(g.key, []);
     }
     members.get(g.key)!.push(b);
-    r.wagered += b.stake;
+    r.wagered += realStake(b);
     if (b.result === 'pending') continue;
-    r.settledStake += b.stake;
+    r.settledStake += realStake(b);
     r.profit += profit(b);
   }
   // counts: a dutch is one bet within each row it has bets in (judged by those bets)

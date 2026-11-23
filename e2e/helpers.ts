@@ -1,6 +1,6 @@
 import { test as base, expect, type APIRequestContext, type Response } from '@playwright/test';
 import type { Bet } from '../src/lib/types';
-import { deleteIds } from './cleanup';
+import { deleteEntryIds, deleteIds, listEntries } from './cleanup';
 
 /** A unique tag per test, put in bet texts so a test only ever touches its own bets (the live DB has real ones). */
 export const makeTag = () => `e2e-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
@@ -55,6 +55,8 @@ export const test = base.extend<{ tag: string }>({
       await Promise.allSettled(reading);
       for (const b of await betsTagged(request, tag)) ids.add(b.id);
       await deleteIds(request, ids);
+      // BT-33: the money entries it made (tag in the book or note)
+      await deleteEntryIds(request, (await listEntries(request)).filter((e) => e.book.includes(tag) || e.note.includes(tag)).map((e) => e.id));
     }
   },
 });

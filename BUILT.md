@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-23
+- BT-33 — Bankroll: insert real, bonus and hypothetical money, and see what you have (v0.23.0)
+  Bonus (B$, amber) is a third money type everywhere (form, dutch log, "B$10" in quick-add, the Real / Bonus / Hypothetical / All switch, export) whose losses cost nothing and whose wins pay the winnings only as real money; the top bar shows R$, Bonus and H$ now (pending under each, click for each book with the next bonus expiry, expired unused and bonus converted), M or "Insert money" puts money in or takes it out, /bankroll lists every entry to edit or delete (Z undoes), and the bet form shows the balance and warns when the stake is more.
 - BT-34 — Cash-out button "C" next to W / L / V, typed as an amount or a percentage (v0.22.0)
   A blue C after W / L / V on every unsettled bet, dutch split and open rollover bet opens the cash-out box, which takes the money returned ("140,50") or a share of the full payout ("70%", or the R$ / % toggle, remembered) and shows both with the profit before Enter; a cashed-out pill reads "Cash-out · R$ 140,00 (70%)".
 - BT-29 — Rollover shot: bank a won bet and add a leg later (v0.21.0)

@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { formatDate, parseDateInput } from '@/lib/dates';
 import { emptyLeg, formFromBet, formToBet, newForm, nextForm, type BetForm, type LegForm } from '@/lib/form';
-import { formatMoney, MONEY_SYMBOL, oddsFromText, parseNumber, potentialReturn } from '@/lib/money';
+import { formatMoney, MONEY_SYMBOL, oddsFromText, parseNumber, profitMoney, winReturn } from '@/lib/money';
+import { MONEY_OPTION_LABEL, MONEY_TEXT } from './moneyStyle';
+import { BalanceHint } from './Bankroll';
 import { BET_TYPES, RESULT_LABEL, RESULTS, SITUATIONS, type Bet } from '@/lib/types';
 import { clashText, teamClashes } from '@/lib/clash';
 import { quickAddLegs } from '@/lib/quickadd';
@@ -79,7 +81,8 @@ function FormBody() {
 
   const stake = parseNumber(f.stake);
   const odds = oddsFromText(f.odds);
-  const potential = stake && odds ? potentialReturn(stake, odds) : 0;
+  // BT-33: a bonus bet returns its winnings only
+  const potential = stake && odds ? winReturn({ stake, odds, money: f.money }) : 0;
   // BT-22: a team in two games on the game date (this bet's games and every other bet's)
   const gameDateISO = (f.gameDate.trim() ? parseDateInput(f.gameDate) : null) ?? (f.placedDate.trim() ? parseDateInput(f.placedDate) : null);
   const clashes = gameDateISO ? teamClashes(f.type === 'solo' ? [f.game] : f.legs.map((l) => l.game), gameDateISO, bets.filter((b) => b.id !== editing?.id)) : [];
@@ -127,11 +130,14 @@ function FormBody() {
             <div className="flex flex-col justify-end">
               <span className="text-xs text-zinc-500">Potential return</span>
               <span className="text-lg font-semibold text-emerald-400" data-testid="potential-return">
-                {formatMoney(potential, f.money)}
+                {formatMoney(potential, profitMoney(f.money))}
               </span>
             </div>
           )}
         </div>
+
+        {/* BT-33: the balance of this money + book, and what the stake leaves (a warning, never a block) */}
+        {!editing && <BalanceHint money={f.money} book={f.book} stake={rollover ? 0 : (stake ?? 0)} />}
 
         {rollover && (
           <p className="rounded-md border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-sm text-sky-200" data-testid="rollover-note">
@@ -153,8 +159,8 @@ function FormBody() {
         <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
           <L label="Money">
             {moneyLocked ? (
-              <span className={`field ${f.money === 'hypothetical' ? 'text-violet-300' : ''}`} title="A rollover keeps the money of its first bet" data-testid="money-locked">
-                {f.money === 'hypothetical' ? 'Hypothetical (H$)' : 'Real (R$)'}
+              <span className={`field ${MONEY_TEXT[f.money]}`} title="A rollover keeps the money of its first bet" data-testid="money-locked">
+                {MONEY_OPTION_LABEL[f.money]}
               </span>
             ) : (
               <MoneySelect value={f.money} onChange={(m) => set('money', m)} />

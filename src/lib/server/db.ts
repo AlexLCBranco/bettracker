@@ -4,6 +4,7 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { Bet, BetInput, Leg } from '../types';
 import type { ImportBet } from '../transfer';
+import type { EntryInput, MoneyEntry } from '../bankroll';
 import { asSolo } from '../games';
 import { repairLegs } from '../settle';
 
@@ -58,6 +59,19 @@ const SCHEMA = [
   `CREATE INDEX IF NOT EXISTS legs_bet ON legs (bet_id)`,
   // one-time data passes already run (BT-28)
   `CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`,
+  // BT-33: money inserted or taken out, per money type and book
+  `CREATE TABLE IF NOT EXISTS money_entries (
+    id TEXT PRIMARY KEY,
+    money TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    amount REAL NOT NULL,
+    book TEXT NOT NULL DEFAULT '',
+    date TEXT NOT NULL,
+    note TEXT NOT NULL DEFAULT '',
+    expiry TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`,
 ];
 
 export async function db(): Promise<Client> {
@@ -122,7 +136,7 @@ function rowToBet(r: Row, legs: Leg[]): Bet {
     betText: s(r.bet_text),
     legs,
     dutchId: r.dutch_id == null || r.dutch_id === '' ? null : s(r.dutch_id),
-    money: r.money === 'hypothetical' ? 'hypothetical' : 'real',
+    money: r.money === 'hypothetical' || r.money === 'bonus' ? r.money : 'real',
     label: s(r.label),
     rolloverId: r.rollover_id == null || r.rollover_id === '' ? null : s(r.rollover_id),
     banked: Number(r.banked ?? 0) === 1,
@@ -295,4 +309,64 @@ export async function deleteBet(id: string): Promise<boolean> {
     'write',
   );
   return (r?.rowsAffected ?? 0) > 0;
+}
+
+// BT-33: money entries (bankroll)
+
+function rowToEntry(r: Row): MoneyEntry {
+  return {
+    id: s(r.id),
+    money: s(r.money) as MoneyEntry['money'],
+    direction: r.direction === 'out' ? 'out' : 'in',
+    amount: Number(r.amount),
+    book: s(r.book),
+    date: s(r.date),
+    note: s(r.note),
+    expiry: r.expiry == null || r.expiry === '' ? null : s(r.expiry),
+    createdAt: s(r.created_at),
+    updatedAt: s(r.updated_at),
+  };
+}
+
+export async function listEntries(): Promise<MoneyEntry[]> {
+  const r = await (await db()).execute('SELECT * FROM money_entries ORDER BY date DESC, created_at DESC');
+  return r.rows.map(rowToEntry);
+}
+
+const entryWrite = (e: MoneyEntry): InStatement => ({
+  sql: 'INSERT OR REPLACE INTO money_entries (id, money, direction, amount, book, date, note, expiry, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)',
+  args: [e.id, e.money, e.direction, e.amount, e.book, e.date, e.note, e.expiry, e.createdAt, e.updatedAt],
+});
+
+/** Creates an entry; `restore` puts back a deleted one with its id and timestamps (undo). */
+export async function createEntry(input: EntryInput, restore?: { id: string; createdAt: string }): Promise<MoneyEntry> {
+  const at = new Date().toISOString();
+  const e: MoneyEntry = { ...input, id: restore?.id ?? crypto.randomUUID(), createdAt: restore?.createdAt ?? at, updatedAt: at };
+  await (await db()).execute(entryWrite(e));
+  return e;
+}
+
+export async function getEntry(id: string): Promise<MoneyEntry | null> {
+  const r = await (await db()).execute({ sql: 'SELECT * FROM money_entries WHERE id = ?', args: [id] });
+  return r.rows[0] ? rowToEntry(r.rows[0]) : null;
+}
+
+export async function updateEntry(existing: MoneyEntry, input: EntryInput): Promise<MoneyEntry> {
+  const e: MoneyEntry = { ...existing, ...input, updatedAt: new Date().toISOString() };
+  await (await db()).execute(entryWrite(e));
+  return e;
+}
+
+export async function deleteEntry(id: string): Promise<boolean> {
+  const r = await (await db()).execute({ sql: 'DELETE FROM money_entries WHERE id = ?', args: [id] });
+  return r.rowsAffected > 0;
+}
+
+/** Import: entries whose id is not there yet (never overwritten). */
+export async function importEntries(items: MoneyEntry[]): Promise<{ added: number; skipped: number }> {
+  const c = await db();
+  const existing = new Set((await c.execute('SELECT id FROM money_entries')).rows.map((r) => s(r.id)));
+  const fresh = items.filter((e) => !existing.has(e.id));
+  if (fresh.length) await c.batch(fresh.map(entryWrite), 'write');
+  return { added: fresh.length, skipped: items.length - fresh.length };
 }

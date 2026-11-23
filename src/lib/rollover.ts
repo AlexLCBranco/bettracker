@@ -154,7 +154,8 @@ export function chainsOf(all: Bet[]): Map<string, Bet[]> {
 
 /** Can this bet be banked: a won plain bet (not in a dutch), or the won last bet of a closed chain. */
 export function canBank(b: Bet, chain: Bet[] = []): boolean {
-  if (b.result !== 'won' || b.dutchId || b.banked) return false;
+  // BT-33: a bonus bet's payout is its winnings only, in real money: it cannot roll on as the same money
+  if (b.result !== 'won' || b.dutchId || b.banked || b.money === 'bonus') return false;
   if (!b.rolloverId) return true;
   const ordered = chainOrder(chain);
   return ordered.at(-1)?.id === b.id && chainSummary(ordered).outcome === 'won';

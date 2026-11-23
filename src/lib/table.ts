@@ -3,7 +3,7 @@
 
 import { groupRows, type BetRow } from './dutch';
 import { comboHits, dutchHits } from './hits';
-import { profit } from './money';
+import { profit, profitMoney } from './money';
 import { collapseRollovers } from './rollover';
 import { tidyGame, tidyNames, type NameCasing } from './tidy';
 import type { Bet, Leg, Money } from './types';
@@ -41,7 +41,7 @@ export function dayGroups(rows: BetRow[], dateOf: (r: BetRow) => string = rowDat
   for (const g of out) {
     const sums = new Map<Money, number>();
     for (const b of collapseRollovers(g.rows.flatMap((r) => (r.kind === 'bet' ? [r.bet] : r.bets))))
-      if (b.result !== 'pending') sums.set(b.money, (sums.get(b.money) ?? 0) + profit(b));
+      if (b.result !== 'pending') sums.set(profitMoney(b.money), (sums.get(profitMoney(b.money)) ?? 0) + profit(b));
     g.nets = (['real', 'hypothetical'] as Money[]).filter((m) => sums.has(m)).map((money) => ({ money, value: round2(sums.get(money)!) }));
   }
   return out;

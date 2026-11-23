@@ -8,6 +8,8 @@ import { latestGate } from '@/lib/latest';
 import { REFRESH_MIN_MS, refreshGate } from '@/lib/refresh';
 import { tidyBet, type NameCasing } from '@/lib/tidy';
 import type { Bet, BetInput, Money } from '@/lib/types';
+import { bankroll as computeBankroll, type Bankroll, type EntryInput, type MoneyEntry } from '@/lib/bankroll';
+import { todayISO } from '@/lib/dates';
 
 /** BT-20: names typed "Mccain" saved as "McCain" once that spelling is known (the server tidies games and units). */
 function tidyPatch<T extends Partial<BetInput>>(p: T, names: NameCasing): T {
@@ -57,6 +59,22 @@ interface AppCtx {
   closeForm(): void;
   toast: { text: string; kind: 'ok' | 'error'; id: number } | null;
   notify(text: string, kind?: 'ok' | 'error'): void;
+  /** BT-33: the bankroll's money entries, newest first, and the balances they make with the bets. */
+  entries: MoneyEntry[];
+  bankroll: Bankroll;
+  saveEntry(input: EntryInput, id?: string): Promise<MoneyEntry>;
+  /** Deletes an entry; the returned function puts it back (undo). */
+  removeEntry(e: MoneyEntry): Promise<() => Promise<void>>;
+  /** The insert / take out money form. */
+  moneyForm: MoneyFormRequest | null;
+  openMoney(req?: Omit<MoneyFormRequest, 'key'>): void;
+  closeMoney(): void;
+}
+
+export interface MoneyFormRequest {
+  key: number;
+  edit?: MoneyEntry;
+  prefill?: Partial<EntryInput>;
 }
 
 const Ctx = createContext<AppCtx | null>(null);
@@ -87,6 +105,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [form, setForm] = useState<FormRequest | null>(null);
   const [dutchForm, setDutchForm] = useState<AppCtx['dutchForm']>(null);
   const [toast, setToast] = useState<AppCtx['toast']>(null);
+  const [entries, setEntries] = useState<MoneyEntry[]>([]);
+  const [moneyForm, setMoneyForm] = useState<MoneyFormRequest | null>(null);
   const betsRef = useRef(bets);
   const names = useMemo(() => betNames(bets), [bets]);
   const namesRef = useRef(names);
@@ -98,9 +118,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const formKey = useRef(0);
 
   useEffect(() => {
-    api<Bet[]>('/api/bets')
-      .then((b) => {
+    Promise.all([api<Bet[]>('/api/bets'), api<MoneyEntry[]>('/api/money')])
+      .then(([b, e]) => {
         setBets(b);
+        setEntries(e);
         setLoaded(true);
       })
       .catch((e: Error) => setLoadError(e.message));
@@ -119,9 +140,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       lastAt = Date.now();
       const token = writes.begin();
       if (token == null) return;
-      api<Bet[]>('/api/bets')
-        .then((b) => {
-          if (writes.canApply(token)) setBets(b);
+      Promise.all([api<Bet[]>('/api/bets'), api<MoneyEntry[]>('/api/money')])
+        .then(([b, e]) => {
+          if (!writes.canApply(token)) return;
+          setBets(b);
+          setEntries(e);
         })
         .catch(() => undefined);
     };
@@ -136,6 +159,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const importExport = useCallback(async (json: unknown) => {
     const r = await write<{ added: number; skipped: number }>('/api/import', { method: 'POST', body: JSON.stringify(json) });
     setBets(await api<Bet[]>('/api/bets'));
+    setEntries(await api<MoneyEntry[]>('/api/money'));
     return r;
   }, [write]);
 
@@ -211,6 +235,39 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [notify, write],
   );
 
+  const byNewest = (a: MoneyEntry, b: MoneyEntry) => (a.date !== b.date ? (a.date < b.date ? 1 : -1) : a.createdAt < b.createdAt ? 1 : -1);
+  const saveEntry = useCallback(
+    async (input: EntryInput, id?: string) => {
+      const e = id
+        ? await write<MoneyEntry>(`/api/money/${id}`, { method: 'PATCH', body: JSON.stringify(input) })
+        : await write<MoneyEntry>('/api/money', { method: 'POST', body: JSON.stringify(input) });
+      setEntries((es) => [...es.filter((x) => x.id !== e.id), e].sort(byNewest));
+      return e;
+    },
+    [write],
+  );
+  const removeEntry = useCallback(
+    async (e: MoneyEntry) => {
+      setEntries((es) => es.filter((x) => x.id !== e.id));
+      try {
+        await write(`/api/money/${e.id}`, { method: 'DELETE' });
+      } catch (err) {
+        setEntries((es) => [...es, e].sort(byNewest));
+        notify((err as Error).message, 'error');
+        throw err;
+      }
+      return async () => {
+        const { id, createdAt, updatedAt: _u, ...input } = e;
+        void _u;
+        const back = await write<MoneyEntry>('/api/money', { method: 'POST', body: JSON.stringify({ ...input, restore: { id, createdAt } }) });
+        setEntries((es) => [...es.filter((x) => x.id !== back.id), back].sort(byNewest));
+      };
+    },
+    [notify, write],
+  );
+  const today = todayISO();
+  const bankroll = useMemo(() => computeBankroll(entries, bets, today), [entries, bets, today]);
+
   const index = useMemo(() => buildIndex(bets), [bets]);
   const suggestFor = useCallback((field: Field, query: string, sport?: string) => suggest(index, field, query, { sport }), [index]);
   const defaults = useMemo(() => lastUsed(bets), [bets]);
@@ -240,6 +297,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     closeForm: () => setForm(null),
     toast,
     notify,
+    entries,
+    bankroll,
+    saveEntry,
+    removeEntry,
+    moneyForm,
+    openMoney: (req) => setMoneyForm({ ...req, key: ++formKey.current }),
+    closeMoney: () => setMoneyForm(null),
   };
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

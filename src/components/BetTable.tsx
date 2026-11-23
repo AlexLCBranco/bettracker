@@ -5,7 +5,8 @@ import { createPortal } from 'react-dom';
 import { formatDate, formatDayHeader, formatDayMonth, parseDateInput } from '@/lib/dates';
 import { betLabel, duplicateDutchDraft, dutchSummary, editDutchDraft, rowKey, type GroupOutcome } from '@/lib/dutch';
 import { duplicateForm } from '@/lib/form';
-import { formatMoney, formatOdds, MONEY_SYMBOL, oddsFromText, parseNumber, potentialReturn, profit, type MoneyScope } from '@/lib/money';
+import { formatMoney, formatOdds, MONEY_SYMBOL, oddsFromText, parseNumber, profit, profitMoney, winReturn, type MoneyScope } from '@/lib/money';
+import { MONEY_TEXT, MONEY_TITLE } from './moneyStyle';
 import { cashoutLabel, cashoutLine, readCashout, type CashoutMode } from '@/lib/cashout';
 import { useCashoutMode } from './useCashoutMode';
 import { RESULT_LABEL, RESULTS, type Bet, type BetInput, type Leg, type Result } from '@/lib/types';
@@ -58,7 +59,6 @@ const SUB = 'text-[11px] leading-5 text-zinc-500';
 /** Bet text: bold, wraps instead of being cut (BT-26). */
 const TEXT = 'font-semibold text-zinc-100 [overflow-wrap:anywhere]';
 const HYPO = 'text-violet-300';
-const HYPO_TITLE = 'Hypothetical dollars: not real money, never counted with R$';
 /** ✎ and ⋯: on row hover, keyboard focus and the selected row (W / L / V and the dutch settle buttons always show). */
 const HOVER_ONLY = 'inline-flex opacity-0 transition-opacity group-hover:opacity-100 group-data-[selected]:opacity-100 focus-within:opacity-100';
 const CELL = 'px-2 py-1.5 align-top';
@@ -325,13 +325,13 @@ function DutchGroup({ bets, dutchId, open, toggle, selected, select, settle, ann
           {annotating === key && <Annotator kind="dutch" bets={bets} onClose={() => annotate(null)} />}
         </td>
         <td className={NUM} data-testid="dutch-stake" data-col="stake">
-          <span className={money === 'hypothetical' ? HYPO : 'text-zinc-200'}>{formatMoney(s.stake, money)}</span>
+          <span className={MONEY_TEXT[money] || 'text-zinc-200'}>{formatMoney(s.stake, money)}</span>
         </td>
         <td className={`${NUM} text-zinc-200`} data-testid="dutch-odds" data-col="odds" title="Combined odds: 1 / Σ(1/odds)">
           {formatOdds(s.combinedOdds, 2)}
         </td>
         <td className={NUM} data-testid="profit" data-col="profit">
-          <ProfitText value={s.profit} pending={s.outcome === 'pending'} money={money} />
+          <ProfitText value={s.profit} pending={s.outcome === 'pending'} money={profitMoney(money)} />
         </td>
         <td className={CELL} data-col="result">
           <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${TONE_BADGE[tone]}`} title={missesTitle(dutchHits(bets))} data-testid="result">
@@ -447,13 +447,13 @@ function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, select, 
           />
         </td>
         <td className={NUM} data-testid="rollover-stake" data-col="stake" title="The first bet's stake: the rolled stakes are the same money">
-          <span className={money === 'hypothetical' ? HYPO : 'text-zinc-200'}>{formatMoney(s.stake, money)}</span>
+          <span className={MONEY_TEXT[money] || 'text-zinc-200'}>{formatMoney(s.stake, money)}</span>
         </td>
         <td className={`${NUM} text-zinc-200`} data-testid="rollover-odds" data-col="odds" title="The bets' odds multiplied (a void counts 1.00)">
           {formatOdds(s.odds, 2)}
         </td>
         <td className={NUM} data-testid="profit" data-col="profit">
-          <ProfitText value={s.profit} pending={chainPending(s.outcome)} money={money} />
+          <ProfitText value={s.profit} pending={chainPending(s.outcome)} money={profitMoney(money)} />
         </td>
         <td className={CELL} data-col="result">
           <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${isOpen ? 'bg-sky-500/15 text-sky-300' : TONE_BADGE[tone]}`} data-testid="result">
@@ -589,7 +589,7 @@ function BetRow({ b, open, toggle, selected, select, settle, split, link, annota
   const hits = comboHits(b);
   const leg0 = b.legs[0];
   const pending = b.result === 'pending';
-  const returns = pending ? `Returns ${formatMoney(potentialReturn(b.stake, b.odds), b.money)} if it wins` : undefined;
+  const returns = pending ? `Returns ${formatMoney(winReturn(b), profitMoney(b.money))} if it wins` : undefined;
   // BT-27: the label chip (a split shows its own only when it differs from the dutch's), a solo's actual, losing legs
   const chip = b.label && !(nested && normalize(b.label) === normalize(split.sharedLabel)) ? b.label : '';
   const soloActual = solo ? (leg0?.actual ?? '') : '';
@@ -695,10 +695,10 @@ function BetRow({ b, open, toggle, selected, select, settle, split, link, annota
           {losses.length > 0 && <LossLine entries={losses} />}
           {annotating === key && <Annotator kind="bet" bet={b} group={split?.group ?? [b]} onClose={() => annotate(null)} />}
         </td>
-        <Cell kind="number" testId="stake" value={String(b.stake)} display={formatMoney(b.stake, b.money)} extraClass={b.money === 'hypothetical' ? HYPO : undefined} title={[b.money === 'hypothetical' ? HYPO_TITLE : '', returns].filter(Boolean).join(' · ') || undefined} label="Stake" onSave={(v) => save({ stake: parseNumber(v) ?? b.stake })} right />
+        <Cell kind="number" testId="stake" value={String(b.stake)} display={formatMoney(b.stake, b.money)} extraClass={MONEY_TEXT[b.money] || undefined} title={[b.money !== 'real' ? MONEY_TITLE[b.money] : '', returns].filter(Boolean).join(' · ') || undefined} label="Stake" onSave={(v) => save({ stake: parseNumber(v) ?? b.stake })} right />
         <Cell kind="odds" testId="odds" value={formatOdds(b.odds)} label="Odds" onSave={(v) => save({ odds: oddsFromText(v) ?? b.odds })} right />
         <td className={NUM} data-testid="profit" data-col="profit">
-          <ProfitText value={profit(b)} pending={pending} money={b.money} />
+          <ProfitText value={profit(b)} pending={pending} money={profitMoney(b.money)} />
         </td>
         <td className={CELL} data-col="result">
           <ResultCell bet={b} title={hits ? missesTitle(hits) : undefined} onPick={(r) => settle.settleBet(b, r, null, group)} />

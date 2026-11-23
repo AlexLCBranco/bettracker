@@ -118,49 +118,6 @@ Needs BT-30.
 
 Tests: unit tests for every figure, including empty and all-void batches.
 
-### BT-33 — Bankroll: insert real, bonus and hypothetical money, and see what you have
-**In short:** One "Insert money" action for real, bonus and hypothetical money, a bankroll in the top bar showing how much of each you have right now, and bonus as a third money type whose bets cost nothing when they lose and pay only the winnings when they win.
-
-Independent of BT-30 to BT-32 and can be built before or after them. Once built, a PP batch (BT-30) can be Bonus.
-
-Decided by the owner (2026-11-23):
-- He wants to see his whole bankroll: real money, the full bonus amount, and hypothetical money.
-- There is one "insert money" action covering every type: insert real, insert bonus, insert hypothetical.
-- A won bonus bet pays the winnings only, never the stake (stake 10 @ 20 pays 190). No setting for this.
-
-Money types:
-- Money gets a third value, Bonus, next to Real (R$) and Hypothetical (H$) (BT-14), with its own colour and
-  symbol, selectable everywhere Real / Hypothetical is today (full form, dutch log, quick-add prefix, filters,
-  the Real / Hypothetical / Both switch, export / import).
-- Bonus maths (`src/lib/money.ts`): the stake comes out of the bonus balance. Lost = R$ 0 real profit. Won =
-  stake x (odds - 1) added to REAL profit and to the real balance. Void = the stake goes back to the bonus
-  balance. Bonus stakes never count in real "wagered", so real ROI ignores them. A separate figure, "bonus
-  converted" = real money won from bonus / bonus spent, shows per book, per PP batch and overall.
-
-Insert money:
-- One small form, opened from the bankroll in the top bar and by a key: type (Real / Bonus / Hypothetical, last
-  used remembered), amount, book (autocomplete; optional for Hypothetical), date (default today), note, and for
-  Bonus an optional expiry date. "Save and add another" as in the bet form.
-- The same form takes money OUT (a withdrawal, or a correction): this was not asked for by the owner, it is added
-  because a bankroll is wrong without it. Keep it as a secondary "Take out" toggle.
-- A list of all entries (newest first, filter by type and book) where each can be edited or deleted, with undo.
-
-Bankroll:
-- Balance per type and book = money inserted - money taken out + returns of settled bets - stakes of all bets
-  placed, following the money rules above (and PP tickets once BT-30 exists).
-- Bets logged before bankroll tracking started must not distort it: for each type + book, only bets placed on or
-  after the date of its first entry count. A type + book with no entry shows "-" and a "set starting balance"
-  prompt, never a negative number made of old bets.
-- Top bar: three figures, R$ (real), Bonus, H$ (hypothetical), each the total across books, with the amount tied
-  up in pending bets shown smaller. Hover or click opens the per-book breakdown, with the nearest bonus expiry.
-  An expired bonus entry's unspent part leaves the balance and is listed as "expired unused".
-- The bet form and the PP builder show the balance of the chosen type + book and what will be left, and warn
-  (do not block) when the stake is more than the balance.
-
-Tests: unit tests for every balance rule (each result type, bonus win / loss / void, expiry, the start-date
-rule, take out); db integration; Playwright for insert each type → place a bet of each type → balances move →
-bonus win pays winnings only into real.
-
 ### BT-35 — Ladder: let the whole payout ride from one bet to the next, shown as rungs
 **In short:** A ladder starts from one stake, puts the whole payout of each win on the next bet (100 → 200 → 400 → ...), and shows as one row with its rungs until it loses or you take the money.
 

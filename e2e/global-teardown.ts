@@ -2,7 +2,7 @@
 // Fails the run when a bet created by this run had to be swept (a test leaked it) or when any e2e bet remains.
 import { request, type FullConfig } from '@playwright/test';
 import { existsSync, readFileSync } from 'node:fs';
-import { deleteIds, e2eLeftovers, listBets } from './cleanup';
+import { deleteEntryIds, deleteIds, e2eLeftovers, isE2eEntry, listBets, listEntries } from './cleanup';
 
 export const RUN_START_FILE = 'e2e/.auth/run-start.txt';
 const STATE = 'e2e/.auth/state.json';
@@ -22,6 +22,12 @@ export default async function globalTeardown(config: FullConfig) {
     await deleteIds(api, all.map((b) => b.id));
     const remaining = e2eLeftovers(await listBets(api), since).all;
     if (remaining.length) throw new Error(`e2e sweep: ${remaining.length} e2e bet(s) still there after the sweep: ${remaining.map((b) => b.id).join(', ')}`);
+    // BT-33: money entries
+    const entries = (await listEntries(api)).filter(isE2eEntry);
+    if (entries.length) console.log(`e2e sweep: deleting ${entries.length} e2e money entr${entries.length === 1 ? 'y' : 'ies'}`);
+    await deleteEntryIds(api, entries.map((e) => e.id));
+    const leakedEntries = entries.filter((e) => e.createdAt >= since);
+    if (leakedEntries.length) throw new Error(`e2e sweep: ${leakedEntries.length} money entr${leakedEntries.length === 1 ? 'y' : 'ies'} from this run were left by a test (now deleted)`);
     if (thisRun.length) throw new Error(`e2e sweep: ${thisRun.length} bet(s) from this run were left by a test (now deleted): ${thisRun.map((b) => `"${b.betText || b.book}"`).join(', ')}`);
   } finally {
     await api.dispose();

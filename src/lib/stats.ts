@@ -1,5 +1,5 @@
 import { countBets } from './dutch';
-import { profit } from './money';
+import { bonusSpentOf, profit, realStake } from './money';
 import { collapseRollovers } from './rollover';
 import type { Bet } from './types';
 
@@ -17,6 +17,12 @@ export interface Summary {
   pendingCount: number;
   pendingAmount: number;
   settledStake: number;
+  /** BT-33: bonus put on settled bets (a void's stake went back), the real money they won, and won / spent. */
+  bonusSpent: number;
+  bonusWon: number;
+  bonusConverted: number | null;
+  /** BT-33: bonus stakes of pending bets. */
+  bonusPending: number;
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -26,15 +32,25 @@ export function summarize(bets: Bet[]): Summary {
   let settledStake = 0;
   let totalWagered = 0;
   let pendingAmount = 0;
+  let bonusSpent = 0;
+  let bonusWon = 0;
+  let bonusPending = 0;
   // BT-29: a rollover shot is one money item (first stake in, final payout out)
+  // BT-33: a bonus stake is not real money: never wagered, never in ROI; its winnings are real profit
   for (const b of collapseRollovers(bets)) {
-    totalWagered += b.stake;
+    const stake = realStake(b);
+    totalWagered += stake;
     if (b.result === 'pending') {
-      pendingAmount += b.stake;
+      pendingAmount += stake;
+      if (b.money === 'bonus') bonusPending += b.stake;
       continue;
     }
-    settledStake += b.stake;
+    settledStake += stake;
     netProfit += profit(b);
+    if (b.money === 'bonus') {
+      bonusSpent += bonusSpentOf(b);
+      bonusWon += profit(b);
+    }
   }
   const { count, pending: pendingCount, wins, losses } = countBets(bets);
   return {
@@ -48,6 +64,10 @@ export function summarize(bets: Bet[]): Summary {
     pendingCount,
     pendingAmount: round2(pendingAmount),
     settledStake: round2(settledStake),
+    bonusSpent: round2(bonusSpent),
+    bonusWon: round2(bonusWon),
+    bonusConverted: bonusSpent > 0 ? bonusWon / bonusSpent : null,
+    bonusPending: round2(bonusPending),
   };
 }
 

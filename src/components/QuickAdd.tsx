@@ -20,7 +20,7 @@ export function QuickAdd() {
     const seen = new Set<string>();
     const out: string[] = [];
     for (const b of [...bets].sort((a, c) => (a.createdAt < c.createdAt ? 1 : -1))) {
-      const l = `${b.money === 'hypothetical' ? 'H$' : ''}${b.stake} @${formatOdds(b.odds)} ${b.betText}`.trim();
+      const l = `${b.money === 'hypothetical' ? 'H$' : b.money === 'bonus' ? 'B$' : ''}${b.stake} @${formatOdds(b.odds)} ${b.betText}`.trim();
       if (!seen.has(normalize(l))) {
         seen.add(normalize(l));
         out.push(l);
@@ -83,7 +83,7 @@ export function QuickAdd() {
           getSuggestions={(q) => (line.trim() ? (q.trim() ? suggestFor('betText', q) : []) : recentLines)}
           toQuery={(v) => splitQuickAddText(v).text}
           applySuggestion={(v, s) => (v.trim() ? splitQuickAddText(v).prefix + s : s)}
-          placeholder='Quick add: "150 @2.10 lakers ml" then Enter ("H$150" for hypothetical)'
+          placeholder='Quick add: "150 @2.10 lakers ml" then Enter ("H$150" hypothetical, "B$150" bonus)'
           aria-label="Quick add"
           data-testid="quick-add"
           className="field w-full"

@@ -21,7 +21,43 @@ export function profitOf(stake: number, odds: number, result: Result, cashout: n
   }
 }
 
-export const profit = (b: Pick<Bet, 'stake' | 'odds' | 'result' | 'cashout'>) => profitOf(b.stake, b.odds, b.result, b.cashout);
+/**
+ * BT-33: a bonus bet's REAL profit. The stake is the book's bonus, so losing costs no real money and winning pays the
+ * winnings only, never the stake (stake 10 @ 20 pays 190). Void or a half result gives (part of) the stake back to the
+ * bonus balance, not as real money. A cash-out returns, like a win, what it paid above the stake (never below 0).
+ */
+export function bonusProfitOf(stake: number, odds: number, result: Result, cashout: number | null): number {
+  switch (result) {
+    case 'won':
+      return round2(stake * (odds - 1));
+    case 'half-won':
+      return round2((stake / 2) * (odds - 1));
+    case 'cash-out':
+      return round2(Math.max(0, (cashout ?? 0) - stake));
+    default:
+      return 0;
+  }
+}
+
+/** A bet's profit in real (or hypothetical) money; a bonus bet's is real money (bonusProfitOf). */
+export const profit = (b: Pick<Bet, 'stake' | 'odds' | 'result' | 'cashout'> & { money?: Money }) =>
+  b.money === 'bonus' ? bonusProfitOf(b.stake, b.odds, b.result, b.cashout) : profitOf(b.stake, b.odds, b.result, b.cashout);
+
+/** BT-33: the bonus a settled bonus bet used up: its stake, less what went back to the bonus (void: all, half results: half). */
+export function bonusSpentOf(b: Pick<Bet, 'stake' | 'result'>): number {
+  if (b.result === 'void') return 0;
+  if (b.result === 'half-won' || b.result === 'half-lost') return round2(b.stake / 2);
+  return b.stake;
+}
+
+/** The money a bet's profit is in: a bonus bet's winnings are real money (BT-33). */
+export const profitMoney = (m: Money): Money => (m === 'bonus' ? 'real' : m);
+
+/** The stake as real money put in: a bonus stake is not (BT-33: bonus stakes never count in real "wagered"). */
+export const realStake = (b: Pick<Bet, 'stake' | 'money'>) => (b.money === 'bonus' ? 0 : b.stake);
+
+/** What a winning bet pays back into its profit money: stake × odds, or for a bonus bet the winnings only (BT-33). */
+export const winReturn = (b: Pick<Bet, 'stake' | 'odds' | 'money'>) => (b.money === 'bonus' ? round2(b.stake * (b.odds - 1)) : potentialReturn(b.stake, b.odds));
 
 /** Stake × odds: what a winning bet pays back in total. */
 export const potentialReturn = (stake: number, odds: number) => (stake > 0 && odds > 0 ? round2(stake * odds) : 0);
@@ -30,7 +66,7 @@ const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' 
 
 /** What totals are shown in (BT-14): one kind of money, or both added up. */
 export type MoneyScope = Money | 'both';
-export const MONEY_SYMBOL: Record<MoneyScope, string> = { real: 'R$', hypothetical: 'H$', both: 'R$+H$' };
+export const MONEY_SYMBOL: Record<MoneyScope, string> = { real: 'R$', bonus: 'B$', hypothetical: 'H$', both: 'R$+H$' };
 
 /** Like formatBRL, in the bet's money: "H$ 50,00" for hypothetical dollars, "R$+H$ 50,00" for both added up. */
 export function formatMoney(n: number, money: MoneyScope = 'real', signed = false): string {

@@ -22,14 +22,15 @@ export function parseQuickAdd(line: string): QuickAdd {
   }
   const tokens = rest.split(/\s+/).filter(Boolean);
   let stake: number | null = null;
-  // "H$150" = hypothetical money (BT-14), "R$150" = real; no prefix = the last-used money
+  // "H$150" = hypothetical money (BT-14), "B$150" = bonus (BT-33), "R$150" = real; no prefix = the last-used money
   let money: Money | undefined;
-  const stakeIdx = tokens.findIndex((t) => new RegExp(String.raw`^(?:[RH]\$)?${NUM}$`, 'i').test(t));
+  const stakeIdx = tokens.findIndex((t) => new RegExp(String.raw`^(?:[RHB]\$)?${NUM}$`, 'i').test(t));
   if (stakeIdx >= 0) {
     const t = tokens[stakeIdx]!;
     if (/^H\$/i.test(t)) money = 'hypothetical';
+    else if (/^B\$/i.test(t)) money = 'bonus';
     else if (/^R\$/i.test(t)) money = 'real';
-    stake = Number(t.replace(/^[RH]\$/i, '').replace(',', '.'));
+    stake = Number(t.replace(/^[RHB]\$/i, '').replace(',', '.'));
     tokens.splice(stakeIdx, 1);
   }
   const betText = tokens.join(' ');
@@ -44,7 +45,7 @@ export function parseQuickAdd(line: string): QuickAdd {
 export function splitQuickAddText(line: string): { prefix: string; text: string } {
   const tokens = line.match(/\S+\s*/g) ?? [];
   let i = 0;
-  while (i < tokens.length && new RegExp(String.raw`^(?:[RH]\$)?${NUM}\s*$|^@\s*(?:${ODDS})?\s*$`, 'i').test(tokens[i]!)) i++;
+  while (i < tokens.length && new RegExp(String.raw`^(?:[RHB]\$)?${NUM}\s*$|^@\s*(?:${ODDS})?\s*$`, 'i').test(tokens[i]!)) i++;
   return { prefix: tokens.slice(0, i).join(''), text: tokens.slice(i).join('') };
 }
 

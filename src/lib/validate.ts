@@ -24,7 +24,7 @@ export function validateBet(raw: unknown): Validated {
   const situation = (r.situation ?? 'pregame') as BetInput['situation'];
   if (!SITUATIONS.includes(situation)) return { ok: false, error: 'Situation must be pregame or live' };
   const money = (r.money ?? 'real') as Money;
-  if (!MONEY.includes(money)) return { ok: false, error: 'Money must be real or hypothetical' };
+  if (!MONEY.includes(money)) return { ok: false, error: 'Money must be real, bonus or hypothetical' };
   const placedDate = str(r.placedDate);
   const gameDate = str(r.gameDate) || placedDate;
   if (!isValidISODate(placedDate)) return { ok: false, error: 'Placed date must be a valid date' };

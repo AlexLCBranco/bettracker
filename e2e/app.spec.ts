@@ -981,7 +981,7 @@ test('BT-14: hypothetical money (H$): quick-add and full form, never in Real tot
   await expect(page.locator(`[data-bet-id="${hypo.id}"]`)).toHaveCount(0);
   await expect(net).toHaveText('+R$ 100,00');
   await expect(page.getByTestId('stat-wagered')).toContainText('1 of');
-  await money.getByRole('radio', { name: 'Both' }).click();
+  await money.getByRole('radio', { name: 'All' }).click();
   await expect(page.locator(`[data-bet-id="${hypo.id}"]`).getByRole('button', { name: 'Edit Stake' })).toHaveText('H$ 1.000,00');
   await expect(page.locator(`[data-bet-id="${hypo.id}"]`).getByTestId('profit')).toHaveText('+H$ 2.000,00');
   await expect(net).toHaveText('+R$+H$ 2.100,00');
@@ -1021,7 +1021,7 @@ test('BT-17–22: combo rows with legs and counts, same styling on every row, ti
   expect(one.type).toBe('solo');
 
   await page.goto('/');
-  await page.getByRole('radio', { name: 'Both' }).click();
+  await page.getByRole('radio', { name: 'All' }).click();
   await page.getByLabel('Search bets').fill(tag);
   const c = page.locator(`[data-bet-id="${combo.id}"]`);
   const s = page.locator(`[data-bet-id="${solo.id}"]`);
@@ -1105,7 +1105,7 @@ test('BT-23 / BT-26: bets grouped by day, one pill per row, the muted line, spli
   await createBet(request, { placedDate: '2000-01-04', gameDate: '2000-01-04', book, betText: `${tag} next day` });
 
   await page.goto('/');
-  await page.getByRole('banner').getByRole('radio', { name: 'Both' }).click(); // the paper bet is H$
+  await page.getByRole('banner').getByRole('radio', { name: 'All' }).click(); // the paper bet is H$
   await page.getByLabel('Search bets').fill(tag);
   const top = page.locator('[data-testid=bet-row]:not([data-nested]), [data-testid=dutch-row]');
   await expect(top).toHaveCount(7);
@@ -1403,7 +1403,7 @@ test('BT-26: one Bets page: stats strip, filters with ⋯ and ?, tabs, the money
   await expect(page.getByTestId('bet-row')).toHaveCount(2);
   await expect(page.getByTestId('stat-net-value')).toHaveText('+R$ 100,00');
   await expect(page.getByTestId('stat-wagered')).toContainText('2 of');
-  await money.getByRole('radio', { name: 'Both' }).click();
+  await money.getByRole('radio', { name: 'All' }).click();
   await expect(page.getByTestId('bet-row')).toHaveCount(3);
   await money.getByRole('radio', { name: 'Real R$' }).click();
 
