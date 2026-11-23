@@ -1,19 +1,24 @@
 'use client';
 
 import { Fragment, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
-import { draftToBets, resolvedBooks, type DutchDraft } from '@/lib/dutch';
+import type { Field } from '@/lib/autocomplete';
+import { logDraft, resolvedBooks, resolvedPicks, type DraftLeg, type DutchDraft, type PickField, type ResolvedPick } from '@/lib/dutch';
+import { outcomeTable } from '@/lib/dutching';
 import { formatBRL, formatOdds } from '@/lib/money';
-import { SITUATIONS } from '@/lib/types';
+import { SITUATIONS, type Bet } from '@/lib/types';
 import { useApp } from './AppProvider';
 import { Autocomplete } from './Autocomplete';
 import { DateField } from './BetFormModal';
+import { OutcomeTable } from './OutcomeTable';
 
-/** Logs a dutch as linked solo bets in one go: shared fields once, a book per selection. */
+/** Logs a dutch as linked bets in one go: shared fields once, a book per selection, a game and market per leg. */
 export function DutchFormModal() {
   const { dutchForm } = useApp();
   if (!dutchForm) return null;
   return <Body key={dutchForm.key} />;
 }
+
+const CHIPS: Record<PickField, 'games' | 'markets'> = { game: 'games', market: 'markets' };
 
 function Body() {
   const { dutchForm, defaults, suggestFor, createMany, closeDutch, notify } = useApp();
@@ -24,28 +29,36 @@ function Body() {
   useEffect(() => first.current?.focus(), []);
 
   const set = <K extends keyof DutchDraft>(k: K, v: DutchDraft[K]) => setD((x) => ({ ...x, [k]: v }));
+  const setLeg = (i: number, k: number, patch: Partial<DraftLeg>) =>
+    setD((x) => ({ ...x, rows: x.rows.map((r, j) => (j === i ? { ...r, legs: r.legs.map((l, m) => (m === k ? { ...l, ...patch } : l)) } : r)) }));
+  const setShared = (k: number, patch: Partial<DraftLeg>) => setD((x) => ({ ...x, shared: x.shared.map((l, m) => (m === k ? { ...l, ...patch } : l)) }));
+  /** Adding or removing a chip; a removed chip is also taken off the legs that picked it. */
+  const setChips = (field: PickField, chips: string[]) =>
+    setD((x) => {
+      const keep = (l: DraftLeg) => (l[field] && !chips.includes(l[field]!) && x[CHIPS[field]].includes(l[field]!) ? { ...l, [field]: '' } : l);
+      return { ...x, [CHIPS[field]]: chips, rows: x.rows.map((r) => ({ ...r, legs: r.legs.map(keep) })), shared: x.shared.map(keep) };
+    });
+
   const books = resolvedBooks(d.rows, defaults.book);
+  const picks = { game: resolvedPicks(d, 'game'), market: resolvedPicks(d, 'market') };
   const total = d.rows.reduce((s, r) => s + r.stake, 0);
   const combined = 1 / d.rows.reduce((s, r) => s + 1 / r.odds, 0);
+  const outcomes = outcomeTable(
+    Math.round(total * 100) / 100,
+    d.rows.map((r) => r.stake),
+    d.rows.map((r) => r.odds),
+    d.shared.length > 0,
+  );
+  const isCombo = (i: number) => d.rows[i]!.legs.length + d.shared.length >= 2;
 
   const save = async () => {
     if (saving) return;
-    const v = draftToBets(d, defaults.book, crypto.randomUUID());
-    if (!v.ok) {
-      setError(v.error);
-      return;
-    }
     setSaving(true);
-    setError('');
-    try {
-      await createMany(v.value);
-      notify(`Dutch logged: ${v.value.length} bets`);
-      closeDutch();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setSaving(false);
-    }
+    const onSaved = dutchForm!.onSaved ?? ((made: Bet[]) => notify(`Dutch logged: ${made.length} bets`));
+    const r = await logDraft(d, defaults.book, crypto.randomUUID(), createMany, onSaved);
+    setSaving(false);
+    if (r.ok) closeDutch();
+    else setError(r.error);
   };
 
   const onKeyDown = (e: KeyboardEvent) => {
@@ -58,13 +71,28 @@ function Body() {
     }
   };
 
+  const pickCells = (label: string, legPicks: { game: ResolvedPick; market: ResolvedPick }, leg: DraftLeg, onPick: (patch: Partial<DraftLeg>) => void) =>
+    (['game', 'market'] as const).map((f) => (
+      <td key={f} className="py-1 pl-3">
+        <PickCell
+          field={f}
+          chips={d[CHIPS[f]]}
+          pick={leg[f] ?? ''}
+          resolved={legPicks[f]}
+          label={`${label} ${f}`}
+          suggest={(q) => suggestFor(f as Field, q, d.sport)}
+          onPick={(v) => onPick({ [f]: v })}
+        />
+      </td>
+    ));
+
   return (
     <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/70 p-4 pt-10" onMouseDown={(e) => e.target === e.currentTarget && closeDutch()}>
       <form
         role="dialog"
         aria-modal="true"
         aria-label="Log dutch"
-        className="card w-full max-w-3xl space-y-4 p-5"
+        className="card w-full max-w-5xl space-y-4 p-5"
         onKeyDown={onKeyDown}
         onSubmit={(e) => {
           e.preventDefault();
@@ -80,11 +108,11 @@ function Body() {
           <L label="Sport">
             <Autocomplete ref={first} value={d.sport} onChange={(v) => set('sport', v)} getSuggestions={(q) => suggestFor('sport', q)} aria-label="Sport" />
           </L>
-          <L label="Game">
-            <Autocomplete value={d.game} onChange={(v) => set('game', v)} getSuggestions={(q) => suggestFor('game', q, d.sport)} aria-label="Game" />
+          <L label="Game(s)" group>
+            <ChipsField chips={d.games} onChange={(c) => setChips('game', c)} suggest={(q) => suggestFor('game', q, d.sport)} label="Game(s)" noun="game" />
           </L>
-          <L label="Market">
-            <Autocomplete value={d.market} onChange={(v) => set('market', v)} getSuggestions={(q) => suggestFor('market', q, d.sport)} aria-label="Market" />
+          <L label="Market(s)" group>
+            <ChipsField chips={d.markets} onChange={(c) => setChips('market', c)} suggest={(q) => suggestFor('market', q, d.sport)} label="Market(s)" noun="market" />
           </L>
           <L label="Placed date">
             <DateField value={d.placedDate} onChange={(v) => set('placedDate', v)} aria-label="Placed date" />
@@ -110,37 +138,66 @@ function Body() {
               <th className="px-3 py-2 text-right font-medium">Odds</th>
               <th className="px-3 py-2 text-right font-medium">Stake</th>
               <th className="py-2 pl-3 font-medium">Book</th>
+              <th className="py-2 pl-3 font-medium">Game</th>
+              <th className="py-2 pl-3 font-medium">Market</th>
             </tr>
           </thead>
           <tbody>
-            {d.rows.map((r, i) => (
-              <Fragment key={i}>
-                <tr className={(r.legs?.length ?? 0) >= 2 ? '' : 'border-b border-zinc-900'} data-testid="dutch-log-row">
-                  <td className="py-2 pr-3 text-zinc-100">{r.selection || `Selection ${i + 1}`}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{formatOdds(r.odds)}</td>
-                  <td className="px-3 py-2 text-right font-semibold tabular-nums">{formatBRL(r.stake)}</td>
-                  <td className="py-1.5 pl-3">
-                    <Autocomplete
-                      value={books[i]!}
-                      onChange={(v) =>
-                        setD((x) => ({
-                          ...x,
-                          rows: x.rows.map((row, j) => (j === i ? { ...row, book: v } : row)),
-                        }))
-                      }
-                      getSuggestions={(q) => suggestFor('book', q)}
-                      aria-label={`Selection ${i + 1} book`}
-                    />
-                  </td>
-                </tr>
-                {(r.legs?.length ?? 0) >= 2 && (
-                  <tr className="border-b border-zinc-900 text-xs text-zinc-400" data-testid="dutch-log-legs">
-                    <td colSpan={4} className="pb-2 pl-4">
-                      Combination: {r.legs!.map((l) => `${l.selection}${l.odds != null ? ` @${formatOdds(l.odds)}` : ''}`).join(' + ')}
+            {d.rows.map((r, i) => {
+              const combo = isCombo(i);
+              return (
+                <Fragment key={i}>
+                  <tr className={combo ? '' : 'border-b border-zinc-900'} data-testid="dutch-log-row">
+                    <td className="py-2 pr-3 text-zinc-100">{r.selection || `Selection ${i + 1}`}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{formatOdds(r.odds)}</td>
+                    <td className="px-3 py-2 text-right font-semibold tabular-nums">{formatBRL(r.stake)}</td>
+                    <td className="py-1.5 pl-3">
+                      <Autocomplete
+                        value={books[i]!}
+                        onChange={(v) =>
+                          setD((x) => ({
+                            ...x,
+                            rows: x.rows.map((row, j) => (j === i ? { ...row, book: v } : row)),
+                          }))
+                        }
+                        getSuggestions={(q) => suggestFor('book', q)}
+                        aria-label={`Selection ${i + 1} book`}
+                      />
                     </td>
+                    {combo ? (
+                      <td colSpan={2} className="py-2 pl-3 text-xs text-zinc-500">
+                        Combination: per leg below
+                      </td>
+                    ) : (
+                      pickCells(`Selection ${i + 1}`, { game: picks.game.rows[i]![0]!, market: picks.market.rows[i]![0]! }, r.legs[0]!, (p) => setLeg(i, 0, p))
+                    )}
                   </tr>
-                )}
-              </Fragment>
+                  {combo &&
+                    r.legs.map((l, k) => (
+                      <tr key={k} className={`text-xs text-zinc-300 ${k === r.legs.length - 1 ? 'border-b border-zinc-900' : ''}`} data-testid="dutch-log-leg">
+                        <td className="py-1 pl-4 pr-3">↳ {l.selection}</td>
+                        <td className="px-3 py-1 text-right tabular-nums text-zinc-400">{l.odds != null ? formatOdds(l.odds) : ''}</td>
+                        <td colSpan={2} className="py-1 pl-3 text-zinc-500">
+                          {d.shared.length > 0 && k === r.legs.length - 1 ? `+ shared: ${d.shared.map((x) => x.selection).join(', ')}` : ''}
+                        </td>
+                        {pickCells(`Selection ${i + 1} leg ${k + 1}`, { game: picks.game.rows[i]![k]!, market: picks.market.rows[i]![k]! }, l, (p) => setLeg(i, k, p))}
+                      </tr>
+                    ))}
+                </Fragment>
+              );
+            })}
+            {d.shared.map((l, k) => (
+              <tr key={`s${k}`} className="border-b border-zinc-900 bg-indigo-500/5 text-xs text-zinc-300" data-testid="dutch-log-shared">
+                <td className="py-1 pl-2 pr-3">
+                  <span className="mr-1.5 rounded bg-indigo-500/20 px-1.5 py-0.5 font-semibold text-indigo-300">Shared</span>
+                  {l.selection}
+                </td>
+                <td className="px-3 py-1 text-right tabular-nums text-zinc-400">{l.odds != null ? formatOdds(l.odds) : ''}</td>
+                <td colSpan={2} className="py-1 pl-3 text-zinc-500">
+                  on every bet
+                </td>
+                {pickCells(`Shared leg ${k + 1}`, { game: picks.game.shared[k]!, market: picks.market.shared[k]! }, l, (p) => setShared(k, p))}
+              </tr>
             ))}
           </tbody>
           <tfoot>
@@ -148,14 +205,18 @@ function Body() {
               <td className="py-2 pr-3">{d.rows.length} bets · combined odds</td>
               <td className="px-3 py-2 text-right tabular-nums">{formatOdds(combined)}</td>
               <td className="px-3 py-2 text-right tabular-nums">{formatBRL(total)}</td>
-              <td />
+              <td colSpan={3} />
             </tr>
           </tfoot>
         </table>
         <p className="text-xs text-zinc-500">
-          Each selection is saved as its own pending bet (a selection with legs as a combination bet at its total odds), linked as one dutch. A book you change is copied to the rows below it until you
-          change those.
+          Each selection is saved as its own pending bet (a selection with legs as a combination bet at its total odds), linked as one dutch. A book, game or market you pick is copied to the rows below
+          it until you change those.
         </p>
+
+        <div className="rounded-md border border-zinc-800 p-3">
+          <OutcomeTable rows={outcomes} compact />
+        </div>
 
         {error && (
           <p role="alert" className="text-sm text-red-400">
@@ -176,11 +237,117 @@ function Body() {
   );
 }
 
-function L({ label, children }: { label: string; children: ReactNode }) {
+/** Several values as chips: Enter or comma adds the typed value, Backspace on an empty box removes the last one. */
+function ChipsField({ chips, onChange, suggest, label, noun }: { chips: string[]; onChange(chips: string[]): void; suggest(q: string): string[]; label: string; noun: string }) {
+  const [text, setText] = useState('');
+  const add = (vals: string[]) => {
+    const next = [...chips];
+    for (const v of vals.map((x) => x.trim())) if (v && !next.includes(v)) next.push(v);
+    if (next.length !== chips.length) onChange(next);
+  };
   return (
-    <label className="flex min-w-0 flex-col gap-1">
+    <div className="space-y-1">
+      {chips.length > 0 && (
+        <div className="flex flex-wrap gap-1" data-testid={`chips-${noun}`}>
+          {chips.map((c) => (
+            <span key={c} className="inline-flex items-center gap-1 rounded bg-zinc-800 px-2 py-0.5 text-xs text-zinc-200" data-testid="chip">
+              {c}
+              <button type="button" className="text-zinc-500 hover:text-white" onClick={() => onChange(chips.filter((x) => x !== c))} aria-label={`Remove ${noun} ${c}`}>
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      <Autocomplete
+        value={text}
+        placeholder={chips.length ? `Add another ${noun}` : `Type a ${noun}, Enter to add`}
+        onChange={(v) => {
+          if (v.includes(',')) {
+            const parts = v.split(',');
+            add(parts.slice(0, -1));
+            setText(parts.at(-1)!);
+          } else setText(v);
+        }}
+        onAccept={(v) => {
+          add([v]);
+          setText('');
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey && text.trim()) {
+            e.preventDefault();
+            add([text]);
+            setText('');
+          } else if (e.key === 'Backspace' && !text && chips.length) {
+            e.preventDefault();
+            onChange(chips.slice(0, -1));
+          }
+        }}
+        onBlur={() => {
+          if (text.trim()) {
+            add([text]);
+            setText('');
+          }
+        }}
+        getSuggestions={(q) => suggest(q).filter((s) => !chips.includes(s))}
+        aria-label={label}
+      />
+    </div>
+  );
+}
+
+const OTHER = '\u0000other';
+
+/** A leg's game or market: one of the chips, "Other…" to type one, or nothing (the leg above's, or the only chip). */
+function PickCell(props: { field: PickField; chips: string[]; pick: string; resolved: ResolvedPick; label: string; suggest(q: string): string[]; onPick(v: string): void }) {
+  const { chips, pick, resolved, label } = props;
+  const [other, setOther] = useState(false);
+  const missing = resolved.value == null;
+  if (other || (pick && !chips.includes(pick))) {
+    return (
+      <Autocomplete
+        autoFocus={other}
+        className="field py-0.5 text-xs"
+        value={pick}
+        onChange={props.onPick}
+        onBlur={() => setOther(false)}
+        getSuggestions={props.suggest}
+        aria-label={label}
+        placeholder={`Type a ${props.field}`}
+      />
+    );
+  }
+  const blankLabel = pick ? '(clear)' : missing ? `— pick ${props.field} —` : resolved.value || '—';
+  return (
+    <select
+      className={`field py-0.5 text-xs ${!pick ? 'text-zinc-500' : ''} ${missing ? 'border-red-500' : ''}`}
+      value={pick}
+      aria-label={label}
+      aria-invalid={missing}
+      title={!pick && resolved.value ? `${resolved.value} (not picked on this leg: the only one, or copied from above)` : undefined}
+      onChange={(e) => {
+        if (e.target.value === OTHER) setOther(true);
+        else props.onPick(e.target.value);
+      }}
+    >
+      <option value="">{blankLabel}</option>
+      {chips.map((c) => (
+        <option key={c} value={c}>
+          {c}
+        </option>
+      ))}
+      <option value={OTHER}>Other…</option>
+    </select>
+  );
+}
+
+/** A labelled field. `group`: a div, for a field holding several controls (chips and their × buttons). */
+function L({ label, group, children }: { label: string; group?: boolean; children: ReactNode }) {
+  const Tag = group ? 'div' : 'label';
+  return (
+    <Tag className="flex min-w-0 flex-col gap-1">
       <span className="text-xs text-zinc-400">{label}</span>
       {children}
-    </label>
+    </Tag>
   );
 }

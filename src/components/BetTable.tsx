@@ -31,12 +31,43 @@ export function ProfitText({ value, pending }: { value: number; pending?: boolea
   return <span className={value > 0 ? 'text-emerald-400' : value < 0 ? 'text-red-400' : 'text-zinc-400'}>{formatBRL(value, true)}</span>;
 }
 
-/** Sport / game shown for a bet: the solo leg's, or the combination's legs joined. */
-function legSummary(b: Bet, k: 'sport' | 'game') {
-  const vals = [...new Set(b.legs.map((l) => l[k]).filter(Boolean))];
-  if (b.type === 'combination' && vals.length > 1) return k === 'sport' ? vals.join(', ') : `${b.legs.length} legs`;
-  return vals[0] ?? '';
+/** Sport shown for a combination: its legs' sports joined. */
+function legSports(b: Bet) {
+  return [...new Set(b.legs.map((l) => l.sport).filter(Boolean))].join(', ');
 }
+
+/**
+ * The Game cell of a combination or a dutch: the one game its legs share, or "2 games" when they differ, followed by
+ * "· 2 markets" when the legs' markets differ (there is no Market column).
+ */
+function gamesAndMarkets(legs: Bet['legs']) {
+  const distinctOf = (k: 'game' | 'market') => [...new Set(legs.map((l) => l[k]).filter(Boolean))];
+  const games = distinctOf('game');
+  const markets = distinctOf('market');
+  if (games.length <= 1 && markets.length <= 1) return games[0] ?? '';
+  return (
+    <>
+      {games.length > 1 ? <Several vals={games} noun="games" /> : games[0]}
+      {markets.length > 1 && (
+        <>
+          {games.length ? <span className="text-zinc-600"> · </span> : null}
+          <Several vals={markets} noun="markets" />
+        </>
+      )}
+    </>
+  );
+}
+
+/** "2 games" / "2 markets" with the values in a tooltip. */
+function Several({ vals, noun }: { vals: string[]; noun: string }) {
+  return (
+    <span title={vals.join(', ')} className="underline decoration-dotted underline-offset-2" data-testid={`several-${noun}`}>
+      {vals.length} {noun}
+    </span>
+  );
+}
+
+
 
 /**
  * Bets as table rows, each cell editable inline. A dutch is one row (total stake, combined odds, net profit) that
@@ -125,7 +156,7 @@ function DutchRow({ bets, dutchId, expanded, toggle }: { bets: Bet[]; dutchId: s
       <td className={cell}>{formatDate(placed)}</td>
       <td className={cell}>{formatDate(game)}</td>
       <td className={cell}>{shared(bets, (b) => b.legs[0]?.sport ?? '')}</td>
-      <td className={cell}>{shared(bets, (b) => b.legs[0]?.game ?? '')}</td>
+      <td className={cell}>{gamesAndMarkets(bets.flatMap((b) => b.legs))}</td>
       <td className={`${cell} min-w-48`}>
         <span className="mr-1.5 rounded bg-indigo-500/20 px-1.5 py-0.5 text-xs font-semibold text-indigo-300">Dutch</span>
         {names}
@@ -205,8 +236,8 @@ function BetRow({ b, expanded, toggle, nested }: { b: Bet; expanded: boolean; to
           </>
         ) : (
           <>
-            <td className="px-2 py-1.5 text-zinc-300">{legSummary(b, 'sport')}</td>
-            <td className="px-2 py-1.5 text-zinc-300">{legSummary(b, 'game') || <span className="text-zinc-600">Combination</span>}</td>
+            <td className="px-2 py-1.5 text-zinc-300">{legSports(b)}</td>
+            <td className="px-2 py-1.5 text-zinc-300">{gamesAndMarkets(b.legs) || <span className="text-zinc-600">Combination</span>}</td>
           </>
         )}
         <Cell kind="text" field="betText" value={b.betText} display={betDisplay} label="Bet" onSave={(v) => save({ betText: v })} wide />

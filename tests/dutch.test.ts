@@ -102,7 +102,7 @@ describe('log as bets', () => {
   });
 
   it('one pending solo bet per selection, all with the same dutch id, unrounded odds kept', () => {
-    const d = { ...newDutchDraft([{ ...rows[0]!, odds: 1 + 100 / 150 }, rows[1]!], { sport: 'Football', situation: 'live' }, '2026-11-22'), game: 'A x B', market: '1X2' };
+    const d = { ...newDutchDraft([{ ...rows[0]!, odds: 1 + 100 / 150 }, rows[1]!], { sport: 'Football', situation: 'live' }, '2026-11-22'), games: ['A x B'], markets: ['1X2'] };
     const r = draftToBets(d, 'Betano', 'dutch-1', '2026-11-22');
     if (!r.ok) throw new Error(r.error);
     expect(r.value).toHaveLength(2);
@@ -121,9 +121,10 @@ describe('log as bets', () => {
     const d = dutchBets('o', [{ book: 'A', stake: 60, odds: 2, result: 'won', placedDate: '2026-01-01' }, { book: 'B', stake: 40, odds: 3, result: 'lost' }]);
     const draft = duplicateDutchDraft(d, '2026-11-22');
     expect(draft.rows).toEqual([
-      { selection: 'Sel 1', odds: 2, stake: 60, book: 'A' },
-      { selection: 'Sel 2', odds: 3, stake: 40, book: 'B' },
+      { selection: 'Sel 1', odds: 2, stake: 60, book: 'A', legs: [{ selection: 'Sel 1', odds: 2, game: 'Lakers vs Celtics', market: 'Moneyline' }] },
+      { selection: 'Sel 2', odds: 3, stake: 40, book: 'B', legs: [{ selection: 'Sel 2', odds: 3, game: 'Lakers vs Celtics', market: 'Moneyline' }] },
     ]);
+    expect(draft).toMatchObject({ games: ['Lakers vs Celtics'], markets: ['Moneyline'], shared: [] });
     expect(draft.placedDate).toBe('22/11/2026');
   });
 });

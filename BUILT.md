@@ -3,6 +3,12 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-22
+- BT-9 — Betting Tool clears after "Log as bets" (v0.8.0)
+  Once a dutch is saved the selections and shared legs clear (total stake and rounding kept, a reload stays empty) and a note says "Dutch logged: 2 bets, R$ 100,00" with View in History and Undo clear.
+- BT-8 — Log dutch: Game(s) and Market(s) picked per leg (v0.8.0)
+  The log form takes several games and markets as chips (Enter or comma adds, Backspace removes), every leg and shared leg picks its own (a pick fills the legs below), and History shows "2 games · 2 markets" where a bet or dutch spans several.
+- BT-7 — Betting Tool: "If this many win" outcome table (v0.8.0)
+  Under the stakes a table shows returns, profit and ROI if 0, 1, 2 … every selection wins (ranges when returns differ), highlights the break-even row, adds "Shared leg loses" with shared legs, and a compact copy appears in the log form; the tile is now "Profit if 1 wins".
 - BT-6 — Dutch hit count: "1/2" badge and misses counted once (v0.7.0)
   Every dutch shows a coloured hits/splits badge (green all, amber some, red none, grey while pending) with its distinct missed legs, a lost shared leg counted once; expanded dutches mark each split hit/miss and lost legs in red, and Analytics (Type) adds Dutch hits.
 - BT-5 — Dutch of combinations: splits with several legs and a shared leg (v0.6.0)

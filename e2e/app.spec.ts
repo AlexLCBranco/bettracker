@@ -326,7 +326,8 @@ test('dutch: odds in any format, log as linked bets, one group row, settle with 
 
   await page.getByRole('button', { name: 'Log as bets' }).click();
   const dialog = page.getByRole('dialog', { name: 'Log dutch' });
-  await dialog.getByLabel('Game', { exact: true }).fill(`${tag} game`);
+  await dialog.getByLabel('Game(s)').fill(`${tag} game`);
+  await dialog.getByLabel('Game(s)').press('Enter'); // adds it as a chip; with one chip every leg gets it
   await dialog.getByLabel('Placed date').fill('01/01/2000');
   await dialog.getByLabel('Game date').fill('01/01/2000');
   await dialog.getByLabel('Selection 1 book').fill(`${tag} BookA`);
@@ -334,6 +335,16 @@ test('dutch: odds in any format, log as linked bets, one group row, settle with 
   await dialog.getByLabel('Selection 3 book').fill(`${tag} BookB`);
   await dialog.getByRole('button', { name: 'Log 3 bets' }).click();
   await expect(dialog).toBeHidden();
+
+  // BT-9: the tool clears (stake kept) and says so; Undo clear puts the calculation back
+  await expect(page.getByTestId('dutch-logged')).toContainText('Dutch logged: 3 bets, R$ 100,00');
+  await expect(page.getByLabel('Selection 1 name')).toHaveValue('');
+  await expect(page.getByLabel('Selection 3 odds')).toHaveValue('');
+  await expect(page.getByLabel('Total stake')).toHaveValue('100');
+  await page.getByRole('button', { name: 'Undo clear' }).click();
+  await expect(page.getByLabel('Selection 1 name')).toHaveValue('Home');
+  await expect(page.getByLabel('Selection 3 format')).toHaveValue('hongkong');
+  await expect(page.getByTestId('dutch-logged')).toHaveCount(0);
 
   const logged = await betsTagged(request, tag);
   expect(logged).toHaveLength(3);
@@ -418,12 +429,21 @@ test('dutch of combinations: shared leg, estimated and typed total, logged as co
 
   await page.getByRole('button', { name: 'Log as bets' }).click();
   const dialog = page.getByRole('dialog', { name: 'Log dutch' });
-  await expect(dialog.getByTestId('dutch-log-legs')).toHaveCount(2);
+  await expect(dialog.getByTestId('dutch-log-leg')).toHaveCount(2);
+  await expect(dialog.getByTestId('dutch-log-shared')).toHaveCount(1);
   await dialog.getByLabel('Placed date').fill('01/01/2000');
   await dialog.getByLabel('Game date').fill('01/01/2000');
   await dialog.getByLabel('Selection 1 book').fill(`${tag} Book`);
   await dialog.getByRole('button', { name: 'Log 2 bets' }).click();
   await expect(dialog).toBeHidden();
+
+  // BT-9: cleared, and a reload does not bring the logged dutch back
+  await expect(page.getByLabel('Shared leg 1 name')).toHaveCount(0);
+  await expect(page.getByLabel('Selection 1 name')).toHaveValue('');
+  await page.reload();
+  await expect(page.getByLabel('Selection 1 name')).toHaveValue('');
+  await expect(page.getByLabel('Shared leg 1 name')).toHaveCount(0);
+  await expect(page.getByLabel('Total stake')).toHaveValue('100');
 
   const logged = (await betsTagged(request, tag)).sort((a, b) => a.betText.localeCompare(b.betText));
   expect(logged).toHaveLength(2);
@@ -553,4 +573,110 @@ test('dutch hit count: the owner example settled three ways shows 0/2 · 1 miss,
   await page.getByRole('tab', { name: 'Type' }).click();
   await expect(page.getByTestId('dutch-hits')).toBeVisible();
   for (const id of ['hits-all', 'hits-none', 'hits-shared']) expect(Number(await page.getByTestId(`${id}-value`).textContent())).toBeGreaterThanOrEqual(1);
+});
+
+test('betting tool: "If this many win" table with ranges and the break-even row, also in the log form', async ({ page }) => {
+  await page.goto('/betting-tool');
+  await page.getByRole('button', { name: 'Clear all' }).click();
+  await page.getByLabel('Total stake').fill('100');
+  await page.getByLabel('Round stakes to').selectOption({ label: 'R$ 1' });
+  for (const n of [1, 2, 3]) await page.getByLabel(`Selection ${n} odds`).fill('3');
+  // stakes 34 / 33 / 33 return 102 / 99 / 99
+  await expect(page.getByTestId('dutch-stake')).toHaveText(['R$ 34,00', 'R$ 33,00', 'R$ 33,00']);
+  await expect(page.getByTestId('dutch-profit')).toContainText('Profit if 1 wins');
+  const table = page.getByTestId('outcome-table');
+  const rows = table.getByTestId('outcome-row');
+  await expect(rows).toHaveCount(4);
+  await expect(table.getByTestId('outcome-returns')).toHaveText(['R$ 0,00', 'R$ 99,00 – R$ 102,00', 'R$ 198,00 – R$ 201,00', 'R$ 300,00']);
+  await expect(table.getByTestId('outcome-profit')).toHaveText(['-R$ 100,00', '-R$ 1,00 – +R$ 2,00', '+R$ 98,00 – +R$ 101,00', '+R$ 200,00']);
+  await expect(table.locator('[data-testid=outcome-row][data-break-even]')).toHaveCount(1);
+  await expect(rows.nth(2)).toHaveAttribute('data-break-even', 'true');
+  await expect(table.getByTestId('outcome-break-even')).toHaveText('break-even from 2 wins');
+
+  // a shared leg adds "Shared leg loses" on top
+  await page.getByRole('button', { name: '+ Shared leg' }).click();
+  await page.getByLabel('Shared leg 1 name').fill('Celtics W');
+  await page.getByLabel('Shared leg 1 odds').fill('1.3');
+  await expect(rows).toHaveCount(5);
+  await expect(rows.first()).toContainText('Shared leg loses');
+  await expect(rows.first()).toContainText('-R$ 100,00');
+
+  // invalid: hidden with the rest of the results
+  await page.getByLabel('Total stake').fill('0');
+  await expect(table).toHaveCount(0);
+  await page.getByLabel('Total stake').fill('100');
+
+  // the log form shows a compact copy
+  await page.getByRole('button', { name: 'Log as bets' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Log dutch' });
+  await expect(dialog.getByTestId('outcome-row')).toHaveCount(5);
+  await expect(dialog.getByTestId('outcome-break-even')).toHaveText(/^break-even from \d wins?$/);
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+});
+
+test('log dutch: Game(s) and Market(s) as chips, picked per leg (owner example), saved per leg, "2 games · 2 markets" in History', async ({ page, request, tag }) => {
+  await page.goto('/betting-tool');
+  await page.getByRole('button', { name: 'Clear all' }).click();
+  await page.getByLabel('Total stake').fill('100');
+  await page.getByRole('button', { name: '+ Shared leg' }).click();
+  await page.getByLabel('Shared leg 1 name').fill('Celtics W');
+  await page.getByLabel('Shared leg 1 odds').fill('1,3');
+  await page.getByLabel('Selection 1 name').fill('McCain 25 pts');
+  await page.getByLabel('Selection 1 odds').fill('+220');
+  await page.getByLabel('Selection 2 name').fill('Mitchell 30 pts');
+  await page.getByLabel('Selection 2 odds').fill('+220');
+  await page.getByRole('button', { name: 'Log as bets' }).click();
+
+  const dialog = page.getByRole('dialog', { name: 'Log dutch' });
+  await dialog.getByLabel('Placed date').fill('01/01/2000');
+  await dialog.getByLabel('Game date').fill('01/01/2000');
+  await dialog.getByLabel('Selection 1 book').fill(`${tag} Book`);
+  const games = dialog.getByLabel('Game(s)');
+  await games.fill(`${tag} CLE x BOS, ${tag} NYK x MIA,`); // comma adds chips
+  const markets = dialog.getByLabel('Market(s)');
+  await markets.fill('ML');
+  await markets.press('Enter');
+  await markets.fill('PTS');
+  await markets.press('Enter');
+  await markets.fill('Oops');
+  await markets.press('Enter');
+  await markets.press('Backspace'); // empty box: removes the last chip
+  await expect(dialog.getByTestId('chips-game').getByTestId('chip')).toHaveText([`${tag} CLE x BOS×`, `${tag} NYK x MIA×`]);
+  await expect(dialog.getByTestId('chips-market').getByTestId('chip')).toHaveText(['ML×', 'PTS×']);
+
+  // several chips and nothing picked: refused
+  await dialog.getByRole('button', { name: 'Log 2 bets' }).click();
+  await expect(dialog.getByRole('alert')).toHaveText('Pick the game for each leg');
+
+  await dialog.getByLabel('Selection 1 leg 1 game').selectOption(`${tag} CLE x BOS`);
+  await dialog.getByLabel('Selection 2 leg 1 game').selectOption(`${tag} NYK x MIA`);
+  await dialog.getByLabel('Selection 1 leg 1 market').selectOption('PTS'); // quick fill: Mitchell below gets PTS too
+  await dialog.getByLabel('Shared leg 1 game').selectOption(`${tag} CLE x BOS`);
+  await dialog.getByRole('button', { name: 'Log 2 bets' }).click();
+  await expect(dialog.getByRole('alert')).toHaveText('Pick the market for each leg');
+  await dialog.getByLabel('Shared leg 1 market').selectOption('ML');
+  await dialog.getByRole('button', { name: 'Log 2 bets' }).click();
+  await expect(dialog).toBeHidden();
+
+  const logged = (await betsTagged(request, tag)).sort((a, b) => a.betText.localeCompare(b.betText));
+  expect(logged.map((b) => b.legs.map((l) => [l.selection, l.game, l.market]))).toEqual([
+    [
+      ['McCain 25 pts', `${tag} CLE x BOS`, 'PTS'],
+      ['Celtics W', `${tag} CLE x BOS`, 'ML'],
+    ],
+    [
+      ['Mitchell 30 pts', `${tag} NYK x MIA`, 'PTS'],
+      ['Celtics W', `${tag} CLE x BOS`, 'ML'],
+    ],
+  ]);
+
+  await page.goto('/history');
+  await page.getByLabel('Search bets').fill(tag);
+  const group = page.getByTestId('dutch-row');
+  await expect(group.getByTestId('several-games')).toHaveText('2 games');
+  await expect(group.getByTestId('several-games')).toHaveAttribute('title', `${tag} CLE x BOS, ${tag} NYK x MIA`);
+  await expect(group.getByTestId('several-markets')).toHaveText('2 markets');
+  await group.getByRole('button', { name: 'Show bets' }).click();
+  // each bet: one game, two markets
+  await expect(page.locator('[data-testid=bet-row][data-nested]').first().getByTestId('several-markets')).toHaveText('2 markets');
 });

@@ -1,11 +1,13 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useApp } from '@/components/AppProvider';
+import { OutcomeTable } from '@/components/OutcomeTable';
 import { newDutchDraft } from '@/lib/dutch';
-import { dutch, type DutchError } from '@/lib/dutching';
+import { dutch, outcomeTable, type DutchError } from '@/lib/dutching';
 import { formatBRL, formatOdds, ODDS_FORMAT_LABEL, ODDS_FORMATS, parseNumber, parseOdds, type OddsFormat } from '@/lib/money';
-import { showsLegs, splitCalc, type LegText, type SplitText } from '@/lib/splits';
+import { sharedUsed, showsLegs, splitCalc, type LegText, type SplitText } from '@/lib/splits';
 import { formatPercent } from '@/lib/stats';
 
 interface ToolState {
@@ -68,10 +70,22 @@ export default function BettingToolPage() {
 
 const ROW_GRID = 'grid grid-cols-[minmax(0,1fr)_7rem_7.5rem_2rem] gap-2';
 
+/** What "Clear all" leaves: no selections or shared legs; the total stake and rounding are kept. */
+const cleared =(s: ToolState): ToolState => ({ ...INITIAL, stake: s.stake, step: s.step });
+
 function Tool() {
   const { defaults, openDutch } = useApp();
   const [s, setS] = useState<ToolState>(loadSaved);
   useEffect(() => localStorage.setItem(STORAGE_KEY, JSON.stringify(s)), [s]);
+  // BT-9: after a dutch is logged the tool clears; this keeps what it held, for "Undo clear". Shown while the tool is
+  // still exactly as it was cleared (any edit hides it) and for 8 s at most.
+  const [logged, setLogged] = useState<{ count: number; stake: number; before: ToolState; after: ToolState } | null>(null);
+  useEffect(() => {
+    if (!logged) return;
+    const t = setTimeout(() => setLogged(null), 8000);
+    return () => clearTimeout(t);
+  }, [logged]);
+  const showLogged = logged && s === logged.after ? logged : null;
 
   const setRow = (id: number, patch: Partial<SplitText>) =>
     setS((x) => ({
@@ -109,29 +123,38 @@ function Tool() {
     return c.legs.map((l, k) => l.name || (k === 0 ? `Selection ${n}` : `Leg ${k + 1}`)).join(' + ');
   };
 
+  const sharedCount = sharedUsed(s.shared).length;
+  const outcomes = ok ? outcomeTable(stake, ok.stakes, oddsValues, sharedCount > 0) : [];
+
   const logAsBets = () => {
     if (!ok) return;
+    const before = s;
+    // the split's own legs; its shared legs (the last `sharedCount` of a combination's legs) go to the draft once
+    const legName = (name: string, k: number, n: number) => name || (k === 0 ? `Selection ${n}` : `Leg ${k + 1}`);
+    const first = used[0] ? calcs.get(used[0].id)! : null;
+    const sharedLegs = first?.combo ? first.legs.slice(first.legs.length - sharedCount).map((l, k) => ({ selection: l.name || `Shared leg ${k + 1}`, odds: l.odds })) : [];
     openDutch(
       newDutchDraft(
         used.map((r, i) => {
           const c = calcs.get(r.id)!;
           const n = s.rows.indexOf(r) + 1;
+          const own = c.combo ? c.legs.slice(0, c.legs.length - sharedCount) : c.legs;
           return {
             selection: splitName(r),
             odds: oddsValues[i]!,
             stake: ok.stakes[i]!,
-            ...(c.combo
-              ? {
-                  legs: c.legs.map((l, k) => ({
-                    selection: l.name || (k === 0 ? `Selection ${n}` : `Leg ${k + 1}`),
-                    odds: l.odds,
-                  })),
-                }
-              : {}),
+            legs: own.map((l, k) => ({ selection: legName(l.name, k, n), odds: c.combo ? l.odds : oddsValues[i]! })),
           };
         }),
         defaults,
+        undefined,
+        sharedLegs,
       ),
+      (bets) => {
+        const after = cleared(before);
+        setS(after);
+        setLogged({ count: bets.length, stake: bets.reduce((t, b) => t + b.stake, 0), before, after });
+      },
     );
   };
 
@@ -146,6 +169,28 @@ function Tool() {
           probability (40%). A selection can be a combination: add legs to it, or a shared leg that is part of every selection.
         </p>
       </div>
+
+      {showLogged && (
+        <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-emerald-800 bg-emerald-950 px-4 py-2 text-sm text-emerald-200" data-testid="dutch-logged">
+          <span>
+            Dutch logged: {showLogged.count} bets, {formatBRL(showLogged.stake)}
+          </span>
+          <span className="text-emerald-700">·</span>
+          <Link href="/history" className="underline hover:text-white">
+            View in History
+          </Link>
+          <span className="text-emerald-700">·</span>
+          <button
+            className="underline hover:text-white"
+            onClick={() => {
+              setS(showLogged.before);
+              setLogged(null);
+            }}
+          >
+            Undo clear
+          </button>
+        </div>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <section className="card space-y-4 p-5">
@@ -244,7 +289,7 @@ function Tool() {
             <button className="btn" onClick={addRow}>
               + Add selection
             </button>
-            <button className="btn" onClick={() => setS({ ...INITIAL, stake: s.stake, step: s.step })}>
+            <button className="btn" onClick={() => setS(cleared(s))}>
               Clear all
             </button>
             <button className="btn btn-primary ml-auto" disabled={!ok} onClick={logAsBets} title={ok ? 'Save one pending bet per selection, linked as one dutch' : 'Needs a valid calculation'}>
@@ -264,7 +309,7 @@ function Tool() {
                 <Tile label="Every selection returns" testId="dutch-return" sub={ok.maxReturn > ok.minReturn ? `up to ${formatBRL(ok.maxReturn)}` : undefined}>
                   {formatBRL(ok.minReturn)}
                 </Tile>
-                <Tile label="Profit if one wins" testId="dutch-profit" sub={ok.maxProfit > ok.minProfit ? `up to ${formatBRL(ok.maxProfit, true)}` : undefined}>
+                <Tile label="Profit if 1 wins" testId="dutch-profit" sub={ok.maxProfit > ok.minProfit ? `up to ${formatBRL(ok.maxProfit, true)}` : undefined}>
                   <span className={ok.minProfit > 0 ? 'text-emerald-400' : ok.minProfit < 0 ? 'text-red-400' : ''}>{formatBRL(ok.minProfit, true)}</span>
                 </Tile>
                 <Tile label="Combined odds" testId="dutch-odds" sub={`book ${formatPercent(ok.book)}`}>
@@ -307,6 +352,9 @@ function Tool() {
                 </tbody>
               </table>
               <p className="text-xs text-zinc-500">Lower odds get more of the stake. Rounding can make returns differ by a few centavos.</p>
+              <div className="border-t border-zinc-800 pt-4">
+                <OutcomeTable rows={outcomes} />
+              </div>
             </>
           )}
         </section>

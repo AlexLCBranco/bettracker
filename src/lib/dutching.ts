@@ -54,3 +54,39 @@ export function dutch(total: number, odds: number[], step = 0.01): DutchResult |
     combinedOdds: 1 / book,
   };
 }
+
+// ---- "If this many win" (BT-7) ----
+// Selections can win together (player props), so the summary shows every count from 0 to all. Returns for k wins
+// range from the k lowest returns to the k highest; profit = returns − total stake, ROI = profit / total stake.
+
+export interface OutcomeRow {
+  /** Number of selections that win; 'shared' = a shared leg loses, so every selection loses. */
+  wins: number | 'shared';
+  minReturn: number;
+  maxReturn: number;
+  minProfit: number;
+  maxProfit: number;
+  minRoi: number;
+  maxRoi: number;
+  /** The first row whose profit is above 0 whichever selections win. */
+  breakEven: boolean;
+}
+
+export function outcomeTable(total: number, stakes: number[], odds: number[], hasShared = false): OutcomeRow[] {
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  const returns = stakes.map((s, i) => r2(s * odds[i]!)).sort((a, b) => a - b);
+  const row = (wins: OutcomeRow['wins'], lo: number, hi: number): OutcomeRow => {
+    const minProfit = r2(lo - total);
+    const maxProfit = r2(hi - total);
+    return { wins, minReturn: lo, maxReturn: hi, minProfit, maxProfit, minRoi: minProfit / total, maxRoi: maxProfit / total, breakEven: false };
+  };
+  const rows: OutcomeRow[] = hasShared ? [row('shared', 0, 0)] : [];
+  for (let k = 0; k <= returns.length; k++) {
+    const lo = r2(returns.slice(0, k).reduce((a, b) => a + b, 0));
+    const hi = r2(returns.slice(returns.length - k).reduce((a, b) => a + b, 0));
+    rows.push(row(k, k === 0 ? 0 : lo, k === 0 ? 0 : hi));
+  }
+  const first = rows.find((r) => r.minProfit > 0);
+  if (first) first.breakEven = true;
+  return rows;
+}

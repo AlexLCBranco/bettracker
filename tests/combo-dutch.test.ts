@@ -76,9 +76,10 @@ describe('draftToBets: combination splits', () => {
       { sport: 'Basketball', situation: 'pregame' },
       '2026-11-22',
     );
+  const legNoPicks = (l: { selection: string; odds: number | null }) => ({ selection: l.selection, odds: l.odds });
 
   it('saves a 2+ leg split as a combination at its total odds, own legs then shared, bet text joined; one leg stays solo', () => {
-    const d = { ...draft(), game: 'Celtics vs Cavs', market: 'Props' };
+    const d = { ...draft(), games: ['Celtics vs Cavs'], markets: ['Props'] };
     const r = draftToBets(d, 'Bet365', 'dx', '2026-11-22');
     if (!r.ok) throw new Error(r.error);
     const [combo, solo] = r.value;
@@ -97,8 +98,13 @@ describe('draftToBets: combination splits', () => {
     if (!r.ok) throw new Error(r.error);
     const bets = r.value.map((b, i) => ({ ...b, id: `b${i}`, createdAt: `2026-11-22T00:00:0${i}Z`, updatedAt: '', legs: b.legs.map((l, j) => ({ ...l, id: `l${i}${j}` })) }) as Bet);
     const dup = duplicateDutchDraft(bets, '2026-11-23');
-    expect(dup.rows[0]).toMatchObject({ selection: 'McCain 25 pts + Celtics W', odds: 4, legs: [{ selection: 'McCain 25 pts', odds: 3.2 }, { selection: 'Celtics W', odds: 1.3 }] });
-    expect(dup.rows[1]!.legs).toBeUndefined();
+    expect(dup.rows[0]).toMatchObject({ selection: 'McCain 25 pts + Celtics W', odds: 4 });
+    expect(dup.rows[0]!.legs.map(legNoPicks)).toEqual([
+      { selection: 'McCain 25 pts', odds: 3.2 },
+      { selection: 'Celtics W', odds: 1.3 },
+    ]);
+    expect(dup.rows[1]!.legs.map(legNoPicks)).toEqual([{ selection: 'Mitchell 30 pts', odds: 3.2 }]);
+    expect(dup.shared).toEqual([]);
     expect(betLabel(bets[0]!)).toBe('McCain 25 pts + Celtics W');
     expect(betLabel(bets[1]!)).toBe('Mitchell 30 pts');
   });

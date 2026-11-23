@@ -3,7 +3,7 @@
 
 import { formatDate, parseDateInput, todayISO } from './dates';
 import { profit } from './money';
-import type { Bet, BetInput, Result, Situation } from './types';
+import type { Bet, BetInput, Leg, Result, Situation } from './types';
 import { validateBet } from './validate';
 
 export type BetRow = { kind: 'bet'; bet: Bet } | { kind: 'dutch'; dutchId: string; bets: Bet[] };
@@ -135,18 +135,22 @@ export function withWholeGroups(all: Bet[], matched: Bet[]): Bet[] {
 }
 
 // ---- The "log as bets" form ----
+// Game and market are chips (BT-8): the dutch lists every game and market it uses, and each leg picks its own.
 
 export interface DraftLeg {
   selection: string;
   /** Unrounded decimal odds; null = not entered. */
   odds: number | null;
+  /** Picked game / market; '' or missing = nothing picked (see resolvedPicks). */
+  game?: string;
+  market?: string;
 }
 
 export interface DutchDraftRow {
   /** For a combination split: its leg names joined with " + ". */
   selection: string;
-  /** 2+ legs (own then shared) = a combination bet; missing or fewer = a solo bet. */
-  legs?: DraftLeg[];
+  /** The split's own legs (a solo split: one, its selection). The draft's shared legs are added to every row. */
+  legs: DraftLeg[];
   /** Unrounded decimal odds (a combination's total odds). */
   odds: number;
   stake: number;
@@ -156,45 +160,53 @@ export interface DutchDraftRow {
 
 export interface DutchDraft {
   rows: DutchDraftRow[];
+  /** Legs that are part of every split, set once and copied to every bet. */
+  shared: DraftLeg[];
   sport: string;
-  game: string;
-  market: string;
+  /** The chips: every game / market this dutch uses. */
+  games: string[];
+  markets: string[];
   situation: Situation;
   /** dd/mm/yyyy as typed */
   placedDate: string;
   gameDate: string;
 }
 
-export function newDutchDraft(rows: { selection: string; odds: number; stake: number; legs?: DraftLeg[] }[], defaults: { sport: string; situation: Situation }, today = todayISO()): DutchDraft {
+type DraftRowIn = { selection: string; odds: number; stake: number; legs?: DraftLeg[] };
+
+export function newDutchDraft(rows: DraftRowIn[], defaults: { sport: string; situation: Situation }, today = todayISO(), shared: DraftLeg[] = []): DutchDraft {
   return {
-    rows: rows.map((r) => ({ ...r, book: null })),
+    rows: rows.map((r) => ({ ...r, legs: r.legs?.length ? r.legs : [{ selection: r.selection, odds: r.odds }], book: null })),
+    shared,
     sport: defaults.sport,
-    game: '',
-    market: '',
+    games: [],
+    markets: [],
     situation: defaults.situation,
     placedDate: formatDate(today),
     gameDate: formatDate(today),
   };
 }
 
-/** Duplicate a dutch: the same selections, odds, stakes and books, dated today, to log as a new dutch. */
+const distinct = (xs: string[]) => xs.map((x) => x.trim()).filter((x, i, a) => x && a.indexOf(x) === i);
+
+/** Duplicate a dutch: the same selections, odds, stakes, books, games and markets, dated today, to log as a new dutch. */
 export function duplicateDutchDraft(bets: Bet[], today = todayISO()): DutchDraft {
-  const first = bets[0]!.legs[0];
+  const sharedNames = sharedLegNames(bets);
+  const isShared = (sel: string) => sharedNames.some((n) => isLeg(sel, n));
+  const pick = (l: Leg): DraftLeg => ({ selection: l.selection, odds: l.odds, game: l.game, market: l.market });
+  const allLegs = bets.flatMap((b) => b.legs);
   return {
     rows: bets.map((b) => ({
       selection: betLabel(b),
       odds: b.odds,
       stake: b.stake,
       book: b.book,
-      ...(b.type === 'combination' && b.legs.length >= 2
-        ? {
-            legs: b.legs.map((l) => ({ selection: l.selection, odds: l.odds })),
-          }
-        : {}),
+      legs: b.legs.length ? b.legs.filter((l) => !isShared(l.selection)).map(pick) : [{ selection: betLabel(b), odds: b.odds }],
     })),
-    sport: first?.sport ?? '',
-    game: first?.game ?? '',
-    market: first?.market ?? '',
+    shared: sharedNames.map((n) => pick(bets[0]!.legs.find((l) => isLeg(l.selection, n))!)),
+    sport: bets[0]!.legs[0]?.sport ?? '',
+    games: distinct(allLegs.map((l) => l.game)),
+    markets: distinct(allLegs.map((l) => l.market)),
     situation: bets[0]!.situation,
     placedDate: formatDate(today),
     gameDate: formatDate(today),
@@ -208,26 +220,63 @@ export function resolvedBooks(rows: DutchDraftRow[], lastBook: string): string[]
   return out;
 }
 
-/** One solo bet per row, pending, all with the same new dutch id. */
+export type PickField = 'game' | 'market';
+
+export interface ResolvedPick {
+  /** The value the leg gets; null = nothing picked while there are several chips (the form is invalid). */
+  value: string | null;
+  /** Not picked on this leg: the only chip, or copied from the leg above. */
+  inherited: boolean;
+}
+
+/**
+ * The game or market each leg really gets. Own legs, row by row: the leg's own pick, else the one picked above it
+ * (quick fill, like books), else the only chip, else '' when there are no chips. Shared legs: their own pick, else the
+ * only chip. With several chips and nothing to go on: null.
+ */
+export function resolvedPicks(d: DutchDraft, field: PickField): { rows: ResolvedPick[][]; shared: ResolvedPick[] } {
+  const chips = field === 'game' ? d.games : d.markets;
+  const fallback = chips.length === 0 ? '' : chips.length === 1 ? chips[0]! : null;
+  let above: string | null = null;
+  const rows = d.rows.map((r) =>
+    r.legs.map((l): ResolvedPick => {
+      const own = (l[field] ?? '').trim();
+      if (own) {
+        above = own;
+        return { value: own, inherited: false };
+      }
+      return { value: above ?? fallback, inherited: true };
+    }),
+  );
+  const shared = d.shared.map((l): ResolvedPick => {
+    const own = (l[field] ?? '').trim();
+    return own ? { value: own, inherited: false } : { value: fallback, inherited: true };
+  });
+  return { rows, shared };
+}
+
+/** One pending bet per row (a combination when it has 2+ legs with the shared ones), all with the same new dutch id. */
 export function draftToBets(d: DutchDraft, lastBook: string, dutchId: string, today = todayISO()): { ok: true; value: BetInput[] } | { ok: false; error: string } {
   if (d.rows.length < 2) return { ok: false, error: 'A dutch needs at least two selections' };
   const placedDate = d.placedDate.trim() ? parseDateInput(d.placedDate, today) : today;
   if (!placedDate) return { ok: false, error: 'Placed date: use dd/mm/yyyy' };
   const gameDate = d.gameDate.trim() ? parseDateInput(d.gameDate, today) : placedDate;
   if (!gameDate) return { ok: false, error: 'Game date: use dd/mm/yyyy' };
+  const games = resolvedPicks(d, 'game');
+  const markets = resolvedPicks(d, 'market');
+  const missing = (p: { rows: ResolvedPick[][]; shared: ResolvedPick[] }) => [...p.rows.flat(), ...p.shared].some((x) => x.value == null);
+  if (missing(games)) return { ok: false, error: 'Pick the game for each leg' };
+  if (missing(markets)) return { ok: false, error: 'Pick the market for each leg' };
   const books = resolvedBooks(d.rows, lastBook);
   const out: BetInput[] = [];
   for (const [i, r] of d.rows.entries()) {
     const result: Result = 'pending';
-    const combo = (r.legs?.length ?? 0) >= 2;
-    const leg = (selection: string, odds: number | null) => ({
-      sport: d.sport,
-      game: d.game,
-      market: d.market,
-      selection,
-      odds,
-      result,
-    });
+    const legs = [
+      ...r.legs.map((l, k) => ({ l, game: games.rows[i]![k]!.value!, market: markets.rows[i]![k]!.value! })),
+      ...d.shared.map((l, k) => ({ l, game: games.shared[k]!.value!, market: markets.shared[k]!.value! })),
+    ];
+    const combo = legs.length >= 2;
+    const leg = (x: (typeof legs)[number], selection: string, odds: number | null) => ({ sport: d.sport, game: x.game, market: x.market, selection, odds, result });
     const v = validateBet({
       book: books[i],
       placedDate,
@@ -240,9 +289,9 @@ export function draftToBets(d: DutchDraft, lastBook: string, dutchId: string, to
       cashout: null,
       preAnalysis: '',
       postAnalysis: '',
-      betText: combo ? r.legs!.map((l) => l.selection.trim()).join(' + ') : '',
+      betText: combo ? legs.map((x) => x.l.selection.trim()).join(' + ') : '',
       dutchId,
-      legs: combo ? r.legs!.map((l) => leg(l.selection, l.odds)) : [leg(r.selection, r.odds)],
+      legs: combo ? legs.map((x) => leg(x, x.l.selection, x.l.odds)) : [leg(legs[0]!, legs[0]!.l.selection || r.selection, r.odds)],
     });
     if (!v.ok)
       return {
@@ -252,4 +301,27 @@ export function draftToBets(d: DutchDraft, lastBook: string, dutchId: string, to
     out.push(v.value);
   }
   return { ok: true, value: out };
+}
+
+/**
+ * Validates and saves a draft. `onSaved` (the Betting Tool clearing itself, BT-9) runs only after the save succeeded;
+ * a refused draft or a failed save leaves everything as it was and returns the error to show.
+ */
+export async function logDraft(
+  d: DutchDraft,
+  lastBook: string,
+  dutchId: string,
+  create: (inputs: BetInput[]) => Promise<Bet[]>,
+  onSaved?: (bets: Bet[]) => void,
+): Promise<{ ok: true; bets: Bet[] } | { ok: false; error: string }> {
+  const v = draftToBets(d, lastBook, dutchId);
+  if (!v.ok) return v;
+  let bets: Bet[];
+  try {
+    bets = await create(v.value);
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+  onSaved?.(bets);
+  return { ok: true, bets };
 }
