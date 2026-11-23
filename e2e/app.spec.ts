@@ -58,6 +58,7 @@ test('N opens the form; autocomplete shows recent entries, filters, and accepts 
 
 test('full form: save and add another keeps book and dates', async ({ page, request, tag }) => {
   await page.goto('/');
+  await expect(page.getByTestId('site-version')).toBeVisible(); // the page is ready for the N key
   await page.keyboard.press('n');
   const dialog = page.getByRole('dialog', { name: 'New bet' });
   await dialog.getByLabel('Stake').fill('20');
@@ -1215,7 +1216,8 @@ test('BT-24: the ⋯ menu opens fully visible on dutch and bet rows, stays while
     await page.getByRole('menuitem', { name: items[0], exact: true }).click();
     const dialog = page.getByRole('dialog', { name: open });
     await expect(dialog).toBeVisible();
-    await page.keyboard.press('Escape');
+    // Cancel, not Esc: on the live site the form's first box opens its recent entries, which Esc closes first
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
     await expect(dialog).toBeHidden();
   }
 });
