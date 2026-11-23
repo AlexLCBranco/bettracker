@@ -57,3 +57,16 @@ game and market. The owner currently types "ML / PTS" in Market as a workaround.
 - Tests: unit for draft-to-bets with one game and market, two of each (each leg gets its own), shared leg values
   copied to every bet, missing pick with several chips is invalid; e2e: owner's example (Celtics W = ML in one
   game, McCain 25 / Mitchell 30 = PTS), saved legs carry the right game and market.
+
+### BT-9 — Betting Tool clears after "Log as bets"
+**In short:** Once a dutch is saved from the "Log dutch as bets" form, the Betting Tool clears, so the logged selections are not left there to be logged twice.
+
+- After a successful save only: clear the selections and the shared legs, exactly like the "Clear all" button
+  does today (Total stake and "Round stakes to" are kept). The saved last calculation is cleared with them, so a
+  reload does not bring the logged dutch back.
+- If the save fails, nothing is cleared (the form stays open with its error, as today).
+- Show a short confirmation on the Betting Tool after it clears: "Dutch logged: 2 bets, R$ 100,00 · View in
+  History · Undo clear". "Undo clear" puts the calculation back (not the bets: those stay saved), for when the
+  same split is wanted again; the message goes away after ~8 s or on the next edit.
+- Tests: unit / component for clear-on-success and keep-on-failure; e2e: log a dutch, the rows are empty, stake
+  kept, reload stays empty, "Undo clear" restores the rows.
