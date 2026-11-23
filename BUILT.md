@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-23
+- BT-24 — Fix the dutch "⋯" menu glitch (v0.16.1)
+  The ⋯ menu on bet and dutch rows opens in full above the rows below it, stays open while the mouse is on it, opens upward near the bottom of the window, and no longer closes at once after typing in the search box.
 - BT-23 — Bet History redesign: clearer and prettier (v0.16.0)
   Bets sit under a header per day ("Sun, 22 Nov · 5 bets · +R$ 185,48"), each row has one result pill with at most one line under it ("1 of 2 splits hit", "lost by Celtics ML"), games read "Celtics @ Warriors +1", dutch splits open as "Split 1", "Split 2" joined to their dutch, and ✎ / ⋯ show on hover.
 

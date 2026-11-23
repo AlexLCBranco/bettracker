@@ -5,13 +5,6 @@ Item IDs are BT-1, BT-2, ... (never reused; BT is this repo's prefix, unique acr
 
 ## Ready
 
-### BT-24 — Fix the dutch "⋯" (More dutch actions) menu glitch
-**In short:** Pressing ⋯ on a dutch row opens an empty, half cut off dark box instead of the Duplicate / Delete menu.
-
-- Seen on v0.16.0, History table, dutch row "Celtics @ Warriors / Nuggets…" (owner's screenshot, 2026-11-23): the box shows with no visible items, drawn under the button and overlapping the next rows.
-- Reproduce it first with Playwright (open ⋯ on a dutch row, then move the mouse onto the menu) before changing anything. Suspects, not confirmed: the menu lives inside the hover-only actions span, so it fades with it once the mouse leaves the row; and `position: fixed` inside the sticky actions cell.
-- Done when: the menu opens fully visible with both items, stays while the mouse is on it, and never gets clipped, on bet rows and dutch rows. Add an e2e check that the menu items are visible and clickable after the mouse moves onto them.
-
 ### BT-25 — Easier way to add or change the game of a logged bet
 **In short:** Setting or changing the game on a bet that is already logged takes one click on the game, for single bets, combinations and dutches.
 

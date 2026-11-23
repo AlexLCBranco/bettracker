@@ -1,6 +1,7 @@
 'use client';
 
 import { Fragment, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { formatDate, formatDayHeader, formatDayMonth, parseDateInput } from '@/lib/dates';
 import { betLabel, duplicateDutchDraft, dutchSummary, editDutchDraft, type GroupOutcome } from '@/lib/dutch';
 import { duplicateForm } from '@/lib/form';
@@ -703,19 +704,28 @@ type MenuItem = { label: string; icon: string; onClick(): void; danger?: boolean
 
 /** "⋯": the row's less used actions (Duplicate, Delete), so the actions column stays narrow (BT-15). */
 function RowMenu({ label, items }: { label: string; items: MenuItem[] }) {
-  // fixed position, so the table's scroll box never clips it; closes on scroll or a click elsewhere
-  const [at, setAt] = useState<{ top: number; right: number } | null>(null);
+  // BT-24: drawn in a portal on <body> with a fixed position. Inside the sticky actions cell (z-index 1) the next rows'
+  // sticky cells painted over it. Closes on a scroll that moves its button or a click elsewhere.
+  const [at, setAt] = useState<{ top?: number; bottom?: number; right: number } | null>(null);
   const open = at != null;
   const box = useRef<HTMLSpanElement>(null);
+  const menu = useRef<HTMLSpanElement>(null);
   const setOpen = (o: boolean | ((x: boolean) => boolean)) => {
     const next = typeof o === 'function' ? o(open) : o;
     const r = box.current?.getBoundingClientRect();
-    setAt(next && r ? { top: r.bottom + 4, right: window.innerWidth - r.right } : null);
+    if (!next || !r) return setAt(null);
+    // opens upward when it would run past the bottom of the window
+    const right = window.innerWidth - r.right;
+    setAt(r.bottom + 4 + items.length * 28 + 10 > window.innerHeight ? { bottom: window.innerHeight - r.top + 4, right } : { top: r.bottom + 4, right });
   };
   useEffect(() => {
     if (!open) return;
-    const away = (e: MouseEvent) => !box.current?.contains(e.target as Node) && setAt(null);
-    const close = () => setAt(null);
+    const away = (e: MouseEvent) => !box.current?.contains(e.target as Node) && !menu.current?.contains(e.target as Node) && setAt(null);
+    // BT-24: leaving the search box scrolls that input, which used to close the menu the moment it opened
+    const close = (e: Event) => {
+      const t = e.target;
+      if (t === document || (t instanceof Node && t.contains(box.current))) setAt(null);
+    };
     document.addEventListener('mousedown', away);
     window.addEventListener('scroll', close, true);
     return () => {
@@ -728,8 +738,10 @@ function RowMenu({ label, items }: { label: string; items: MenuItem[] }) {
       <button className="rounded px-1.5 py-0.5 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-white" title={label} aria-label={label} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
         ⋯
       </button>
-      {open && (
-        <span
+      {open &&
+        createPortal(
+          <span
+          ref={menu}
           role="menu"
           style={at ?? undefined}
           className="fixed z-50 flex w-44 flex-col rounded-md border border-zinc-700 bg-zinc-900 py-1 text-left text-xs shadow-xl"
@@ -756,8 +768,9 @@ function RowMenu({ label, items }: { label: string; items: MenuItem[] }) {
               {it.label}
             </button>
           ))}
-        </span>
-      )}
+        </span>,
+          document.body,
+        )}
     </span>
   );
 }

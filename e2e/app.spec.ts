@@ -137,7 +137,7 @@ test('history: inline edit a cell, one-click result, duplicate', async ({ page, 
   await expect.poll(async () => (await betsTagged(request, tag))[0]).toMatchObject({ book: `${tag} New Book`, result: 'won' });
 
   await row.getByRole('button', { name: 'More actions' }).click();
-  await row.getByRole('menuitem', { name: 'Duplicate' }).click();
+  await page.getByRole('menuitem', { name: 'Duplicate' }).click();
   const dialog = page.getByRole('dialog', { name: 'New bet' });
   await expect(dialog.getByLabel('Stake')).toHaveValue('50');
   await expect(dialog.getByLabel('Result')).toHaveValue('pending');
@@ -1168,4 +1168,54 @@ test('BT-23: Bet History grouped by day, one pill per row, one sub-line, splits 
   expect(sw).toBeLessThanOrEqual(cw);
   await page.mouse.move(0, 0);
   await page.screenshot({ path: 'test-results/bt-23-history-1366.png', fullPage: true });
+});
+
+test('BT-24: the ⋯ menu opens fully visible on dutch and bet rows, stays while the mouse is on it, items clickable', async ({ page, request, tag }) => {
+  const book = `${tag} Book`;
+  const d = `${tag}-m`.replace(/[^A-Za-z0-9_-]/g, '');
+  // the dutch and a bet on the newest days, more rows under them for the menu to overlap
+  for (const sel of ['Celtics ML', 'Warriors ML'])
+    await createBet(request, { placedDate: '2000-01-05', gameDate: '2000-01-05', book, betText: '', dutchId: d, legs: [{ game: `${tag} Celtics @ Warriors`, selection: sel, odds: 2 }] });
+  const single = await createBet(request, { placedDate: '2000-01-04', gameDate: '2000-01-04', book, betText: `${tag} single` });
+  for (const n of [1, 2, 3]) await createBet(request, { placedDate: '2000-01-03', gameDate: '2000-01-03', book, betText: `${tag} filler ${n}` });
+
+  await page.goto('/history');
+  await page.getByLabel('Search bets').fill(tag); // focus stays in the search box, as when the owner filters first
+  /** Each item is the element on top at its centre (nothing drawn over it) and inside the window. */
+  const itemsOnTop = () =>
+    page.getByRole('menu').evaluate((m) =>
+      [...m.querySelectorAll('[role=menuitem]')].map((it) => {
+        const r = it.getBoundingClientRect();
+        const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+        return `${it.getAttribute('aria-label')}: ${top && it.contains(top) && r.bottom <= innerHeight ? 'on top' : 'covered'}`;
+      }),
+    );
+  for (const [row, button, items, open] of [
+    [page.locator(`[data-dutch-id="${d}"]`), 'More dutch actions', ['Duplicate dutch', 'Delete dutch'], 'Log dutch'],
+    [page.locator(`[data-bet-id="${single.id}"]`), 'More actions', ['Duplicate', 'Delete'], 'New bet'],
+  ] as const) {
+    await row.hover();
+    await row.getByRole('button', { name: button }).click();
+    const menu = page.getByRole('menu');
+    await expect(menu).toBeVisible();
+    expect(await itemsOnTop()).toEqual(items.map((i) => `${i}: on top`));
+    // the mouse leaves the row and goes onto the menu: it stays, fully visible
+    const box = (await menu.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + 4, { steps: 8 });
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height - 4, { steps: 8 });
+    await expect(menu).toBeVisible();
+    expect(
+      await menu.evaluate((m) => {
+        let o = 1;
+        for (let e: Element | null = m; e; e = e.parentElement) o *= +getComputedStyle(e).opacity;
+        return o;
+      }),
+    ).toBe(1);
+    expect(await itemsOnTop()).toEqual(items.map((i) => `${i}: on top`));
+    await page.getByRole('menuitem', { name: items[0], exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: open });
+    await expect(dialog).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+  }
 });
