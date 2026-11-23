@@ -19,7 +19,7 @@ export function HitBadge({ bets }: { bets: Bet[] }) {
         {hitsText(h)}
       </span>
       {misses && (
-        <span className="mt-0.5 text-[11px] text-zinc-400" data-testid="hit-misses">
+        <span className="mt-0.5 max-w-36 truncate text-[11px] text-zinc-400" data-testid="hit-misses">
           {misses}
         </span>
       )}

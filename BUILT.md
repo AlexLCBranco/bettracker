@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-22
+- BT-15 — History table fits the screen (v0.11.0)
+  History and the dashboard fit a 1366px screen without scrolling sideways: bet and game dates, game and sport, and type and situation share a column, long text is cut with the full text on hover, Duplicate and Delete moved into a "⋯" menu, and the actions column stays pinned on the right.
 - BT-16 — Every odds box accepts any odds format (v0.10.0)
   Typing -114, +220, 5/2, 1,3 or 40% in the bet form (total and legs), the quick-add line ("@-114") or a History odds cell shows "-114 → 1.88" while typing, turns into the decimal value when you leave the box, and is saved as decimal.
 - Fix: bets reload when you come back to the tab, so bets added, settled or deleted elsewhere (another tab, the phone, a test run) show up without reloading the page (v0.9.1)

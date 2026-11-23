@@ -56,7 +56,7 @@ function Frame({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col">
       <header className="sticky top-0 z-30 border-b border-zinc-800 bg-black/90 backdrop-blur">
-        <div className="mx-auto flex max-w-[1400px] items-center gap-6 px-6 py-3">
+        <div className="mx-auto flex max-w-[1400px] items-center gap-6 px-4 py-3">
           <Link href="/" className="flex items-center gap-2 font-bold">
             <span className="grid h-8 w-8 place-items-center rounded-lg bg-white text-black">↗</span>
             BetTracker
@@ -78,7 +78,7 @@ function Frame({ children }: { children: ReactNode }) {
           </nav>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-[1400px] flex-1 px-6 py-6">
+      <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 py-6">
         {loadError ? <p className="rounded-md border border-red-800 bg-red-950 p-4 text-sm text-red-300">Could not load bets: {loadError}</p> : children}
       </main>
       <BetFormModal />

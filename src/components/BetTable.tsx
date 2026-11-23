@@ -92,24 +92,29 @@ export function BetTable({ bets, limit, empty = 'No bets yet. Type one in the qu
   const rows = groupRows(bets).slice(0, limit);
 
   return (
-    <div className="overflow-x-auto">
+    // BT-15: fits a 1366px screen; dates, sport + game and type + situation share a column, long text is cut with
+    // the full text on hover, and the actions column stays pinned on the right if it ever has to scroll
+    <div className="overflow-x-auto" data-testid="bet-table-scroll">
       <table className="w-full text-sm" data-testid="bet-table">
         <thead>
           <tr className="border-b border-zinc-800 text-left text-xs uppercase tracking-wide text-zinc-500">
             <th className="w-6" />
-            <th className="px-2 py-2">Bet Date</th>
-            <th className="px-2 py-2">Game Date</th>
-            <th className="px-2 py-2">Sport</th>
-            <th className="px-2 py-2">Game</th>
-            <th className="px-2 py-2">Bet</th>
-            <th className="px-2 py-2">Book</th>
-            <th className="px-2 py-2 text-right">Stake</th>
-            <th className="px-2 py-2 text-right">Odds</th>
-            <th className="px-2 py-2">Type</th>
-            <th className="px-2 py-2">Situation</th>
-            <th className="px-2 py-2 text-right">Plus/Minus</th>
-            <th className="px-2 py-2">Result</th>
-            <th className="px-2 py-2 text-right">Actions</th>
+            <th className="px-1.5 py-2" title="Bet date, game date under it">
+              Date
+            </th>
+            <th className="px-1.5 py-2" title="Game, sport under it">
+              Game
+            </th>
+            <th className="px-1.5 py-2">Bet</th>
+            <th className="px-1.5 py-2">Book</th>
+            <th className="px-1.5 py-2 text-right">Stake</th>
+            <th className="px-1.5 py-2 text-right">Odds</th>
+            <th className="px-1.5 py-2" title="Type, situation under it">
+              Type
+            </th>
+            <th className="px-1.5 py-2 text-right">+/-</th>
+            <th className="px-1.5 py-2">Result</th>
+            <th className={`${STICKY} px-1.5 py-2 text-right`}>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -128,6 +133,12 @@ export function BetTable({ bets, limit, empty = 'No bets yet. Type one in the qu
     </div>
   );
 }
+
+/** The actions column: pinned to the right edge with the card's background. */
+const STICKY = 'sticky right-0 z-[1] bg-zinc-950 shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.8)]';
+/** Second line of a merged cell (game date, sport, situation). */
+const SUB = 'text-[11px] leading-tight text-zinc-500';
+const shortDate = (iso: string) => formatDate(iso).slice(0, 5);
 
 const OUTCOME: Record<GroupOutcome, { label: string; cls: string }> = {
   pending: { label: 'Pending', cls: resultClass('pending') },
@@ -203,7 +214,7 @@ function DutchRow({ bets, dutchId, expanded, toggle, settle }: { bets: Bet[]; du
   const books = [...new Set(bets.map((b) => b.book).filter(Boolean))].join(', ');
   const placed = bets.map((b) => b.placedDate).sort()[0]!;
   const game = bets.map((b) => b.gameDate).sort()[0]!;
-  const cell = 'px-2 py-1.5 text-zinc-200';
+  const cell = 'px-1.5 py-1.5 text-zinc-200';
   return (
     <tr className="border-b border-zinc-900 bg-indigo-500/5 hover:bg-zinc-900/60" data-testid="dutch-row" data-dutch-id={dutchId}>
       <td className="px-1">
@@ -211,35 +222,49 @@ function DutchRow({ bets, dutchId, expanded, toggle, settle }: { bets: Bet[]; du
           {expanded ? '▾' : '▸'}
         </button>
       </td>
-      <td className={cell}>{formatDate(placed)}</td>
-      <td className={cell}>{formatDate(game)}</td>
-      <td className={cell}>{shared(bets, (b) => b.legs[0]?.sport ?? '')}</td>
-      <td className={cell}>{gamesAndMarkets(bets.flatMap((b) => b.legs))}</td>
-      <td className={`${cell} min-w-48`}>
-        <span className="mr-1.5 rounded bg-indigo-500/20 px-1.5 py-0.5 text-xs font-semibold text-indigo-300">Dutch</span>
-        {names}
+      <td className={`${cell} whitespace-nowrap`}>
+        {formatDate(placed)}
+        <div className={SUB}>game {shortDate(game)}</div>
       </td>
-      <td className={cell}>{books}</td>
+      <td className={cell}>
+        <div className="max-w-36 truncate">{gamesAndMarkets(bets.flatMap((b) => b.legs))}</div>
+        <div className={SUB}>{shared(bets, (b) => b.legs[0]?.sport ?? '')}</div>
+      </td>
+      <td className={cell}>
+        <div className="flex max-w-44 items-center" title={names}>
+          <span className="mr-1.5 shrink-0 rounded bg-indigo-500/20 px-1.5 py-0.5 text-xs font-semibold text-indigo-300">Dutch</span>
+          <span className="truncate">{names}</span>
+        </div>
+      </td>
+      <td className={cell}>
+        <div className="max-w-24 truncate" title={books}>
+          {books}
+        </div>
+      </td>
       <td className={`${cell} whitespace-nowrap text-right tabular-nums`} data-testid="dutch-stake">
         {formatBRL(s.stake)}
       </td>
       <td className={`${cell} whitespace-nowrap text-right tabular-nums`} data-testid="dutch-odds" title="Combined odds: 1 / Σ(1/odds)">
         {formatOdds(s.combinedOdds)}
       </td>
-      <td className={cell}>Dutch · {bets.length}</td>
-      <td className={cell}>{capitalize(shared(bets, (b) => b.situation))}</td>
-      <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums" data-testid="profit">
+      <td className={`${cell} whitespace-nowrap`}>
+        Dutch · {bets.length}
+        <div className={SUB}>{capitalize(shared(bets, (b) => b.situation))}</div>
+      </td>
+      <td className="whitespace-nowrap px-1.5 py-1.5 text-right tabular-nums" data-testid="profit">
         <ProfitText value={s.profit} pending={s.outcome === 'pending'} />
       </td>
-      <td className="whitespace-nowrap px-2 py-1.5">
-        <span className="inline-flex items-start gap-1.5">
-          <span className={`rounded px-2 py-0.5 text-xs font-medium ${o.cls}`} data-testid="result">
-            {o.label}
+      <td className="whitespace-nowrap px-1.5 py-1.5">
+        <span className="inline-flex flex-col items-start gap-0.5">
+          <span className="inline-flex items-center gap-1.5">
+            <span className={`rounded px-2 py-0.5 text-xs font-medium ${o.cls}`} data-testid="result">
+              {o.label}
+            </span>
           </span>
           <HitBadge bets={bets} />
         </span>
       </td>
-      <td className="whitespace-nowrap px-2 py-1.5 text-right">
+      <td className={`${STICKY} whitespace-nowrap px-1.5 py-1.5 text-right`}>
         <span className="inline-flex items-center gap-0.5">
           {settle.undoShown === dutchId ? (
             <button className="rounded px-1.5 py-0.5 text-xs font-semibold text-amber-300 hover:bg-amber-600/30" title="Undo the settle (Z)" onClick={settle.undo}>
@@ -248,17 +273,20 @@ function DutchRow({ bets, dutchId, expanded, toggle, settle }: { bets: Bet[]; du
           ) : (
             <DutchSettleButtons dutchId={dutchId} bets={bets} onSettle={(a) => settle.settle(dutchId, bets, a)} />
           )}
-          <IconButton label="Duplicate dutch" onClick={() => openDutch(duplicateDutchDraft(bets))}>
-            ⧉
-          </IconButton>
-          <IconButton
-            label="Delete dutch"
-            onClick={() => {
-              if (window.confirm(`Delete this dutch and its ${bets.length} bets (${formatBRL(s.stake)} in all: ${names})? This cannot be undone.`)) void removeDutch(dutchId);
-            }}
-          >
-            🗑
-          </IconButton>
+          <RowMenu
+            label="More dutch actions"
+            items={[
+              { label: 'Duplicate dutch', icon: '⧉', onClick: () => openDutch(duplicateDutchDraft(bets)) },
+              {
+                label: 'Delete dutch',
+                icon: '🗑',
+                danger: true,
+                onClick: () => {
+                  if (window.confirm(`Delete this dutch and its ${bets.length} bets (${formatBRL(s.stake)} in all: ${names})? This cannot be undone.`)) void removeDutch(dutchId);
+                },
+              },
+            ]}
+          />
         </span>
       </td>
     </tr>
@@ -292,55 +320,68 @@ function BetRow({ b, expanded, toggle, nested }: { b: Bet; expanded: boolean; to
             </button>
           )}
         </td>
-        <Cell kind="date" value={formatDate(b.placedDate)} label="Bet date" onSave={(v) => save({ placedDate: parseDateInput(v) ?? b.placedDate })} />
-        <Cell kind="date" value={formatDate(b.gameDate)} label="Game date" onSave={(v) => save({ gameDate: parseDateInput(v) ?? b.gameDate })} />
+        <td className="whitespace-nowrap px-1.5 py-1.5">
+          <Cell bare kind="date" value={formatDate(b.placedDate)} label="Bet date" onSave={(v) => save({ placedDate: parseDateInput(v) ?? b.placedDate })} />
+          <div className={SUB}>
+            <Cell bare kind="date" value={formatDate(b.gameDate)} display={`game ${shortDate(b.gameDate)}`} label="Game date" onSave={(v) => save({ gameDate: parseDateInput(v) ?? b.gameDate })} />
+          </div>
+        </td>
         {solo ? (
-          <>
-            <Cell kind="text" field="sport" value={b.legs[0]?.sport ?? ''} label="Sport" onSave={(v) => saveLeg(0, { sport: v })} />
-            <Cell kind="text" field="game" sport={b.legs[0]?.sport} value={b.legs[0]?.game ?? ''} label="Game" onSave={(v) => saveLeg(0, { game: v })} />
-          </>
+          <td className="px-1.5 py-1.5">
+            <Cell bare truncate="max-w-36" kind="text" field="game" sport={b.legs[0]?.sport} value={b.legs[0]?.game ?? ''} label="Game" onSave={(v) => saveLeg(0, { game: v })} />
+            <div className={SUB}>
+              <Cell bare truncate="max-w-36" kind="text" field="sport" value={b.legs[0]?.sport ?? ''} label="Sport" onSave={(v) => saveLeg(0, { sport: v })} />
+            </div>
+          </td>
         ) : (
-          <>
-            <td className="px-2 py-1.5 text-zinc-300">{legSports(b)}</td>
-            <td className="px-2 py-1.5 text-zinc-300">{gamesAndMarkets(b.legs) || <span className="text-zinc-600">Combination</span>}</td>
-          </>
+          <td className="px-1.5 py-1.5 text-zinc-300">
+            <div className="max-w-36 truncate">{gamesAndMarkets(b.legs) || <span className="text-zinc-600">Combination</span>}</div>
+            <div className={`${SUB} max-w-36 truncate`}>{legSports(b)}</div>
+          </td>
         )}
-        <Cell kind="text" field="betText" value={b.betText} display={betDisplay} label="Bet" onSave={(v) => save({ betText: v })} wide />
-        <Cell kind="text" field="book" value={b.book} label="Book" onSave={(v) => save({ book: v })} />
+        <Cell kind="text" truncate="max-w-44" field="betText" value={b.betText} display={betDisplay} label="Bet" onSave={(v) => save({ betText: v })} />
+        <Cell kind="text" truncate="max-w-24" field="book" value={b.book} label="Book" onSave={(v) => save({ book: v })} />
         <Cell kind="number" value={String(b.stake)} display={formatBRL(b.stake)} label="Stake" onSave={(v) => save({ stake: parseNumber(v) ?? b.stake })} right />
         <Cell kind="odds" value={formatOdds(b.odds)} label="Odds" onSave={(v) => save({ odds: oddsFromText(v) ?? b.odds })} right />
-        <Cell kind="select" options={['solo', 'combination']} value={b.type} label="Type" onSave={(v) => save({ type: v as Bet['type'] })} />
-        <Cell kind="select" options={['pregame', 'live']} value={b.situation} label="Situation" onSave={(v) => save({ situation: v as Bet['situation'] })} />
-        <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums" data-testid="profit">
+        <td className="whitespace-nowrap px-1.5 py-1.5">
+          <Cell bare kind="select" options={['solo', 'combination']} labels={{ solo: 'Solo', combination: 'Combo' }} value={b.type} label="Type" onSave={(v) => save({ type: v as Bet['type'] })} />
+          <div className={SUB}>
+            <Cell bare kind="select" options={['pregame', 'live']} value={b.situation} label="Situation" onSave={(v) => save({ situation: v as Bet['situation'] })} />
+          </div>
+        </td>
+        <td className="whitespace-nowrap px-1.5 py-1.5 text-right tabular-nums" data-testid="profit">
           <ProfitText value={profit(b)} pending={b.result === 'pending'} />
         </td>
-        <td className="whitespace-nowrap px-2 py-1.5">
+        <td className="whitespace-nowrap px-1.5 py-1.5">
           <span className="inline-flex items-center gap-1.5">
             <ResultCell bet={b} onPick={(r) => settle(r)} />
             {nested && <SplitMarkTag mark={splitMark(b)} />}
           </span>
         </td>
-        <td className="whitespace-nowrap px-2 py-1.5 text-right">
+        <td className={`${STICKY} whitespace-nowrap px-1.5 py-1.5 text-right`}>
           <span className="inline-flex gap-0.5">
             {QUICK_RESULTS.map(({ r, key, cls }) => (
               <button key={r} className={`rounded px-1.5 py-0.5 text-xs font-semibold ${cls} ${b.result === r ? 'ring-1 ring-current' : ''}`} title={RESULT_LABEL[r]} aria-label={`Mark ${RESULT_LABEL[r]}`} onClick={() => settle(r)}>
                 {key}
               </button>
             ))}
-            <IconButton label="Duplicate" onClick={() => openNew(duplicateForm(b))}>
-              ⧉
-            </IconButton>
             <IconButton label="Edit" onClick={() => openEdit(b)}>
               ✎
             </IconButton>
-            <IconButton
-              label="Delete"
-              onClick={() => {
-                if (window.confirm(`Delete this bet (${formatBRL(b.stake)} @${formatOdds(b.odds)} ${betDisplay ?? ''})? This cannot be undone.`)) void remove(b.id);
-              }}
-            >
-              🗑
-            </IconButton>
+            <RowMenu
+              label="More actions"
+              items={[
+                { label: 'Duplicate', icon: '⧉', onClick: () => openNew(duplicateForm(b)) },
+                {
+                  label: 'Delete',
+                  icon: '🗑',
+                  danger: true,
+                  onClick: () => {
+                    if (window.confirm(`Delete this bet (${formatBRL(b.stake)} @${formatOdds(b.odds)} ${betDisplay ?? ''})? This cannot be undone.`)) void remove(b.id);
+                  },
+                },
+              ]}
+            />
           </span>
         </td>
       </tr>
@@ -348,18 +389,20 @@ function BetRow({ b, expanded, toggle, nested }: { b: Bet; expanded: boolean; to
         b.legs.map((l, i) => (
           <tr key={l.id} className={`border-b border-zinc-900 text-xs ${l.result === 'lost' || l.result === 'half-lost' ? 'bg-red-950/60 text-red-300' : 'bg-zinc-950'}`} data-testid="leg-row" data-lost={l.result === 'lost' || l.result === 'half-lost' || undefined}>
             <td />
-            <td className="px-2 py-1 text-zinc-500" colSpan={2}>
-              Leg {i + 1}
+            <td className="whitespace-nowrap px-1.5 py-1 text-zinc-500">Leg {i + 1}</td>
+            <td className="px-1.5 py-1">
+              <Cell bare truncate="max-w-36" kind="text" field="game" sport={l.sport} value={l.game} label={`Leg ${i + 1} game`} onSave={(v) => saveLeg(i, { game: v })} />
+              <div className={SUB}>
+                <Cell bare truncate="max-w-36" kind="text" field="sport" value={l.sport} label={`Leg ${i + 1} sport`} onSave={(v) => saveLeg(i, { sport: v })} />
+              </div>
             </td>
-            <Cell kind="text" field="sport" value={l.sport} label={`Leg ${i + 1} sport`} onSave={(v) => saveLeg(i, { sport: v })} />
-            <Cell kind="text" field="game" sport={l.sport} value={l.game} label={`Leg ${i + 1} game`} onSave={(v) => saveLeg(i, { game: v })} />
-            <Cell kind="text" field="selection" sport={l.sport} value={l.selection} label={`Leg ${i + 1} selection`} onSave={(v) => saveLeg(i, { selection: v })} />
-            <Cell kind="text" field="market" sport={l.sport} value={l.market} label={`Leg ${i + 1} market`} onSave={(v) => saveLeg(i, { market: v })} />
+            <Cell kind="text" truncate="max-w-44" field="selection" sport={l.sport} value={l.selection} label={`Leg ${i + 1} selection`} onSave={(v) => saveLeg(i, { selection: v })} />
+            <Cell kind="text" truncate="max-w-24" field="market" sport={l.sport} value={l.market} label={`Leg ${i + 1} market`} onSave={(v) => saveLeg(i, { market: v })} />
             <td />
             <Cell kind="odds" value={formatOdds(l.odds)} label={`Leg ${i + 1} odds`} onSave={(v) => saveLeg(i, { odds: v.trim() ? (oddsFromText(v) ?? l.odds) : null })} right />
-            <td colSpan={3} />
+            <td colSpan={2} />
             <Cell kind="select" options={[...RESULTS]} labels={RESULT_LABEL} value={l.result} label={`Leg ${i + 1} result`} onSave={(v) => saveLeg(i, { result: v as Result })} />
-            <td />
+            <td className={STICKY} />
           </tr>
         ))}
     </>
@@ -411,7 +454,10 @@ type CellProps = {
   onSave(v: string): unknown;
   display?: string;
   right?: boolean;
-  wide?: boolean;
+  /** Render without its own <td> (a second line inside a merged cell). */
+  bare?: boolean;
+  /** Max-width class: the text is cut with "…" and shown in full on hover. */
+  truncate?: string;
 } & (
   | { kind: 'text'; field: Field; sport?: string }
   | { kind: 'number' }
@@ -447,27 +493,27 @@ function Cell(props: CellProps) {
       setEditing(false);
     }
   };
-  const td = `px-2 py-1.5 ${props.right ? 'whitespace-nowrap text-right tabular-nums' : ''} ${props.wide ? 'min-w-48' : ''}`;
+  const td = `px-1.5 py-1.5 ${props.right ? 'whitespace-nowrap text-right tabular-nums' : ''}`;
+  const wrap = (inner: ReactNode) => (props.bare ? inner : <td className={td}>{inner}</td>);
   if (!editing) {
     const shown = props.display ?? (props.kind === 'select' ? (props.labels?.[props.value] ?? capitalize(props.value)) : props.value);
-    return (
-      <td className={td}>
-        <span
-          role="button"
-          tabIndex={0}
-          aria-label={`Edit ${props.label}`}
-          className="-mx-1 block min-h-5 cursor-text rounded px-1 text-zinc-200 hover:bg-zinc-800"
-          onClick={start}
-          onKeyDown={(e) => e.key === 'Enter' && start()}
-        >
-          {shown || <span className="text-zinc-700">-</span>}
-        </span>
-      </td>
+    return wrap(
+      <span
+        role="button"
+        tabIndex={0}
+        aria-label={`Edit ${props.label}`}
+        title={props.truncate && shown ? shown : undefined}
+        className={`-mx-1 block min-h-4 cursor-text rounded px-1 hover:bg-zinc-800 ${props.bare ? '' : 'text-zinc-200'} ${props.truncate ? `${props.truncate} truncate` : ''}`}
+        onClick={start}
+        onKeyDown={(e) => e.key === 'Enter' && start()}
+      >
+        {shown || <span className="text-zinc-700">-</span>}
+      </span>,
     );
   }
   const cls = 'field py-0.5 text-sm';
-  return (
-    <td className={td}>
+  return wrap(
+    <>
       {props.kind === 'text' ? (
         <Autocomplete autoFocus className={cls} value={draft} onChange={setDraft} getSuggestions={(q) => suggestFor(props.field, q, props.sport)} onBlur={commit} onKeyDown={keys} aria-label={props.label} />
       ) : props.kind === 'select' ? (
@@ -494,7 +540,70 @@ function Cell(props: CellProps) {
       ) : (
         <input autoFocus className={`${cls} w-24`} value={draft} inputMode={props.kind === 'number' ? 'decimal' : undefined} placeholder={props.kind === 'date' ? 'dd/mm/yyyy' : undefined} onChange={(e) => setDraft(e.target.value)} onBlur={commit} onKeyDown={keys} aria-label={props.label} />
       )}
-    </td>
+    </>,
+  );
+}
+
+type MenuItem = { label: string; icon: string; onClick(): void; danger?: boolean };
+
+/** "⋯": the row's less used actions (Duplicate, Delete), so the actions column stays narrow (BT-15). */
+function RowMenu({ label, items }: { label: string; items: MenuItem[] }) {
+  // fixed position, so the table's scroll box never clips it; closes on scroll or a click elsewhere
+  const [at, setAt] = useState<{ top: number; right: number } | null>(null);
+  const open = at != null;
+  const box = useRef<HTMLSpanElement>(null);
+  const setOpen = (o: boolean | ((x: boolean) => boolean)) => {
+    const next = typeof o === 'function' ? o(open) : o;
+    const r = box.current?.getBoundingClientRect();
+    setAt(next && r ? { top: r.bottom + 4, right: window.innerWidth - r.right } : null);
+  };
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => !box.current?.contains(e.target as Node) && setAt(null);
+    const close = () => setAt(null);
+    document.addEventListener('mousedown', away);
+    window.addEventListener('scroll', close, true);
+    return () => {
+      document.removeEventListener('mousedown', away);
+      window.removeEventListener('scroll', close, true);
+    };
+  }, [open]);
+  return (
+    <span ref={box} className="relative inline-flex">
+      <button className="rounded px-1.5 py-0.5 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-white" title={label} aria-label={label} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        ⋯
+      </button>
+      {open && (
+        <span
+          role="menu"
+          style={at ?? undefined}
+          className="fixed z-50 flex w-44 flex-col rounded-md border border-zinc-700 bg-zinc-900 py-1 text-left text-xs shadow-xl"
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.stopPropagation();
+              setOpen(false);
+            }
+          }}
+        >
+          {items.map((it, i) => (
+            <button
+              key={it.label}
+              role="menuitem"
+              autoFocus={i === 0}
+              aria-label={it.label}
+              className={`flex items-center gap-2 px-3 py-1.5 text-left hover:bg-zinc-800 ${it.danger ? 'text-red-300' : 'text-zinc-200'}`}
+              onClick={() => {
+                setOpen(false);
+                it.onClick();
+              }}
+            >
+              <span className="w-4 text-center">{it.icon}</span>
+              {it.label}
+            </button>
+          ))}
+        </span>
+      )}
+    </span>
   );
 }
 

@@ -136,7 +136,8 @@ test('history: inline edit a cell, one-click result, duplicate', async ({ page, 
   await expect(row.getByTestId('profit')).toHaveText('+R$ 50,00');
   await expect.poll(async () => (await betsTagged(request, tag))[0]).toMatchObject({ book: `${tag} New Book`, result: 'won' });
 
-  await row.getByRole('button', { name: 'Duplicate' }).click();
+  await row.getByRole('button', { name: 'More actions' }).click();
+  await row.getByRole('menuitem', { name: 'Duplicate' }).click();
   const dialog = page.getByRole('dialog', { name: 'New bet' });
   await expect(dialog.getByLabel('Stake')).toHaveValue('50');
   await expect(dialog.getByLabel('Result')).toHaveValue('pending');
@@ -801,3 +802,33 @@ test('BT-16: odds in any format in the full form, quick-add and History cells, s
   await expect(row.getByRole('button', { name: 'Edit Odds' })).toHaveText('3.50');
   await expect.poll(async () => (await betsTagged(request, tag)).find((b) => b.betText.endsWith('minus'))?.odds).toBe(3.5);
 });
+
+for (const width of [1366, 1920]) {
+  test(`BT-15: History fits a ${width}px screen: no sideways scroll, every row's buttons in view`, async ({ page, request, tag }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const long = 'a very long bet text that goes on and on about the over under and both teams to score';
+    await createBet(request, { betText: `${tag} ${long}`, book: 'A Book With A Long Name Indeed', legs: [{ sport: 'Football', game: 'Sociedade Esportiva Palmeiras x Clube de Regatas do Flamengo', market: 'Match result', selection: 'Palmeiras' }] });
+    await createBet(request, { betText: `${tag} combo`, type: 'combination', odds: 4, legs: [{ sport: 'Football', game: 'A x B', selection: 'A', odds: 2 }, { sport: 'Basketball', game: 'C x D', selection: 'C', odds: 2 }] });
+    const d = `${tag}-d`;
+    for (const sel of ['Home', 'Draw', 'Away']) await createBet(request, { betText: '', dutchId: d.replace(/[^A-Za-z0-9_-]/g, ''), odds: 3, legs: [{ sport: 'Football', game: `${tag} long game name x another long name`, selection: sel }] });
+    for (const path of ['/history', '/']) {
+      await page.goto(path);
+      if (path === '/history') await page.getByLabel('Search bets').fill(tag);
+      await expect(page.getByTestId('bet-row').first()).toBeVisible();
+      const scroll = page.getByTestId('bet-table-scroll');
+      const { sw, cw } = await scroll.evaluate((el) => ({ sw: el.scrollWidth, cw: el.clientWidth }));
+      expect(sw, `${path}: table scrolls sideways`).toBeLessThanOrEqual(cw);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      const rows = page.locator('[data-testid="bet-row"], [data-testid="dutch-row"]').filter({ hasText: tag });
+      for (const row of await rows.all()) {
+        const btn = row.getByRole('button', { name: /^(Edit|More dutch actions)$/ });
+        const box = (await btn.boundingBox())!;
+        expect(box.x + box.width, `${path}: a row's buttons are off screen`).toBeLessThanOrEqual(width);
+      }
+      if (path === '/history') {
+        // long text is cut, the full text is on hover
+        await expect(page.getByRole('button', { name: 'Edit Bet' }).filter({ hasText: 'over under' })).toHaveAttribute('title', `${tag} ${long}`);
+      }
+    }
+  });
+}

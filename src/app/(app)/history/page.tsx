@@ -91,7 +91,7 @@ export default function HistoryPage() {
         {s.betCount} of {all.betCount} bets · net <span className={s.netProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}>{formatBRL(s.netProfit, true)}</span> · ROI {formatPercent(s.roi, true)} · win rate {formatPercent(s.winRate)} ({s.wins}W/{s.losses}L)
       </p>
 
-      <section className="card p-4">{loaded ? <BetTable bets={shown} empty={bets.length ? 'No bets match these filters.' : undefined} /> : <p className="py-10 text-center text-sm text-zinc-500">Loading…</p>}</section>
+      <section className="card p-3">{loaded ? <BetTable bets={shown} empty={bets.length ? 'No bets match these filters.' : undefined} /> : <p className="py-10 text-center text-sm text-zinc-500">Loading…</p>}</section>
     </div>
   );
 }
