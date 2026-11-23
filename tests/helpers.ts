@@ -24,6 +24,8 @@ export function bet(over: Partial<Bet> = {}): Bet {
     betText: 'lakers ml',
     legs: [leg()],
     dutchId: null,
+    rolloverId: null,
+    banked: false,
     money: 'real',
     label: '',
     createdAt: '2026-11-20T12:00:00.000Z',

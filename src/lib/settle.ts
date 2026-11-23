@@ -29,8 +29,8 @@ export function settleQueue(bets: Bet[], today: string): QueueItem[] {
     created: string;
   }[] = [];
   for (const r of groupRows(bets)) {
-    if (r.kind === 'bet') {
-      const b = r.bet;
+    // BT-29: a rollover's pending bet is settled like a plain bet (its shot is shown around it)
+    for (const b of r.kind === 'bet' ? [r.bet] : r.kind === 'rollover' ? r.bets : []) {
       if (b.result === 'pending' && due(b) <= today)
         items.push({
           item: { kind: 'bet', key: b.id, bet: b },
@@ -38,8 +38,8 @@ export function settleQueue(bets: Bet[], today: string): QueueItem[] {
           placed: b.placedDate,
           created: b.createdAt,
         });
-      continue;
     }
+    if (r.kind !== 'dutch') continue;
     const pending = r.bets.filter((b) => b.result === 'pending');
     if (!pending.some((b) => due(b) <= today)) continue;
     items.push({

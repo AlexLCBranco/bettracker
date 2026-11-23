@@ -34,6 +34,14 @@ export function validateBet(raw: unknown): Validated {
     if (typeof r.dutchId !== 'string' || !/^[A-Za-z0-9_-]{1,100}$/.test(r.dutchId)) return { ok: false, error: 'Dutch id is not valid' };
     dutchId = r.dutchId;
   }
+  // BT-29: a rollover chain id, and whether this bet is banked (kept open); banked only means something in a chain
+  let rolloverId: string | null = null;
+  if (r.rolloverId != null && r.rolloverId !== "") {
+    if (typeof r.rolloverId !== "string" || !/^[A-Za-z0-9_-]{1,100}$/.test(r.rolloverId)) return { ok: false, error: "Rollover id is not valid" };
+    if (dutchId) return { ok: false, error: "A bet in a dutch cannot be part of a rollover" };
+    rolloverId = r.rolloverId;
+  }
+  const banked = rolloverId != null && r.banked === true;
   let cashout: number | null = null;
   if (result === 'cash-out') {
     cashout = num(r.cashout);
@@ -82,6 +90,8 @@ export function validateBet(raw: unknown): Validated {
       betText: tidy.betText,
       legs: tidy.legs,
       dutchId,
+      rolloverId,
+      banked,
       money,
       // BT-27: one label per bet, kept as typed (shown uppercase)
       label: str(r.label).replace(/\s+/g, ' ').slice(0, 60),

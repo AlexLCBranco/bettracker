@@ -11,6 +11,8 @@ interface Undo {
   before: SettleChange[];
   key: string;
   dutchId?: string;
+  /** BT-29: a step made outside settling (bank, add leg, close): how to put it back. */
+  revert?: () => void;
 }
 
 export interface Settler {
@@ -20,6 +22,8 @@ export interface Settler {
   settleLeg(group: Bet[], b: Bet, index: number, r: Result): void;
   settleDutch(dutchId: string, bets: Bet[], action: DutchRowAction): void;
   undo(): void;
+  /** BT-29: adds a change made elsewhere (bank, add leg, close) to the undo history and selects its row. */
+  record(key: string, label: string, revert: () => void): void;
   canUndo: boolean;
   /** The dutch whose "Undo" button shows (8 s after it was settled). */
   undoShown: string | null;
@@ -95,11 +99,17 @@ export function useSettle({ settled, restored }: { settled(key: string): void; r
     undo() {
       const last = stack.at(-1);
       if (!last) return;
-      apply(last.before);
+      if (last.revert) last.revert();
+      else apply(last.before);
       setStack((s) => s.slice(0, -1));
       setUndoShown(null);
       notify('Undone');
       restored(last.key);
+    },
+    record(key, label, revert) {
+      setStack((s) => [...s, { before: [], key, revert }]);
+      notify(label);
+      restored(key);
     },
     canUndo: stack.length > 0,
     undoShown,

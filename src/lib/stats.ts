@@ -1,5 +1,6 @@
 import { countBets } from './dutch';
 import { profit } from './money';
+import { collapseRollovers } from './rollover';
 import type { Bet } from './types';
 
 export interface Summary {
@@ -25,7 +26,8 @@ export function summarize(bets: Bet[]): Summary {
   let settledStake = 0;
   let totalWagered = 0;
   let pendingAmount = 0;
-  for (const b of bets) {
+  // BT-29: a rollover shot is one money item (first stake in, final payout out)
+  for (const b of collapseRollovers(bets)) {
     totalWagered += b.stake;
     if (b.result === 'pending') {
       pendingAmount += b.stake;
@@ -59,7 +61,7 @@ export function formatPercent(fraction: number | null, signed = false): string {
 /** Cumulative profit by game date (settled bets only), one point per date, oldest first. */
 export function cumulativeProfit(bets: Bet[]): { date: string; profit: number; cumulative: number }[] {
   const byDate = new Map<string, number>();
-  for (const b of bets) {
+  for (const b of collapseRollovers(bets)) {
     if (b.result === 'pending') continue;
     const d = b.gameDate || b.placedDate;
     byDate.set(d, (byDate.get(d) ?? 0) + profit(b));

@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { formatDate, formatDayHeader, formatDayMonth, parseDateInput } from '@/lib/dates';
-import { betLabel, duplicateDutchDraft, dutchSummary, editDutchDraft, type GroupOutcome } from '@/lib/dutch';
+import { betLabel, duplicateDutchDraft, dutchSummary, editDutchDraft, rowKey, type GroupOutcome } from '@/lib/dutch';
 import { duplicateForm } from '@/lib/form';
 import { formatMoney, formatOdds, oddsFromText, parseNumber, potentialReturn, profit, type MoneyScope } from '@/lib/money';
 import { RESULT_LABEL, RESULTS, type Bet, type BetInput, type Leg, type Result } from '@/lib/types';
@@ -22,6 +22,8 @@ import type { Settler } from './useSettle';
 import { losingLegs, sharedLabel } from '@/lib/actuals';
 import { normalize } from '@/lib/autocomplete';
 import { Annotator, LabelChip, LossLine } from './Annotator';
+import { chainPending, chainSummary, needsText, tierOf, type ChainOutcome } from '@/lib/rollover';
+import type { Rollover } from './useRollover';
 
 const QUICK_RESULTS: { r: Result; key: string; cls: string }[] = [
   { r: 'won', key: 'W', cls: 'hover:bg-emerald-600/40 text-emerald-400' },
@@ -33,6 +35,17 @@ const QUICK_RESULTS: { r: Result; key: string; cls: string }[] = [
 export function ProfitText({ value, pending, money = 'real' }: { value: number; pending?: boolean; money?: MoneyScope }) {
   if (pending) return <span className="text-zinc-500">-</span>;
   return <span className={`font-semibold ${value > 0 ? 'text-emerald-400' : value < 0 ? 'text-red-400' : 'text-zinc-400'}`}>{formatMoney(value, money, true)}</span>;
+}
+
+/** BT-29: the odds tier as a small chip ("Semi"); "Banked Semi" on a banked bet or an open shot. None under 1.10. */
+function TierChip({ odds, banked }: { odds: number; banked?: boolean }) {
+  const t = tierOf(odds);
+  if (!t) return null;
+  return (
+    <span className={`ml-1.5 inline-block whitespace-nowrap rounded px-1 align-[1px] text-[10px] font-bold uppercase leading-4 tracking-wide ${banked ? 'bg-sky-500/20 text-sky-200' : 'bg-sky-500/10 text-sky-300'}`} title={`Odds tier: ${t}`} data-testid="tier-chip">
+      {banked ? `Banked ${t}` : t}
+    </span>
+  );
 }
 
 /** BT-26: rows as tall as they need; the selected row (keyboard settling) is tinted. */
@@ -147,6 +160,8 @@ interface TableProps {
   /** BT-27: the row whose label / actual editor is open (T), and how to open or close it. */
   annotating: string | null;
   annotate(key: string | null): void;
+  /** BT-29: bank, add leg, close. */
+  rollover: Rollover;
   empty?: string;
 }
 
@@ -156,7 +171,7 @@ interface TableProps {
  * two lines: the bet text (wraps, never cut) and a muted line with game, sport, market, book and tags. A dutch is a
  * summary row with one such block per split under it. A click selects a row (keyboard settling), a double click edits.
  */
-export function BetTable({ days, selected, select, settle, annotating, annotate, empty = 'No bets yet. Type one in the quick-add line above.' }: TableProps) {
+export function BetTable({ days, selected, select, settle, annotating, annotate, rollover, empty = 'No bets yet. Type one in the quick-add line above.' }: TableProps) {
   const [open, setOpen] = useState<Set<string>>(new Set());
   const toggle = (id: string) =>
     setOpen((s) => {
@@ -168,7 +183,7 @@ export function BetTable({ days, selected, select, settle, annotating, annotate,
 
   if (!days.length) return <p className="py-10 text-center text-sm text-zinc-500">{empty}</p>;
   const th = 'sticky top-14 z-[2] bg-zinc-950 px-2 py-2 text-[11px] font-medium text-zinc-500 shadow-[inset_0_-1px_0_rgb(39_39_42)]';
-  const row = { open, toggle, selected, select, settle, annotating, annotate };
+  const row = { open, toggle, selected, select, settle, annotating, annotate, rollover };
 
   return (
     <div data-testid="bet-table-scroll">
@@ -197,7 +212,7 @@ export function BetTable({ days, selected, select, settle, annotating, annotate,
         </thead>
         <tbody>
           {days.map((d) => (
-            <Fragment key={`${d.date}-${d.rows[0]!.kind === 'bet' ? d.rows[0]!.bet.id : d.rows[0]!.dutchId}`}>
+            <Fragment key={`${d.date}-${rowKey(d.rows[0]!)}`}>
               <tr className="border-b border-zinc-800 bg-zinc-900/70" data-testid="day-header" data-date={d.date}>
                 <td colSpan={COLS} className="px-2 py-1.5">
                   <div className="flex items-center justify-between text-xs">
@@ -218,7 +233,15 @@ export function BetTable({ days, selected, select, settle, annotating, annotate,
                   </div>
                 </td>
               </tr>
-              {d.rows.map((r) => (r.kind === 'bet' ? <BetRow key={r.bet.id} b={r.bet} {...row} /> : <DutchGroup key={r.dutchId} dutchId={r.dutchId} bets={r.bets} {...row} />))}
+              {d.rows.map((r) =>
+                r.kind === 'bet' ? (
+                  <BetRow key={r.bet.id} b={r.bet} {...row} />
+                ) : r.kind === 'dutch' ? (
+                  <DutchGroup key={r.dutchId} dutchId={r.dutchId} bets={r.bets} {...row} />
+                ) : (
+                  <RolloverGroup key={r.rolloverId} rolloverId={r.rolloverId} bets={r.bets} {...row} />
+                ),
+              )}
             </Fragment>
           ))}
         </tbody>
@@ -235,7 +258,7 @@ function shared(bets: Bet[], pick: (b: Bet) => string) {
   return vals.length === 1 ? vals[0]! : vals.length > 1 ? 'Mixed' : '';
 }
 
-type RowProps = { open: Set<string>; toggle(id: string): void; selected: string | null; select(key: string): void; settle: Settler; annotating: string | null; annotate(key: string | null): void };
+type RowProps = { open: Set<string>; toggle(id: string): void; selected: string | null; select(key: string): void; settle: Settler; annotating: string | null; annotate(key: string | null): void; rollover: Rollover };
 
 /** BT-27: "+ label / result", faint, on row hover (T on the selected row does the same). */
 function AnnotateButton({ onClick }: { onClick(): void }) {
@@ -255,7 +278,7 @@ function AnnotateButton({ onClick }: { onClick(): void }) {
   );
 }
 
-function DutchGroup({ bets, dutchId, open, toggle, selected, select, settle, annotating, annotate }: { bets: Bet[]; dutchId: string } & RowProps) {
+function DutchGroup({ bets, dutchId, open, toggle, selected, select, settle, annotating, annotate, rollover }: { bets: Bet[]; dutchId: string } & RowProps) {
   const { removeDutch, openDutch, names: nameCasing } = useApp();
   const s = dutchSummary(bets);
   const tone = groupTone(s.outcome);
@@ -357,6 +380,7 @@ function DutchGroup({ bets, dutchId, open, toggle, selected, select, settle, ann
           settle={settle}
           annotating={annotating}
           annotate={annotate}
+          rollover={rollover}
           split={{
             group: bets,
             sharedLabel: label,
@@ -371,6 +395,158 @@ function DutchGroup({ bets, dutchId, open, toggle, selected, select, settle, ann
       ))}
     </>
   );
+}
+
+const CHAIN_LABEL: Record<ChainOutcome, string> = { pending: 'Pending', open: 'Open', won: 'Won', lost: 'Lost', even: 'Even' };
+
+/**
+ * BT-29: a rollover shot. One row (stake = the first bet's, odds = the product of its bets', profit = final payout −
+ * first stake) with its bets under it, like a dutch's splits. An open shot shows what is banked and the odds the next
+ * bet needs, with Add leg and Close.
+ */
+function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, select, settle, annotating, annotate, rollover }: { bets: Bet[]; rolloverId: string } & RowProps) {
+  const { names: nameCasing, remove } = useApp();
+  const s = chainSummary(raw);
+  const bets = s.bets;
+  const tone = groupTone(chainPending(s.outcome) ? 'pending' : (s.outcome as GroupOutcome));
+  const money = bets[0]!.money;
+  const key = `rollover:${rolloverId}`;
+  const isSel = selected === key;
+  const isOpen = s.outcome === 'open';
+  const last = bets.at(-1)!;
+  const pendingBet = bets.find((b) => b.result === 'pending');
+  const names = bets.map((b) => tidyText(b.betText || betLabel(b), nameCasing)).join(' → ');
+  const books = [...new Set(bets.map((b) => b.book).filter(Boolean))];
+  const live = bets.every((b) => b.situation === 'live');
+  const shot = `Banked ${formatMoney(s.banked, money)} @ ${formatOdds(s.odds, 2)} · ${needsText(s)}`;
+  return (
+    <>
+      <tr className={ROW} data-testid="rollover-row" data-rollover-id={rolloverId} data-key={key} data-selected={isSel || undefined} data-tone={tone} data-money={money} data-outcome={s.outcome} onClick={() => select(key)}>
+        <td className={TONE_EDGE[tone]} />
+        <td className={CELL}>
+          <div className={`${TEXT} flex items-center gap-1.5`} data-testid="bet-text" title={names}>
+            <span data-testid="type">Rollover ×{bets.length}</span>
+            <TierChip odds={s.odds} banked={isOpen} />
+            {live && <LiveTag />}
+          </div>
+          <SubLine
+            parts={[
+              isOpen && {
+                text: shot,
+                node: (
+                  <span className="text-sky-300" data-testid="shot-line">
+                    {shot}
+                  </span>
+                ),
+              },
+              { text: names, node: <span className="text-zinc-300">{names}</span> },
+              books.length > 0 && { text: books.join(', '), node: books.join(', ') },
+            ]}
+          />
+        </td>
+        <td className={NUM} data-testid="rollover-stake" data-col="stake" title="The first bet's stake: the rolled stakes are the same money">
+          <span className={money === 'hypothetical' ? HYPO : 'text-zinc-200'}>{formatMoney(s.stake, money)}</span>
+        </td>
+        <td className={`${NUM} text-zinc-200`} data-testid="rollover-odds" data-col="odds" title="The bets' odds multiplied (a void counts 1.00)">
+          {formatOdds(s.odds, 2)}
+        </td>
+        <td className={NUM} data-testid="profit" data-col="profit">
+          <ProfitText value={s.profit} pending={chainPending(s.outcome)} money={money} />
+        </td>
+        <td className={CELL} data-col="result">
+          <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${isOpen ? 'bg-sky-500/15 text-sky-300' : TONE_BADGE[tone]}`} data-testid="result">
+            {CHAIN_LABEL[s.outcome]}
+          </span>
+        </td>
+        <td className={ACTIONS}>
+          <span className="inline-flex items-center gap-0.5">
+            {isOpen && (
+              <>
+                <button
+                  className="rounded px-1.5 py-0.5 text-xs font-semibold text-sky-300 hover:bg-sky-600/30"
+                  title="Add the next bet with the banked payout (A)"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    select(key);
+                    rollover.addLeg(bets);
+                  }}
+                  data-testid="add-leg"
+                >
+                  + Add leg
+                </button>
+                <button
+                  className="rounded px-1.5 py-0.5 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-white"
+                  title="Close the shot: no more legs (B)"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    rollover.close(bets);
+                  }}
+                  data-testid="close-shot"
+                >
+                  Close
+                </button>
+              </>
+            )}
+            {pendingBet &&
+              QUICK_RESULTS.map(({ r, key: k, cls }) => (
+                <button
+                  key={r}
+                  className={`rounded px-1.5 py-0.5 text-xs font-semibold ${cls}`}
+                  title={`${RESULT_LABEL[r]} (${k})`}
+                  aria-label={`Mark ${RESULT_LABEL[r]}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    settle.settleBet(pendingBet, r, null, [pendingBet]);
+                  }}
+                >
+                  {k}
+                </button>
+              ))}
+            <span className={HOVER_ONLY} data-testid="row-actions">
+              <RowMenu
+                label="More rollover actions"
+                items={[
+                  ...(rollover.canBank(last) ? [{ label: 'Bank for rollover', icon: '⤴', onClick: () => rollover.bank(last) }] : []),
+                  ...(isOpen ? [{ label: 'Close shot', icon: '■', onClick: () => rollover.close(bets) }] : []),
+                  {
+                    label: 'Delete rollover',
+                    icon: '🗑',
+                    danger: true,
+                    onClick: () => {
+                      if (window.confirm(`Delete this rollover and its ${bets.length} bets (${names})? This cannot be undone.`)) for (const b of bets) void remove(b.id);
+                    },
+                  },
+                ]}
+              />
+            </span>
+          </span>
+        </td>
+      </tr>
+      {bets.map((b, i) => (
+        <BetRow
+          key={b.id}
+          b={b}
+          open={open}
+          toggle={toggle}
+          selected={selected}
+          select={select}
+          settle={settle}
+          annotating={annotating}
+          annotate={annotate}
+          rollover={rollover}
+          link={{ index: i, last: i === bets.length - 1 && !open.has(b.id), chainKey: key, chain: bets }}
+        />
+      ))}
+    </>
+  );
+}
+
+/** BT-29: a bet shown under its rollover shot. */
+interface ChainLink {
+  index: number;
+  last: boolean;
+  chainKey: string;
+  chain: Bet[];
 }
 
 interface Split {
@@ -388,7 +564,7 @@ interface Split {
   pick: { n: number; on: boolean; toggle(): void } | null;
 }
 
-function BetRow({ b, open, toggle, selected, select, settle, split, annotating, annotate }: { b: Bet; split?: Split } & RowProps) {
+function BetRow({ b, open, toggle, selected, select, settle, split, link, annotating, annotate, rollover }: { b: Bet; split?: Split; link?: ChainLink } & RowProps) {
   const { update, remove, openEdit, openNew, names } = useApp();
   const save = (patch: Partial<BetInput>) => update(b.id, patch).catch(() => undefined);
   const saveLeg = (i: number, patch: Partial<Leg>) => save({ legs: b.legs.map((l, j) => (j === i ? { ...l, ...patch } : l)) });
@@ -399,7 +575,10 @@ function BetRow({ b, open, toggle, selected, select, settle, split, annotating, 
   const combo = b.type === 'combination';
   const tone = betTone(b);
   const key = `bet:${b.id}`;
-  const isSel = selected === key || (nested && selected === split.dutchKey);
+  const indent = nested || !!link;
+  const isSel = selected === key || (nested && selected === split.dutchKey) || (!!link && selected === link.chainKey);
+  // BT-29: Bank on a won bet (not in a dutch; in a shot only its last bet, once closed)
+  const bankable = !nested && rollover.canBank(b);
   // a dutch's bets are logged without bet text: its selection is the text, edited on the leg
   const textOnLeg = !b.betText && solo && nested;
   const rawText = b.betText || (nested ? betLabel(b) : '');
@@ -413,7 +592,7 @@ function BetRow({ b, open, toggle, selected, select, settle, split, annotating, 
   const soloActual = solo ? (leg0?.actual ?? '') : '';
   const group = split?.group ?? [b];
   const losses = losingLegs(b, split?.group ?? []);
-  const flow = !!(chip || soloActual);
+  const flow = !!(chip || soloActual || link || b.banked);
   const annotateHere = () => {
     select(key);
     annotate(key);
@@ -427,14 +606,20 @@ function BetRow({ b, open, toggle, selected, select, settle, split, annotating, 
       <tr className={ROW} data-testid="bet-row" data-bet-id={b.id} data-key={key} data-nested={nested || undefined} data-split-of={nested ? split.dutchKey.slice(6) : undefined} data-selected={isSel || undefined} data-tone={tone} data-money={b.money} onClick={() => select(key)}>
         <td className={`relative px-1 align-top ${TONE_EDGE[tone]}`}>
           {nested && <Connector last={split.last} />}
+          {link && <Connector last={link.last} />}
           {combo && (
-            <span className={`${nested ? 'relative ml-3' : ''} inline-flex pt-1`}>
+            <span className={`${indent ? 'relative ml-3' : ''} inline-flex pt-1`}>
               <Chevron expanded={expanded} noun="legs" onClick={() => toggle(b.id)} />
             </span>
           )}
         </td>
-        <td className={`${CELL} ${nested ? 'pl-5' : ''}`}>
+        <td className={`${CELL} ${indent ? 'pl-5' : ''}`}>
           <div className="flex items-start gap-1.5">
+            {link && (
+              <span className="mt-px shrink-0 text-[10px] leading-4 text-zinc-500" data-testid="chain-label">
+                Bet {link.index + 1}
+              </span>
+            )}
             {nested &&
               (split.pick ? (
                 <button
@@ -469,6 +654,7 @@ function BetRow({ b, open, toggle, selected, select, settle, split, annotating, 
                 </span>
               )}
               {chip && <LabelChip label={chip} />}
+              {(link || b.banked) && <TierChip odds={b.odds} banked={b.banked && !!link && link.index === link.chain.length - 1} />}
             </div>
           </div>
           <SubLine
@@ -532,6 +718,19 @@ function BetRow({ b, open, toggle, selected, select, settle, split, annotating, 
                     </button>
                   ))}
                 <span className={HOVER_ONLY} data-testid="row-actions">
+                  {bankable && (
+                    <button
+                      className="rounded px-1.5 py-0.5 text-xs font-semibold text-sky-300 hover:bg-sky-600/30"
+                      title="Bank for rollover: keep the payout for a later bet (B)"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        rollover.bank(b);
+                      }}
+                      data-testid="bank"
+                    >
+                      Bank
+                    </button>
+                  )}
                   <AnnotateButton onClick={annotateHere} />
                   <IconButton label="Edit" onClick={() => openEdit(b)}>
                     ✎
@@ -539,6 +738,7 @@ function BetRow({ b, open, toggle, selected, select, settle, split, annotating, 
                   <RowMenu
                     label="More actions"
                     items={[
+                      ...(bankable ? [{ label: 'Bank for rollover', icon: '⤴', onClick: () => rollover.bank(b) }] : []),
                       { label: 'Duplicate', icon: '⧉', onClick: () => openNew(duplicateForm(b)) },
                       {
                         label: 'Delete',
@@ -574,9 +774,9 @@ function BetRow({ b, open, toggle, selected, select, settle, split, annotating, 
           return (
             <tr key={l.id} className={`${ROW} text-xs`} data-testid="leg-row" data-leg-of={b.id} data-lost={legLost || undefined} data-tone={lt}>
               <td className={`relative px-1 ${TONE_EDGE[lt]}`}>
-                <Connector last={i === b.legs.length - 1 && (!nested || split.last)} />
+                <Connector last={i === b.legs.length - 1 && (nested ? split.last : link ? link.last : true)} />
               </td>
-              <td className={`${CELL} ${nested ? 'pl-9' : 'pl-5'}`}>
+              <td className={`${CELL} ${indent ? 'pl-9' : 'pl-5'}`}>
                 <div className="flex items-start gap-1.5">
                   <span className="mt-px shrink-0 text-[10px] leading-4 text-zinc-500">Leg {i + 1}</span>
                   <div className="min-w-0 flex-1 [overflow-wrap:anywhere]" data-testid="bet-text">

@@ -7,7 +7,7 @@ import type { BetForm } from '@/lib/form';
 import { latestGate } from '@/lib/latest';
 import { REFRESH_MIN_MS, refreshGate } from '@/lib/refresh';
 import { tidyBet, type NameCasing } from '@/lib/tidy';
-import type { Bet, BetInput } from '@/lib/types';
+import type { Bet, BetInput, Money } from '@/lib/types';
 
 /** BT-20: names typed "Mccain" saved as "McCain" once that spelling is known (the server tidies games and units). */
 function tidyPatch<T extends Partial<BetInput>>(p: T, names: NameCasing): T {
@@ -16,7 +16,15 @@ function tidyPatch<T extends Partial<BetInput>>(p: T, names: NameCasing): T {
   return { ...p, ...(p.betText != null ? { betText: t.betText } : {}), ...(p.legs ? { legs: t.legs } : {}) };
 }
 
-export type FormRequest = { mode: 'new'; prefill?: Partial<BetForm>; key: number } | { mode: 'edit'; bet: Bet; key: number };
+/** BT-29: the new bet is the next bet of an open rollover shot: its stake is the banked payout and its money the shot's. */
+export interface RolloverAdd {
+  rolloverId: string;
+  stake: number;
+  money: Money;
+  onSaved?(bet: Bet): void;
+}
+
+export type FormRequest = { mode: 'new'; prefill?: Partial<BetForm>; rollover?: RolloverAdd; key: number } | { mode: 'edit'; bet: Bet; key: number };
 
 interface AppCtx {
   bets: Bet[];
@@ -44,7 +52,7 @@ interface AppCtx {
   defaults: ReturnType<typeof lastUsed>;
   presets: number[];
   form: FormRequest | null;
-  openNew(prefill?: Partial<BetForm>): void;
+  openNew(prefill?: Partial<BetForm>, rollover?: RolloverAdd): void;
   openEdit(bet: Bet): void;
   closeForm(): void;
   toast: { text: string; kind: 'ok' | 'error'; id: number } | null;
@@ -227,7 +235,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     defaults,
     presets,
     form,
-    openNew: (prefill) => setForm({ mode: 'new', prefill, key: ++formKey.current }),
+    openNew: (prefill, rollover) => setForm({ mode: 'new', prefill, rollover, key: ++formKey.current }),
     openEdit: (bet) => setForm({ mode: 'edit', bet, key: ++formKey.current }),
     closeForm: () => setForm(null),
     toast,

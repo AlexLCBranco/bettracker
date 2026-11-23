@@ -4,11 +4,13 @@
 import { groupRows, type BetRow } from './dutch';
 import { comboHits, dutchHits } from './hits';
 import { profit } from './money';
+import { collapseRollovers } from './rollover';
 import { tidyGame, tidyNames, type NameCasing } from './tidy';
 import type { Bet, Leg, Money } from './types';
 
-/** The day a table row sits under: a bet's date, a dutch's earliest. */
-export const rowDate = (r: BetRow): string => (r.kind === 'bet' ? r.bet.placedDate : r.bets.map((b) => b.placedDate).sort()[0]!);
+/** The day a table row sits under: a bet's date, a dutch's earliest, a rollover's latest (it sits where its newest bet is). */
+export const rowDate = (r: BetRow): string =>
+  r.kind === 'bet' ? r.bet.placedDate : r.kind === 'dutch' ? r.bets.map((b) => b.placedDate).sort()[0]! : r.bets.map((b) => b.placedDate).sort().at(-1)!;
 
 export interface DayNet {
   money: Money;
@@ -38,7 +40,7 @@ export function dayGroups(rows: BetRow[], dateOf: (r: BetRow) => string = rowDat
   }
   for (const g of out) {
     const sums = new Map<Money, number>();
-    for (const b of g.rows.flatMap((r) => (r.kind === 'bet' ? [r.bet] : r.bets)))
+    for (const b of collapseRollovers(g.rows.flatMap((r) => (r.kind === 'bet' ? [r.bet] : r.bets))))
       if (b.result !== 'pending') sums.set(b.money, (sums.get(b.money) ?? 0) + profit(b));
     g.nets = (['real', 'hypothetical'] as Money[]).filter((m) => sums.has(m)).map((money) => ({ money, value: round2(sums.get(money)!) }));
   }

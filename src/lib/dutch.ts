@@ -3,36 +3,41 @@
 
 import { formatDate, parseDateInput, todayISO } from './dates';
 import { profit } from './money';
+import { chainPending, chainSummary } from './rollover';
 import type { Bet, BetInput, Leg, Money, Result, Situation } from './types';
 import { validateBet } from './validate';
 
-export type BetRow = { kind: 'bet'; bet: Bet } | { kind: 'dutch'; dutchId: string; bets: Bet[] };
+export type BetRow = { kind: 'bet'; bet: Bet } | { kind: 'dutch'; dutchId: string; bets: Bet[] } | { kind: 'rollover'; rolloverId: string; bets: Bet[] };
 
 const byCreated = (a: Bet, b: Bet) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
 /**
- * Table rows: a dutch becomes one row at the position of its first bet in `bets` (which keeps its order otherwise),
- * holding its bets in the order they were logged.
+ * Table rows: a dutch (or a rollover shot, BT-29) becomes one row at the position of its first bet in `bets` (which
+ * keeps its order otherwise), holding its bets in the order they were logged.
  */
 export function groupRows(bets: Bet[]): BetRow[] {
   const rows: BetRow[] = [];
   const groups = new Map<string, Bet[]>();
   for (const b of bets) {
-    if (!b.dutchId) {
+    const id = b.dutchId ? `d:${b.dutchId}` : b.rolloverId ? `r:${b.rolloverId}` : null;
+    if (!id) {
       rows.push({ kind: 'bet', bet: b });
       continue;
     }
-    let g = groups.get(b.dutchId);
+    let g = groups.get(id);
     if (!g) {
       g = [];
-      groups.set(b.dutchId, g);
-      rows.push({ kind: 'dutch', dutchId: b.dutchId, bets: g });
+      groups.set(id, g);
+      rows.push(b.dutchId ? { kind: 'dutch', dutchId: b.dutchId, bets: g } : { kind: 'rollover', rolloverId: b.rolloverId!, bets: g });
     }
     g.push(b);
   }
   for (const g of groups.values()) g.sort(byCreated);
   return rows;
 }
+
+/** A row's selection key: "bet:<id>", "dutch:<dutchId>" or "rollover:<rolloverId>". */
+export const rowKey = (r: BetRow) => (r.kind === 'bet' ? `bet:${r.bet.id}` : r.kind === 'dutch' ? `dutch:${r.dutchId}` : `rollover:${r.rolloverId}`);
 
 /** What a bet is called in a dutch: a combination's bet text (its legs joined), else its selection. */
 export function betLabel(b: Bet): string {
@@ -118,7 +123,7 @@ export function countBets(bets: Bet[]): Counts {
       else if (r.bet.result === 'lost') c.losses++;
       continue;
     }
-    const o = groupOutcome(r.bets);
+    const o = r.kind === 'dutch' ? groupOutcome(r.bets) : chainOutcomeForCount(r.bets);
     if (o === 'pending') c.pending++;
     else if (o === 'won') c.wins++;
     else if (o === 'lost') c.losses++;
@@ -126,12 +131,19 @@ export function countBets(bets: Bet[]): Counts {
   return c;
 }
 
-/** Every bet of any dutch that has at least one bet in `matched` is added (a group matches when any of its bets does). */
+/** BT-29: a rollover shot in counts: pending while a bet is pending or it is open, else won / lost / even. */
+function chainOutcomeForCount(bets: Bet[]): GroupOutcome {
+  const o = chainSummary(bets).outcome;
+  return chainPending(o) ? 'pending' : o;
+}
+
+/** Every bet of any dutch or rollover that has at least one bet in `matched` is added (a group matches when any of its bets does). */
 export function withWholeGroups(all: Bet[], matched: Bet[]): Bet[] {
   const ids = new Set(matched.map((b) => b.dutchId).filter((d): d is string => !!d));
-  if (!ids.size) return matched;
+  const chains = new Set(matched.map((b) => b.rolloverId).filter((d): d is string => !!d));
+  if (!ids.size && !chains.size) return matched;
   const keep = new Set(matched.map((b) => b.id));
-  return all.filter((b) => keep.has(b.id) || (b.dutchId != null && ids.has(b.dutchId)));
+  return all.filter((b) => keep.has(b.id) || (b.dutchId != null && ids.has(b.dutchId)) || (b.rolloverId != null && chains.has(b.rolloverId)));
 }
 
 // ---- The "log as bets" form ----

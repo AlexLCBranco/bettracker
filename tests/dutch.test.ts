@@ -11,7 +11,7 @@ describe('groupRows', () => {
     const d = dutchBets('d1', [{}, {}, {}]);
     const b = bet();
     const rows = groupRows([a, d[2]!, b, d[0]!, d[1]!]);
-    expect(rows.map((r) => (r.kind === 'bet' ? r.bet.id : r.dutchId))).toEqual([a.id, 'd1', b.id]);
+    expect(rows.map((r) => (r.kind === 'bet' ? r.bet.id : r.kind === 'dutch' ? r.dutchId : r.rolloverId))).toEqual([a.id, 'd1', b.id]);
     expect(rows[1]!.kind === 'dutch' && rows[1]!.bets.map((x) => x.id)).toEqual(d.map((x) => x.id));
   });
 });

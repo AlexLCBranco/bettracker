@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-23
+- BT-29 — Rollover shot: bank a won bet and add a leg later (v0.21.0)
+  "Bank" (or B) on a won bet keeps it open as one shot ("Banked R$ 160,00 @ 1.60 · needs 1.13+ to reach 1.80 (Shot)" with a Mini / Semi / Pepsi / Shot chip); "+ Add leg" (or A) logs the next bet with the whole payout as its fixed stake and the same money, and the chain is one row and one bet with the odds multiplied, the first stake wagered and final payout − first stake as profit; Close (or B) ends it, and Z undoes bank, add leg and close.
 - BT-28 — Leg results: one-click W / L / V, and legs, splits and dutch always agree (v0.20.0)
   A pending leg has W / L / V buttons (a settled one changes from its result); a lost leg loses its bet, all legs won wins it, a shared leg of a dutch is set on every split, a bet set won or back to pending takes its legs along, and a lost bet's unknown legs show "?" instead of "Pending", all undone with Z in one step.
 - BT-27 — Label chip and actual results on a bet (v0.19.0)

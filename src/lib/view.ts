@@ -1,6 +1,7 @@
 // BT-26: the Bets page's tabs (All / Pending / To settle), the order its rows are in, and where the selection goes.
 
-import { groupRows, type BetRow } from './dutch';
+import { groupRows, rowKey, type BetRow } from './dutch';
+import { chainSummary, chainPending } from './rollover';
 import { settleQueue } from './settle';
 import { dayGroups, type DayGroup } from './table';
 import type { Bet } from './types';
@@ -10,8 +11,11 @@ export type Tab = (typeof TABS)[number];
 export const TAB_LABEL: Record<Tab, string> = { all: 'All', pending: 'Pending', settle: 'To settle' };
 export const isTab = (v: unknown): v is Tab => TABS.includes(v as Tab);
 
-/** A row's selection key: "bet:<id>" or "dutch:<dutchId>". A dutch's split lines are selected as "bet:<id>". */
-export const rowKey = (r: BetRow) => (r.kind === 'bet' ? `bet:${r.bet.id}` : `dutch:${r.dutchId}`);
+/** A row's selection key (see dutch.ts). A dutch's split lines and a rollover's bets are selected as "bet:<id>". */
+export { rowKey };
+
+/** Shown on the Pending tab: a bet still pending, or a rollover shot that is still open (BT-29). */
+const isPendingRow = (r: BetRow) => (r.kind === 'rollover' ? chainPending(chainSummary(r.bets).outcome) : (r.kind === 'bet' ? [r.bet] : r.bets).some((b) => b.result === 'pending'));
 
 const due = (b: Bet) => b.gameDate || b.placedDate;
 
@@ -22,8 +26,12 @@ const due = (b: Bet) => b.gameDate || b.placedDate;
  */
 export function tabDays(bets: Bet[], tab: Tab, today: string): DayGroup[] {
   if (tab === 'all') return dayGroups(groupRows(bets));
-  if (tab === 'pending') return dayGroups(groupRows(bets).filter((r) => (r.kind === 'bet' ? [r.bet] : r.bets).some((b) => b.result === 'pending')));
-  const rows: BetRow[] = settleQueue(bets, today).map((it) => (it.kind === 'bet' ? { kind: 'bet', bet: it.bet } : { kind: 'dutch', dutchId: it.dutchId, bets: it.bets }));
+  if (tab === 'pending') return dayGroups(groupRows(bets).filter(isPendingRow));
+  // a rollover's pending bet is queued on its own; the tab shows its whole shot
+  const chain = (id: string) => bets.filter((b) => b.rolloverId === id);
+  const rows: BetRow[] = settleQueue(bets, today).map((it) =>
+    it.kind === 'dutch' ? { kind: 'dutch', dutchId: it.dutchId, bets: it.bets } : it.bet.rolloverId ? { kind: 'rollover', rolloverId: it.bet.rolloverId, bets: chain(it.bet.rolloverId) } : { kind: 'bet', bet: it.bet },
+  );
   return dayGroups(rows, (r) => (r.kind === 'bet' ? due(r.bet) : r.bets.filter((b) => b.result === 'pending').map(due).sort()[0]!));
 }
 

@@ -49,6 +49,10 @@ export interface Bet {
   money: Money;
   /** Bets logged together as one dutch share this id (see src/lib/dutch.ts); null = not part of a dutch. */
   dutchId: string | null;
+  /** BT-29: bets of one rollover shot share this id (see src/lib/rollover.ts); null = not part of one. */
+  rolloverId: string | null;
+  /** BT-29: a won bet kept open so a later bet can roll its payout on (only the last bet of a chain counts). */
+  banked: boolean;
   /** BT-27: one short free-text label ("lost by one"), shown uppercase as a chip; empty = none. */
   label: string;
   /** ISO timestamps, used for "most recent" ordering. */

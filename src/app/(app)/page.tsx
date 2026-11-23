@@ -10,6 +10,8 @@ import { DataTransfer } from '@/components/DataTransfer';
 import { useMoneyScope } from '@/components/Money';
 import { isTyping } from '@/components/Shell';
 import { useSettle } from '@/components/useSettle';
+import { useRollover } from '@/components/useRollover';
+import { chainSummary } from '@/lib/rollover';
 import { parseDateInput, todayISO } from '@/lib/dates';
 import { countBets } from '@/lib/dutch';
 import { filterBets, NO_FILTERS, type Filters } from '@/lib/filters';
@@ -40,6 +42,8 @@ const HELP: [string, string][] = [
   ['Enter', 'Dutch: confirm (toggled won, rest lost)'],
   ['0', 'Dutch: none won'],
   ['S', 'Dutch: shared leg lost'],
+  ['B', 'Bank a won bet for a rollover; on an open shot, close it'],
+  ['A', 'Open shot: add the next leg'],
   ['T', 'Label and actual result'],
   ['Z', 'Undo the last settle'],
   ['N', 'New bet'],
@@ -86,7 +90,8 @@ function Bets() {
   // ↑ ↓ from a split move from its dutch
   const navKey = (k: string | null) => {
     const b = k?.startsWith('bet:') ? byId.get(k.slice(4)) : undefined;
-    return b?.dutchId && !keys.includes(k!) ? `dutch:${b.dutchId}` : k;
+    if (!b || keys.includes(k!)) return k;
+    return b.dutchId ? `dutch:${b.dutchId}` : b.rolloverId ? `rollover:${b.rolloverId}` : k;
   };
   const keysRef = useRef(keys);
   const selRef = useRef(selected);
@@ -102,6 +107,7 @@ function Bets() {
     },
     restored: (k) => setPicked(k),
   });
+  const rollover = useRollover(settle);
 
   const [help, setHelp] = useState(false);
   // BT-27: the row whose label / actual editor is open; it never opens on its own (settling stays W / L / V)
@@ -133,6 +139,30 @@ function Bets() {
       if (k === 't') {
         e.preventDefault();
         return setAnnotating(selected);
+      }
+      // BT-29: a rollover shot, or a bet in one: B banks / closes, A adds a leg, W / L / V settle its pending bet
+      const sel = selected.startsWith('bet:') ? byId.get(selected.slice(4)) : undefined;
+      const chainId = selected.startsWith('rollover:') ? selected.slice(9) : sel?.rolloverId;
+      const chain = chainId ? all.filter((b) => b.rolloverId === chainId) : [];
+      if (k === 'b') {
+        e.preventDefault();
+        if (chain.length && chainSummary(chain).outcome === 'open') return rollover.close(chain);
+        const target = sel ?? (chain.length ? chainSummary(chain).bets.at(-1) : undefined);
+        if (target) return rollover.bank(target);
+        return notify('B banks a won bet', 'error');
+      }
+      if (k === 'a' && chain.length) {
+        e.preventDefault();
+        return rollover.addLeg(chain);
+      }
+      if (selected.startsWith('rollover:')) {
+        if (!(k in SETTLE_KEYS)) return;
+        e.preventDefault();
+        const p = chain.find((b) => b.result === 'pending');
+        if (!p) return notify('Nothing pending in this shot: settle its bets on their own rows', 'error');
+        if (k === 'c') settle.startCashout(p.id);
+        else settle.settleBet(p, SETTLE_KEYS[k]!, null, [p]);
+        return;
       }
       if (selected.startsWith('dutch:')) {
         const dutchId = selected.slice(6);
@@ -301,6 +331,7 @@ function Bets() {
             settle={settle}
             annotating={annotating}
             annotate={setAnnotating}
+            rollover={rollover}
             empty={tab === 'settle' ? 'Nothing to settle.' : tab === 'pending' ? 'No pending bets.' : all.length ? 'No bets match these filters.' : undefined}
           />
         ) : (

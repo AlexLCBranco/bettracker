@@ -4,6 +4,7 @@
 import { normalize } from './autocomplete';
 import { countBets } from './dutch';
 import { profit } from './money';
+import { collapseRollovers } from './rollover';
 import type { Bet, Leg, Result } from './types';
 
 export const DIMENSIONS = ['sport', 'book', 'market', 'odds', 'type', 'situation'] as const;
@@ -81,6 +82,7 @@ function groupOf(b: Bet, d: Dimension): { key: string; label: string } {
     }
     case 'type':
       if (b.dutchId) return { key: 'dutch', label: 'Dutch' };
+      if (b.rolloverId) return { key: 'rollover', label: 'Rollover' };
       return { key: b.type, label: b.type === 'solo' ? 'Solo' : 'Combination' };
     case 'situation':
       return { key: b.situation, label: b.situation === 'pregame' ? 'Pregame' : 'Live' };
@@ -94,7 +96,8 @@ function groupOf(b: Bet, d: Dimension): { key: string; label: string } {
 export function breakdown(bets: Bet[], d: Dimension): Row[] {
   const rows = new Map<string, Row>();
   const members = new Map<string, Bet[]>();
-  for (const b of bets) {
+  // BT-29: a rollover shot is one bet, grouped by its first bet (book, situation) and its legs, at its total odds
+  for (const b of collapseRollovers(bets)) {
     const g = groupOf(b, d);
     let r = rows.get(g.key);
     if (!r) {

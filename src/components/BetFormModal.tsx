@@ -22,7 +22,13 @@ export function BetFormModal() {
 function FormBody() {
   const { form: req, bets, defaults, presets, suggestFor, create, update, closeForm, notify } = useApp();
   const editing: Bet | null = req?.mode === 'edit' ? req.bet : null;
-  const [f, setF] = useState<BetForm>(() => (editing ? formFromBet(editing) : { ...newForm(defaults), ...(req?.mode === 'new' ? req.prefill : {}) }));
+  // BT-29: adding the next bet of a rollover shot: stake and money are fixed (a different stake is not a rollover)
+  const rollover = req?.mode === 'new' ? req.rollover : undefined;
+  const [f, setF] = useState<BetForm>(() =>
+    editing ? formFromBet(editing) : { ...newForm(defaults), ...(req?.mode === 'new' ? req.prefill : {}), ...(rollover ? { stake: String(rollover.stake), money: rollover.money } : {}) },
+  );
+  // a bet in a rollover keeps the shot's money
+  const moneyLocked = !!rollover || !!editing?.rolloverId;
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const stakeRef = useRef<HTMLInputElement>(null);
@@ -45,11 +51,12 @@ function FormBody() {
     setSaving(true);
     setError('');
     try {
-      // the form has no dutch field: an edited bet stays in its dutch
-      if (editing) await update(editing.id, { ...v.value, dutchId: editing.dutchId });
+      // the form has no dutch or rollover field: an edited bet stays in its dutch / rollover (and banked)
+      if (editing) await update(editing.id, { ...v.value, dutchId: editing.dutchId, rolloverId: editing.rolloverId, banked: editing.banked, ...(editing.rolloverId ? { money: editing.money } : {}) });
+      else if (rollover) rollover.onSaved?.(await create({ ...v.value, stake: rollover.stake, money: rollover.money, rolloverId: rollover.rolloverId, banked: false }));
       else await create(v.value);
-      notify(editing ? 'Bet updated' : 'Bet saved');
-      if (another && !editing) {
+      if (!rollover) notify(editing ? 'Bet updated' : 'Bet saved');
+      if (another && !editing && !rollover) {
         setF(nextForm(f));
         stakeRef.current?.focus();
       } else closeForm();
@@ -83,7 +90,7 @@ function FormBody() {
       <form
         role="dialog"
         aria-modal="true"
-        aria-label={editing ? 'Edit bet' : 'New bet'}
+        aria-label={editing ? 'Edit bet' : rollover ? 'Add rollover leg' : 'New bet'}
         className="card w-full max-w-3xl space-y-4 p-5"
         onKeyDown={onKeyDown}
         onSubmit={(e) => {
@@ -92,13 +99,13 @@ function FormBody() {
         }}
       >
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">{editing ? 'Edit bet' : 'New bet'}</h2>
+          <h2 className="text-lg font-semibold">{editing ? 'Edit bet' : rollover ? 'Add rollover leg' : 'New bet'}</h2>
           <span className="text-xs text-zinc-500">Enter saves · Ctrl+Shift+Enter saves and adds another · Esc closes</span>
         </div>
 
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <L label={`Stake (${MONEY_SYMBOL[f.money]}) *`}>
-            <input ref={stakeRef} className="field" inputMode="decimal" value={f.stake} onChange={(e) => set('stake', e.target.value)} aria-label="Stake" />
+            <input ref={stakeRef} className="field" inputMode="decimal" value={f.stake} readOnly={!!rollover} title={rollover ? 'The banked payout: the whole of it rolls on' : undefined} onChange={(e) => set('stake', e.target.value)} aria-label="Stake" />
           </L>
           <L label="Total odds *">
             <OddsInput value={f.odds} onChange={(v) => set('odds', v)} placeholder="2.10, -114, 5/2" aria-label="Odds" />
@@ -126,7 +133,13 @@ function FormBody() {
           )}
         </div>
 
-        {presets.length > 0 && (
+        {rollover && (
+          <p className="rounded-md border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-sm text-sky-200" data-testid="rollover-note">
+            Rollover: the whole banked payout, {formatMoney(rollover.stake, rollover.money)}, goes on this bet. Its odds multiply the shot&apos;s.
+          </p>
+        )}
+
+        {presets.length > 0 && !rollover && (
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <span className="text-zinc-500">Stakes:</span>
             {presets.map((p) => (
@@ -139,7 +152,13 @@ function FormBody() {
 
         <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
           <L label="Money">
-            <MoneySelect value={f.money} onChange={(m) => set('money', m)} />
+            {moneyLocked ? (
+              <span className={`field ${f.money === 'hypothetical' ? 'text-violet-300' : ''}`} title="A rollover keeps the money of its first bet" data-testid="money-locked">
+                {f.money === 'hypothetical' ? 'Hypothetical (H$)' : 'Real (R$)'}
+              </span>
+            ) : (
+              <MoneySelect value={f.money} onChange={(m) => set('money', m)} />
+            )}
           </L>
           <L label="Book">
             <Autocomplete value={f.book} onChange={(v) => set('book', v)} getSuggestions={(q) => suggestFor('book', q)} aria-label="Book" />
@@ -284,7 +303,7 @@ function FormBody() {
           <button type="button" className="btn" onClick={closeForm}>
             Cancel
           </button>
-          {!editing && (
+          {!editing && !rollover && (
             <button type="button" className="btn" disabled={saving} onClick={() => void save(true)}>
               Save and add another
             </button>

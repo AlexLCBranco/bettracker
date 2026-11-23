@@ -38,6 +38,8 @@ const SCHEMA = [
     dutch_id TEXT,
     money TEXT NOT NULL DEFAULT 'real',
     label TEXT NOT NULL DEFAULT '',
+    rollover_id TEXT,
+    banked INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   )`,
@@ -77,6 +79,9 @@ async function migrate(c: Client): Promise<void> {
   if (!cols.has('money')) await c.execute("ALTER TABLE bets ADD COLUMN money TEXT NOT NULL DEFAULT 'real'");
   // BT-27: existing bets get no label and no actual results
   if (!cols.has('label')) await c.execute("ALTER TABLE bets ADD COLUMN label TEXT NOT NULL DEFAULT ''");
+  // BT-29: existing bets are in no rollover and not banked
+  if (!cols.has('rollover_id')) await c.execute('ALTER TABLE bets ADD COLUMN rollover_id TEXT');
+  if (!cols.has('banked')) await c.execute('ALTER TABLE bets ADD COLUMN banked INTEGER NOT NULL DEFAULT 0');
   const legCols = new Set((await c.execute('PRAGMA table_info(legs)')).rows.map((r) => String(r.name)));
   if (!legCols.has('actual')) await c.execute("ALTER TABLE legs ADD COLUMN actual TEXT NOT NULL DEFAULT ''");
   await repairLegsOnce(c);
@@ -119,6 +124,8 @@ function rowToBet(r: Row, legs: Leg[]): Bet {
     dutchId: r.dutch_id == null || r.dutch_id === '' ? null : s(r.dutch_id),
     money: r.money === 'hypothetical' ? 'hypothetical' : 'real',
     label: s(r.label),
+    rolloverId: r.rollover_id == null || r.rollover_id === '' ? null : s(r.rollover_id),
+    banked: Number(r.banked ?? 0) === 1,
     createdAt: s(r.created_at),
     updatedAt: s(r.updated_at),
   });
@@ -169,9 +176,9 @@ function writeStatements(bet: Bet): InStatement[] {
   return [
     {
       sql: `INSERT OR REPLACE INTO bets (id, book, placed_date, game_date, type, situation, stake, odds, result, cashout,
-            pre_analysis, post_analysis, bet_text, dutch_id, money, label, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+            pre_analysis, post_analysis, bet_text, dutch_id, money, label, rollover_id, banked, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       args: [bet.id, bet.book, bet.placedDate, bet.gameDate, bet.type, bet.situation, bet.stake, bet.odds, bet.result, bet.cashout,
-        bet.preAnalysis, bet.postAnalysis, bet.betText, bet.dutchId, bet.money, bet.label, bet.createdAt, bet.updatedAt],
+        bet.preAnalysis, bet.postAnalysis, bet.betText, bet.dutchId, bet.money, bet.label, bet.rolloverId, bet.banked ? 1 : 0, bet.createdAt, bet.updatedAt],
     },
     { sql: 'DELETE FROM legs WHERE bet_id = ?', args: [bet.id] },
     ...bet.legs.map((l, i) => ({
@@ -201,7 +208,7 @@ export async function createBets(inputs: BetInput[]): Promise<Bet[]> {
 
 const COLUMNS = {
   book: 'book', placedDate: 'placed_date', gameDate: 'game_date', type: 'type', situation: 'situation', stake: 'stake',
-  odds: 'odds', result: 'result', cashout: 'cashout', preAnalysis: 'pre_analysis', postAnalysis: 'post_analysis', betText: 'bet_text', dutchId: 'dutch_id', money: 'money', label: 'label',
+  odds: 'odds', result: 'result', cashout: 'cashout', preAnalysis: 'pre_analysis', postAnalysis: 'post_analysis', betText: 'bet_text', dutchId: 'dutch_id', money: 'money', label: 'label', rolloverId: 'rollover_id', banked: 'banked',
 } as const satisfies Partial<Record<keyof Bet, string>>;
 
 const sameLegs = (a: BetInput['legs'], b: Leg[]) =>
@@ -218,7 +225,8 @@ export async function updateBet(existing: Bet, input: BetInput): Promise<Bet> {
   for (const [key, col] of Object.entries(COLUMNS) as [keyof typeof COLUMNS, string][]) {
     if (input[key] !== existing[key]) {
       sets.push(`${col} = ?`);
-      args.push(input[key]);
+      const v = input[key];
+      args.push(typeof v === 'boolean' ? (v ? 1 : 0) : v);
     }
   }
   const legsChanged = !sameLegs(input.legs, existing.legs);
