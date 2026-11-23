@@ -161,33 +161,6 @@ Tests: unit tests for every balance rule (each result type, bonus win / loss / v
 rule, take out); db integration; Playwright for insert each type → place a bet of each type → balances move →
 bonus win pays winnings only into real.
 
-### BT-34 — Cash-out button "C" next to W / L / V, typed as an amount or a percentage
-**In short:** A blue "C" button beside W / L / V on every unsettled bet opens a small cash-out box where you type either the money returned or a percentage, and it shows both values before you confirm.
-
-Asked for by the owner on 2026-11-23 with a screenshot of the W / L / V buttons. Today cash-out exists only behind
-the C key and the result pill, and `CashoutBox` (`src/components/BetTable.tsx`) takes an amount only.
-
-- Add "C" as a fourth button after V in the same button group (`QUICK_RESULTS` in `BetTable.tsx`), on plain bets
-  and on each split of a dutch, wherever W / L / V show. Colour: blue (V is grey, `text-zinc-300`, but looks
-  bluish on the dark background: make C a saturated blue so the two cannot be confused). Tooltip "Cash-out (C)".
-- Clicking it (or pressing C on the selected row, as now) opens the cash-out box in place. One input that accepts
-  either form:
-  - a money amount ("140", "140,50") = the amount returned;
-  - a percentage ("70%") = that share of the bet's FULL PAYOUT (stake x odds).
-  A small R$ / % toggle next to the input does the same as typing the "%" sign; the last-used mode is remembered.
-- While typing, a line under the input shows both values and the result, whichever one was typed:
-  "R$ 140,00 returned · 70% of full payout (R$ 200,00) · profit +R$ 40,00" (profit in green or red).
-  The percentage base is Claude's choice, NOT confirmed by the owner (he said only "by real money or
-  percentage"): if he says it should be a percentage of the stake, change the base and the wording.
-- Enter saves, Esc closes, Z undoes, exactly as the current box. What is stored does not change: result
-  `cash-out` and `cashout` = the amount returned (`src/lib/money.ts` stays as is). The percentage is derived for
-  display, never stored.
-- The result pill and its tooltip of a cashed-out bet show both too: "Cash-out · R$ 140,00 (70%)".
-- Uses the bet's own money symbol (R$, H$, and Bonus once BT-33 exists). No cut text.
-
-Tests: unit tests for parsing (amount, comma decimals, "%", toggle) and both conversions; Playwright for click C
-→ type 70% → both values shown → Enter → row shows cash-out and profit → Z undoes.
-
 ### BT-35 — Ladder: let the whole payout ride from one bet to the next, shown as rungs
 **In short:** A ladder starts from one stake, puts the whole payout of each win on the next bet (100 → 200 → 400 → ...), and shows as one row with its rungs until it loses or you take the money.
 

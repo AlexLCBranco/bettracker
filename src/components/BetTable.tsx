@@ -5,7 +5,9 @@ import { createPortal } from 'react-dom';
 import { formatDate, formatDayHeader, formatDayMonth, parseDateInput } from '@/lib/dates';
 import { betLabel, duplicateDutchDraft, dutchSummary, editDutchDraft, rowKey, type GroupOutcome } from '@/lib/dutch';
 import { duplicateForm } from '@/lib/form';
-import { formatMoney, formatOdds, oddsFromText, parseNumber, potentialReturn, profit, type MoneyScope } from '@/lib/money';
+import { formatMoney, formatOdds, MONEY_SYMBOL, oddsFromText, parseNumber, potentialReturn, profit, type MoneyScope } from '@/lib/money';
+import { cashoutLabel, cashoutLine, readCashout, type CashoutMode } from '@/lib/cashout';
+import { useCashoutMode } from './useCashoutMode';
 import { RESULT_LABEL, RESULTS, type Bet, type BetInput, type Leg, type Result } from '@/lib/types';
 import type { Field } from '@/lib/autocomplete';
 import { useApp } from './AppProvider';
@@ -502,6 +504,7 @@ function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, select, 
                   {k}
                 </button>
               ))}
+            {pendingBet && <CashoutButton onClick={() => settle.startCashout(pendingBet.id)} />}
             <span className={HOVER_ONLY} data-testid="row-actions">
               <RowMenu
                 label="More rollover actions"
@@ -704,8 +707,11 @@ function BetRow({ b, open, toggle, selected, select, settle, split, link, annota
           {settle.cashoutFor === b.id ? (
             <CashoutBox bet={b} onDone={(a) => settle.settleBet(b, 'cash-out', a, group)} onClose={settle.cancelCashout} />
           ) : nested ? (
-            <span className={HOVER_ONLY} data-testid="row-actions">
-              <AnnotateButton onClick={annotateHere} />
+            <span className="inline-flex items-center gap-0.5">
+              {pending && <CashoutButton onClick={() => settle.startCashout(b.id)} />}
+              <span className={HOVER_ONLY} data-testid="row-actions">
+                <AnnotateButton onClick={annotateHere} />
+              </span>
             </span>
           ) : (
             (
@@ -717,6 +723,7 @@ function BetRow({ b, open, toggle, selected, select, settle, split, link, annota
                       {k}
                     </button>
                   ))}
+                {pending && <CashoutButton onClick={() => settle.startCashout(b.id)} />}
                 <span className={HOVER_ONLY} data-testid="row-actions">
                   {bankable && (
                     <button
@@ -811,34 +818,90 @@ function BetRow({ b, open, toggle, selected, select, settle, split, link, annota
   );
 }
 
-/** C (or Cash-out on the result pill): the amount returned, typed in place; Enter saves, Esc closes (BT-26). */
-function CashoutBox({ bet, onDone, onClose }: { bet: Bet; onDone(amount: number): void; onClose(): void }) {
-  const [amount, setAmount] = useState('');
+/** BT-34: "C", blue, after W / L / V: opens the cash-out box on this bet (same as C on the selected row). */
+function CashoutButton({ onClick }: { onClick(): void }) {
   return (
-    <form
-      className="inline-flex"
-      onSubmit={(e) => {
-        e.preventDefault();
-        const a = parseNumber(amount);
-        if (a != null) onDone(a);
+    <button
+      className="rounded px-1.5 py-0.5 text-xs font-bold text-blue-500 hover:bg-blue-600/40 hover:text-blue-300"
+      title="Cash-out (C)"
+      aria-label="Mark Cash-out"
+      data-testid="cashout-button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
       }}
     >
-      <input
-        autoFocus
-        className="field w-36 py-0.5 text-xs"
-        placeholder={`Cash-out ${bet.money === 'hypothetical' ? 'H$' : 'R$'} returned`}
-        aria-label="Cash-out amount"
-        value={amount}
-        onChange={(e) => setAmount(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') {
-            e.preventDefault();
-            e.stopPropagation();
-            onClose();
-          }
-        }}
-        onBlur={onClose}
-      />
+      C
+    </button>
+  );
+}
+
+/**
+ * C (or the C button, or Cash-out on the result pill): the money returned or a percentage of the full payout, typed in
+ * place (BT-34). The line under it shows both values and the profit. Enter saves, Esc closes (BT-26).
+ */
+function CashoutBox({ bet, onDone, onClose }: { bet: Bet; onDone(amount: number): void; onClose(): void }) {
+  const [text, setText] = useState('');
+  const [mode, setMode] = useCashoutMode();
+  const box = useRef<HTMLFormElement>(null);
+  const read = readCashout(text, mode, bet.stake, bet.odds);
+  const shownMode: CashoutMode = text.trim().endsWith('%') ? 'percent' : mode;
+  const sym = MONEY_SYMBOL[bet.money];
+  return (
+    <form
+      ref={box}
+      className="flex flex-col items-end gap-0.5 whitespace-normal"
+      data-testid="cashout-box"
+      onClick={(e) => e.stopPropagation()}
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (read) onDone(read.amount);
+      }}
+      onBlur={(e) => {
+        if (!box.current?.contains(e.relatedTarget as Node | null)) onClose();
+      }}
+    >
+      <span className="inline-flex items-center gap-1">
+        <input
+          autoFocus
+          className="field w-36 py-0.5 text-xs"
+          placeholder={shownMode === 'percent' ? '% of full payout' : `Cash-out ${sym} returned`}
+          aria-label="Cash-out amount"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.preventDefault();
+              e.stopPropagation();
+              onClose();
+            }
+          }}
+        />
+        <span role="radiogroup" aria-label="Cash-out typed as" className="inline-flex rounded border border-zinc-700 text-[11px]">
+          {(['amount', 'percent'] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              role="radio"
+              aria-checked={shownMode === m}
+              className={`px-1.5 py-0.5 ${shownMode === m ? 'bg-blue-500/25 text-blue-200' : 'text-zinc-400 hover:text-white'}`}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                setMode(m);
+                // the sign and the toggle say the same thing: drop a "%" that now contradicts it
+                if (m === 'amount') setText((t) => t.replace(/\s*%\s*$/, ''));
+              }}
+            >
+              {m === 'amount' ? sym : '%'}
+            </button>
+          ))}
+        </span>
+      </span>
+      {read && (
+        <span className="max-w-[260px] text-right text-[11px] leading-4 text-zinc-400" data-testid="cashout-preview">
+          {cashoutLine(read, bet.money)} · profit <span className={read.profit > 0 ? 'text-emerald-400' : read.profit < 0 ? 'text-red-400' : 'text-zinc-300'}>{formatMoney(read.profit, bet.money, true)}</span>
+        </span>
+      )}
     </form>
   );
 }
@@ -920,12 +983,29 @@ function ResultCell({ bet, onPick, title }: { bet: Bet; onPick(r: Result): void;
         ))}
       </select>
     );
-  const cashout = bet.result === 'cash-out' && bet.cashout != null ? `Cash-out: ${formatMoney(bet.cashout, bet.money)} returned` : '';
+  // BT-34: a cash-out shows the amount returned and its share of the full payout, on the pill and in its tooltip
+  const cashout = bet.result === 'cash-out' && bet.cashout != null ? cashoutLabel(bet.cashout, bet.stake, bet.odds, bet.money) : '';
+  if (cashout) {
+    const amount = cashout.slice('Cash-out · '.length);
+    return (
+      <button
+        className={`rounded-xl px-2 py-0.5 text-left text-xs font-medium leading-4 ${TONE_BADGE[betTone(bet)]}`}
+        onClick={() => setEditing(true)}
+        title={[cashout, title, 'click to change'].filter(Boolean).join(' · ')}
+        data-testid="result"
+      >
+        <span className="block whitespace-nowrap">{RESULT_LABEL[bet.result]}</span>
+        <span className="block text-[10px] font-normal tabular-nums" data-testid="cashout-amount">
+          {amount}
+        </span>
+      </button>
+    );
+  }
   return (
     <button
       className={`whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${TONE_BADGE[betTone(bet)]}`}
       onClick={() => setEditing(true)}
-      title={[cashout, title, 'click to change'].filter(Boolean).join(' · ')}
+      title={[title, 'click to change'].filter(Boolean).join(' · ')}
       data-testid="result"
     >
       {RESULT_LABEL[bet.result]}

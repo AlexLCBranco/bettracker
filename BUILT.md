@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-23
+- BT-34 — Cash-out button "C" next to W / L / V, typed as an amount or a percentage (v0.22.0)
+  A blue C after W / L / V on every unsettled bet, dutch split and open rollover bet opens the cash-out box, which takes the money returned ("140,50") or a share of the full payout ("70%", or the R$ / % toggle, remembered) and shows both with the profit before Enter; a cashed-out pill reads "Cash-out · R$ 140,00 (70%)".
 - BT-29 — Rollover shot: bank a won bet and add a leg later (v0.21.0)
   "Bank" (or B) on a won bet keeps it open as one shot ("Banked R$ 160,00 @ 1.60 · needs 1.13+ to reach 1.80 (Shot)" with a Mini / Semi / Pepsi / Shot chip); "+ Add leg" (or A) logs the next bet with the whole payout as its fixed stake and the same money, and the chain is one row and one bet with the odds multiplied, the first stake wagered and final payout − first stake as profit; Close (or B) ends it, and Z undoes bank, add leg and close.
 - BT-28 — Leg results: one-click W / L / V, and legs, splits and dutch always agree (v0.20.0)

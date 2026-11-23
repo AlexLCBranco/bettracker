@@ -36,7 +36,7 @@ const HELP: [string, string][] = [
   ['Double click', 'Edit a cell'],
   ['↑ ↓', 'Move the selection'],
   ['W L V', 'Won, lost, void'],
-  ['C', 'Cash-out (type the amount)'],
+  ['C', 'Cash-out (the amount returned, or a % of the full payout)'],
   ['H J', 'Half-won, half-lost'],
   ['1-9', 'Dutch: toggle a split that won'],
   ['Enter', 'Dutch: confirm (toggled won, rest lost)'],
