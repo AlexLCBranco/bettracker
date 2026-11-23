@@ -3,6 +3,7 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-22
+- Fix: bets reload when you come back to the tab, so bets added, settled or deleted elsewhere (another tab, the phone, a test run) show up without reloading the page (v0.9.1)
 - BT-10 — One-click settle buttons on a dutch row (v0.9.0)
   A pending dutch in History and on the dashboard has 0 W, All W, Pick W… (one button per split with two, checkboxes with more), Shared ✕ and V; Undo shows for 8 s and Z undoes, the same as the Settle page.
 - BT-11 — Fix: live e2e tests no longer leave bets behind (v0.9.0)

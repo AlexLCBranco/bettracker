@@ -5,6 +5,7 @@ import { buildIndex, lastUsed, stakePresets, suggest, type Field, type SuggestIn
 import type { DutchDraft } from '@/lib/dutch';
 import type { BetForm } from '@/lib/form';
 import { latestGate } from '@/lib/latest';
+import { REFRESH_MIN_MS, refreshGate } from '@/lib/refresh';
 import type { Bet, BetInput } from '@/lib/types';
 
 export type FormRequest = { mode: 'new'; prefill?: Partial<BetForm>; key: number } | { mode: 'edit'; bet: Bet; key: number };
@@ -83,11 +84,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
       .catch((e: Error) => setLoadError(e.message));
   }, []);
 
+  // Every write goes through the gate, so a reload on focus never puts back what this page just changed.
+  const [writes] = useState(refreshGate);
+  const write = useCallback(<T,>(url: string, init: RequestInit) => writes.write(() => api<T>(url, init)), [writes]);
+
+  // Reload all bets when the tab comes back into view (another tab, the phone or an e2e run may have changed them),
+  // at most every few seconds, and only when nothing was written meanwhile.
+  useEffect(() => {
+    let lastAt = 0;
+    const reload = () => {
+      if (document.visibilityState !== 'visible' || Date.now() - lastAt < REFRESH_MIN_MS) return;
+      lastAt = Date.now();
+      const token = writes.begin();
+      if (token == null) return;
+      api<Bet[]>('/api/bets')
+        .then((b) => {
+          if (writes.canApply(token)) setBets(b);
+        })
+        .catch(() => undefined);
+    };
+    window.addEventListener('focus', reload);
+    document.addEventListener('visibilitychange', reload);
+    return () => {
+      window.removeEventListener('focus', reload);
+      document.removeEventListener('visibilitychange', reload);
+    };
+  }, [writes]);
+
   const importExport = useCallback(async (json: unknown) => {
-    const r = await api<{ added: number; skipped: number }>('/api/import', { method: 'POST', body: JSON.stringify(json) });
+    const r = await write<{ added: number; skipped: number }>('/api/import', { method: 'POST', body: JSON.stringify(json) });
     setBets(await api<Bet[]>('/api/bets'));
     return r;
-  }, []);
+  }, [write]);
 
   const notify = useCallback((text: string, kind: 'ok' | 'error' = 'ok') => setToast({ text, kind, id: Date.now() }), []);
 
@@ -98,29 +126,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [toast]);
 
   const create = useCallback(async (input: BetInput) => {
-    const bet = await api<Bet>('/api/bets', { method: 'POST', body: JSON.stringify(input) });
+    const bet = await write<Bet>('/api/bets', { method: 'POST', body: JSON.stringify(input) });
     setBets((bs) => [bet, ...bs]);
     return bet;
-  }, []);
+  }, [write]);
 
   const createMany = useCallback(async (inputs: BetInput[]) => {
-    const made = await api<Bet[]>('/api/bets', { method: 'POST', body: JSON.stringify(inputs) });
+    const made = await write<Bet[]>('/api/bets', { method: 'POST', body: JSON.stringify(inputs) });
     setBets((bs) => [...[...made].reverse(), ...bs]);
     return made;
-  }, []);
+  }, [write]);
 
   const removeDutch = useCallback(
     async (dutchId: string) => {
       const before = betsRef.current;
       setBets((bs) => bs.filter((b) => b.dutchId !== dutchId));
       try {
-        await api(`/api/dutch/${dutchId}`, { method: 'DELETE' });
+        await write(`/api/dutch/${dutchId}`, { method: 'DELETE' });
       } catch (e) {
         setBets(before);
         notify((e as Error).message, 'error');
       }
     },
-    [notify],
+    [notify, write],
   );
 
   const update = useCallback(
@@ -131,7 +159,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (before) setBets((bs) => bs.map((b) => (b.id === id ? ({ ...b, ...patch, legs: patch.legs ? patch.legs.map((l, i) => ({ ...l, id: b.legs[i]?.id ?? `new-${i}` })) : b.legs } as Bet) : b)));
       const token = updates.begin(id);
       try {
-        const bet = await api<Bet>(`/api/bets/${id}`, { method: 'PATCH', body: JSON.stringify(patch) });
+        const bet = await write<Bet>(`/api/bets/${id}`, { method: 'PATCH', body: JSON.stringify(patch) });
         // a newer edit of this bet is in flight or done: its response (read after both writes) is the one to show
         if (updates.isLatest(id, token)) setBets((bs) => bs.map((b) => (b.id === id ? bet : b)));
         return bet;
@@ -141,7 +169,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw e;
       }
     },
-    [notify, updates],
+    [notify, updates, write],
   );
 
   const remove = useCallback(
@@ -149,13 +177,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const before = betsRef.current;
       setBets((bs) => bs.filter((b) => b.id !== id));
       try {
-        await api(`/api/bets/${id}`, { method: 'DELETE' });
+        await write(`/api/bets/${id}`, { method: 'DELETE' });
       } catch (e) {
         setBets(before);
         notify((e as Error).message, 'error');
       }
     },
-    [notify],
+    [notify, write],
   );
 
   const index = useMemo(() => buildIndex(bets), [bets]);

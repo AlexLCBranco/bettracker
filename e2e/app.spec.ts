@@ -747,3 +747,25 @@ test('dutch row: Pick W… with three splits uses checkboxes, Enter saves', asyn
   await expect.poll(results).toEqual({ Home: 'won', Draw: 'lost', Away: 'won' });
   await expect(row.getByTestId('hit-count')).toHaveText('2/3');
 });
+
+test('bets reload when the tab comes back into view: a bet added and deleted elsewhere shows / goes', async ({ page, request, tag }) => {
+  await page.clock.install();
+  await page.goto('/history');
+  await page.getByLabel('Search bets').fill(tag);
+  await expect(page.getByTestId('bet-row')).toHaveCount(0);
+
+  // another client (the phone, another tab, an e2e run) adds a bet
+  const made = await createBet(request, { betText: `${tag} from elsewhere` });
+  const comeBack = async () => {
+    await page.clock.fastForward(6000); // reloads at most every 5 s
+    await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  };
+  await comeBack();
+  await expect(page.getByTestId('bet-row')).toHaveCount(1);
+  await expect(page.getByTestId('bet-row')).toContainText(`${tag} from elsewhere`);
+
+  // ... and deletes it: it goes away here too
+  await request.delete(`/api/bets/${made.id}`);
+  await comeBack();
+  await expect(page.getByTestId('bet-row')).toHaveCount(0);
+});
