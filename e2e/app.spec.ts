@@ -329,6 +329,8 @@ test('dutch: odds in any format, log as linked bets, one group row, settle with 
   const dialog = page.getByRole('dialog', { name: 'Log dutch' });
   await dialog.getByLabel('Game(s)').fill(`${tag} game`);
   await dialog.getByLabel('Game(s)').press('Enter'); // adds it as a chip; with one chip every leg gets it
+  // the form starts on the last-used money, which on the live site can be H$: this test is about R$
+  await dialog.getByLabel('Money').selectOption('real');
   await dialog.getByLabel('Placed date').fill('01/01/2000');
   await dialog.getByLabel('Game date').fill('01/01/2000');
   await dialog.getByLabel('Selection 1 book').fill(`${tag} BookA`);
