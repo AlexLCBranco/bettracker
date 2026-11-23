@@ -357,13 +357,15 @@ test('dutch: odds in any format, log as linked bets, one group row, settle with 
   await expect(page.locator('[data-testid=bet-row][data-nested]')).toHaveCount(3);
   await expect(page.getByTestId('history-summary')).toContainText(/^1 of \d+ bets/);
 
-  // Settle: the dutch is one item; 2 = Draw won, the others lost; Z undoes the whole group
+  // Settle: the dutch is one item; 2 toggles Draw as won, Enter confirms (the others lost); Z undoes the whole group
   await page.goto('/settle');
   const item = page.getByTestId('queue-row').filter({ hasText: `${tag} BookA` });
   await expect(item).toHaveCount(1);
   await expect(item.getByTestId('queue-dutch-bet')).toHaveCount(3);
   await item.click();
   await page.keyboard.press('2');
+  await expect(item.locator('[data-testid=queue-dutch-bet][data-won]')).toHaveText(/Draw/);
+  await page.keyboard.press('Enter');
   const results = async () => Object.fromEntries((await betsTagged(request, tag)).map((b) => [b.legs[0]!.selection, b.result]));
   await expect.poll(results).toEqual({ Home: 'lost', Draw: 'won', Away: 'lost' });
   await expect(item).toHaveCount(0);
@@ -372,6 +374,7 @@ test('dutch: odds in any format, log as linked bets, one group row, settle with 
   await expect(item).toHaveCount(1);
   await item.click();
   await page.keyboard.press('2');
+  await page.keyboard.press('Enter');
   await expect.poll(results).toEqual({ Home: 'lost', Draw: 'won', Away: 'lost' });
 
   // Stats: one bet, one win, money bet by bet (Draw stake × 4 − 100)
@@ -383,4 +386,90 @@ test('dutch: odds in any format, log as linked bets, one group row, settle with 
   await expect(page.getByTestId('history-summary')).toContainText('win rate 100.0% (1W/0L)');
   await expect(page.getByTestId('history-summary')).toContainText(`+R$ ${net.toFixed(2).replace('.', ',')}`);
   await expect(page.getByTestId('dutch-row').getByTestId('result')).toHaveText('Won');
+});
+
+test('dutch of combinations: shared leg, estimated and typed total, logged as combinations, legs in History, two winners settled with 1, 2, Enter', async ({ page, request, tag }) => {
+  await page.goto('/betting-tool');
+  await page.getByRole('button', { name: 'Clear all' }).click();
+  await page.getByLabel('Total stake').fill('100');
+  // owner's example: McCain 25 pts (+220) + Celtics W (1,3) / Mitchell 30 pts (+220) + Celtics W (1,3)
+  await page.getByRole('button', { name: '+ Shared leg' }).click();
+  await page.getByLabel('Shared leg 1 name').fill(`${tag} Celtics W`);
+  await page.getByLabel('Shared leg 1 odds').fill('1,3');
+  await page.getByLabel('Selection 1 name').fill(`${tag} McCain 25 pts`);
+  await page.getByLabel('Selection 1 odds').fill('+220');
+  await page.getByLabel('Selection 2 name').fill(`${tag} Mitchell 30 pts`);
+  await page.getByLabel('Selection 2 odds').fill('+220');
+  // the total is prefilled with the legs multiplied (3.20 × 1.30) and marked estimated
+  await expect(page.getByLabel('Selection 1 total odds')).toHaveValue('4.16');
+  await expect(page.getByTestId('total-estimated')).toHaveCount(2); // the blank selection 3 has no total box
+  await expect(page.getByTestId('dutch-stake')).toHaveText(['R$ 50,00', 'R$ 50,00']);
+  // the book's real price typed over it wins
+  await page.getByLabel('Selection 2 total odds').fill('4');
+  await expect(page.getByTestId('total-estimated')).toHaveCount(1);
+  await expect(page.getByTestId('dutch-row').nth(1)).toContainText(`${tag} Mitchell 30 pts + ${tag} Celtics W`);
+  const stakes = await page.getByTestId('dutch-stake').allTextContents();
+  expect(stakes).toEqual(['R$ 49,02', 'R$ 50,98']); // 100 / (1/4.16 + 1/4) split so both return the same
+
+  // remembered across visits
+  await page.reload();
+  await expect(page.getByLabel('Shared leg 1 name')).toHaveValue(`${tag} Celtics W`);
+  await expect(page.getByLabel('Selection 2 total odds')).toHaveValue('4');
+
+  await page.getByRole('button', { name: 'Log as bets' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Log dutch' });
+  await expect(dialog.getByTestId('dutch-log-legs')).toHaveCount(2);
+  await dialog.getByLabel('Placed date').fill('01/01/2000');
+  await dialog.getByLabel('Game date').fill('01/01/2000');
+  await dialog.getByLabel('Selection 1 book').fill(`${tag} Book`);
+  await dialog.getByRole('button', { name: 'Log 2 bets' }).click();
+  await expect(dialog).toBeHidden();
+
+  const logged = (await betsTagged(request, tag)).sort((a, b) => a.betText.localeCompare(b.betText));
+  expect(logged).toHaveLength(2);
+  expect(logged.every((b) => b.type === 'combination' && b.dutchId === logged[0]!.dutchId && b.result === 'pending')).toBe(true);
+  expect(logged.map((b) => b.betText)).toEqual([`${tag} McCain 25 pts + ${tag} Celtics W`, `${tag} Mitchell 30 pts + ${tag} Celtics W`]);
+  expect(logged[0]!.odds).toBeCloseTo(4.16, 10);
+  expect(logged[1]!.odds).toBe(4);
+  expect(logged[0]!.legs.map((l) => [l.selection, l.odds])).toEqual([
+    [`${tag} McCain 25 pts`, 3.2],
+    [`${tag} Celtics W`, 1.3],
+  ]);
+
+  // History: the dutch expands to its two bets, each expands to its legs
+  await page.goto('/history');
+  await page.getByLabel('Search bets').fill(tag);
+  const group = page.getByTestId('dutch-row');
+  await expect(group).toHaveCount(1);
+  await group.getByRole('button', { name: 'Show bets' }).click();
+  const nested = page.locator('[data-testid=bet-row][data-nested]');
+  await expect(nested).toHaveCount(2);
+  await nested.first().getByRole('button', { name: 'Show legs' }).click();
+  await expect(page.getByTestId('leg-row')).toHaveCount(2);
+
+  // Settle: both won with 1, 2, Enter; their legs are marked won. Z undoes; then S = shared leg lost
+  await page.goto('/settle');
+  const item = page.getByTestId('queue-row').filter({ hasText: `${tag} Book` });
+  await item.click();
+  await page.keyboard.press('1');
+  await page.keyboard.press('2');
+  await expect(item.locator('[data-testid=queue-dutch-bet][data-won]')).toHaveCount(2);
+  await page.keyboard.press('Enter');
+  const state = async () => (await betsTagged(request, tag)).sort((a, b) => a.betText.localeCompare(b.betText)).map((b) => [b.result, ...b.legs.map((l) => l.result)]);
+  await expect.poll(state).toEqual([
+    ['won', 'won', 'won'],
+    ['won', 'won', 'won'],
+  ]);
+  await expect(item).toHaveCount(0);
+  await page.keyboard.press('z');
+  await expect.poll(state).toEqual([
+    ['pending', 'pending', 'pending'],
+    ['pending', 'pending', 'pending'],
+  ]);
+  await item.click();
+  await page.keyboard.press('s');
+  await expect.poll(state).toEqual([
+    ['lost', 'pending', 'lost'],
+    ['lost', 'pending', 'lost'],
+  ]);
 });

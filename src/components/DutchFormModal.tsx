@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { draftToBets, resolvedBooks, type DutchDraft } from '@/lib/dutch';
 import { formatBRL, formatOdds } from '@/lib/money';
 import { SITUATIONS } from '@/lib/types';
@@ -114,19 +114,33 @@ function Body() {
           </thead>
           <tbody>
             {d.rows.map((r, i) => (
-              <tr key={i} className="border-b border-zinc-900" data-testid="dutch-log-row">
-                <td className="py-2 pr-3 text-zinc-100">{r.selection || `Selection ${i + 1}`}</td>
-                <td className="px-3 py-2 text-right tabular-nums">{formatOdds(r.odds)}</td>
-                <td className="px-3 py-2 text-right font-semibold tabular-nums">{formatBRL(r.stake)}</td>
-                <td className="py-1.5 pl-3">
-                  <Autocomplete
-                    value={books[i]!}
-                    onChange={(v) => setD((x) => ({ ...x, rows: x.rows.map((row, j) => (j === i ? { ...row, book: v } : row)) }))}
-                    getSuggestions={(q) => suggestFor('book', q)}
-                    aria-label={`Selection ${i + 1} book`}
-                  />
-                </td>
-              </tr>
+              <Fragment key={i}>
+                <tr className={(r.legs?.length ?? 0) >= 2 ? '' : 'border-b border-zinc-900'} data-testid="dutch-log-row">
+                  <td className="py-2 pr-3 text-zinc-100">{r.selection || `Selection ${i + 1}`}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{formatOdds(r.odds)}</td>
+                  <td className="px-3 py-2 text-right font-semibold tabular-nums">{formatBRL(r.stake)}</td>
+                  <td className="py-1.5 pl-3">
+                    <Autocomplete
+                      value={books[i]!}
+                      onChange={(v) =>
+                        setD((x) => ({
+                          ...x,
+                          rows: x.rows.map((row, j) => (j === i ? { ...row, book: v } : row)),
+                        }))
+                      }
+                      getSuggestions={(q) => suggestFor('book', q)}
+                      aria-label={`Selection ${i + 1} book`}
+                    />
+                  </td>
+                </tr>
+                {(r.legs?.length ?? 0) >= 2 && (
+                  <tr className="border-b border-zinc-900 text-xs text-zinc-400" data-testid="dutch-log-legs">
+                    <td colSpan={4} className="pb-2 pl-4">
+                      Combination: {r.legs!.map((l) => `${l.selection}${l.odds != null ? ` @${formatOdds(l.odds)}` : ''}`).join(' + ')}
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
             ))}
           </tbody>
           <tfoot>
@@ -138,7 +152,10 @@ function Body() {
             </tr>
           </tfoot>
         </table>
-        <p className="text-xs text-zinc-500">Each selection is saved as its own pending bet, linked as one dutch. A book you change is copied to the rows below it until you change those.</p>
+        <p className="text-xs text-zinc-500">
+          Each selection is saved as its own pending bet (a selection with legs as a combination bet at its total odds), linked as one dutch. A book you change is copied to the rows below it until you
+          change those.
+        </p>
 
         {error && (
           <p role="alert" className="text-sm text-red-400">

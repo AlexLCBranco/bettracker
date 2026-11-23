@@ -4,9 +4,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '@/components/AppProvider';
 import { isTyping } from '@/components/Shell';
 import { formatDate, todayISO } from '@/lib/dates';
-import { dutchSummary } from '@/lib/dutch';
+import { betLabel, dutchSummary } from '@/lib/dutch';
 import { formatBRL, formatOdds, parseNumber, potentialReturn } from '@/lib/money';
-import { moveCursor, settleAt, settleDutchAt, settleQueue, SETTLE_KEYS, undoLast, type QueueItem, type SettleState, type SettleStep } from '@/lib/settle';
+import { moveCursor, settleAt, settleDutchAt, settleQueue, settleSharedLostAt, SETTLE_KEYS, sharedLegOf, undoLast, type QueueItem, type SettleState, type SettleStep } from '@/lib/settle';
 import { RESULT_LABEL, type Bet } from '@/lib/types';
 
 const HELP: [string, string][] = [
@@ -16,15 +16,17 @@ const HELP: [string, string][] = [
   ['C', 'Cash-out'],
   ['H', 'Half-won'],
   ['J', 'Half-lost'],
-  ['1-9', 'Dutch: this one won'],
+  ['1-9', 'Dutch: toggle a winner'],
+  ['Enter', 'Dutch: confirm (toggled won, rest lost)'],
   ['0', 'Dutch: none won'],
+  ['S', 'Dutch: shared leg lost'],
   ['↑ ↓', 'Move'],
   ['Z', 'Undo'],
 ];
 
-const DUTCH_KEYS_HELP = 'A dutch settles with 1-9 (the selection that won), 0 (none won) or V (void all). Anything else: settle its bets in History.';
+const DUTCH_KEYS_HELP = 'A dutch settles with 1-9 to toggle the splits that won, then Enter; 0 (none won), V (void all) or S (shared leg lost). Anything else: settle its bets in History.';
 
-const selectionOf = (b: Bet) => b.legs[0]?.selection || b.betText || 'selection';
+const selectionOf = betLabel;
 const itemLabel = (it: QueueItem) => (it.kind === 'bet' ? it.bet.betText || 'bet' : `dutch (${it.bets.length} bets)`);
 
 export default function SettlePage() {
@@ -33,14 +35,33 @@ export default function SettlePage() {
   const [state, setState] = useState<SettleState>({ cursor: 0, undo: [] });
   const [cashoutFor, setCashoutFor] = useState<string | null>(null);
   const [amount, setAmount] = useState('');
+  // the splits toggled as won on the dutch under the cursor (forgotten once another item is settled)
+  const [picked, setPicked] = useState<{ key: string; winners: number[] }>({
+    key: '',
+    winners: [],
+  });
   const rowRefs = useRef(new Map<string, HTMLElement>());
   const cursor = Math.min(state.cursor, Math.max(0, queue.length - 1));
   const current = queue[cursor];
+  const winnersFor = (key: string) => (picked.key === key ? picked.winners : []);
+  const toggleWinner = (key: string, n: number) =>
+    setPicked((p) => {
+      const w = p.key === key ? p.winners : [];
+      return {
+        key,
+        winners: w.includes(n) ? w.filter((x) => x !== n) : [...w, n].sort((a, b) => a - b),
+      };
+    });
 
   const apply = (r: SettleStep | null, label: string) => {
     if (!r) return;
     setState(r.state);
-    for (const c of r.changes) void update(c.id, { result: c.result, cashout: c.cashout }).catch(() => undefined);
+    for (const c of r.changes)
+      void update(c.id, {
+        result: c.result,
+        cashout: c.cashout,
+        ...(c.legs ? { legs: c.legs } : {}),
+      }).catch(() => undefined);
     notify(label);
   };
 
@@ -51,11 +72,24 @@ export default function SettlePage() {
     apply(settleAt(queue, { ...state, cursor: at }, result, cashout), `${RESULT_LABEL[result]}: ${itemLabel(item)}`);
   };
 
-  const settleDutch = (at: number, winner: number | 'none' | 'void') => {
+  const settleDutch = (at: number, winners: number[] | 'none' | 'void') => {
     const item = queue[at];
     if (item?.kind !== 'dutch') return;
-    const label = winner === 'void' ? 'Void' : winner === 'none' ? 'None won' : `Won: ${selectionOf(item.pending[winner]!)}`;
-    apply(settleDutchAt(queue, { ...state, cursor: at }, winner), `${label} · ${itemLabel(item)}`);
+    const none = winners === 'none' || (Array.isArray(winners) && !winners.length);
+    const label = winners === 'void' ? 'Void' : none ? 'None won' : `Won: ${(winners as number[]).map((w) => selectionOf(item.pending[w]!)).join(', ')}`;
+    setPicked({ key: '', winners: [] });
+    apply(settleDutchAt(queue, { ...state, cursor: at }, none ? 'none' : winners), `${label} · ${itemLabel(item)}`);
+  };
+
+  const settleShared = (at: number) => {
+    const item = queue[at];
+    const shared = sharedLegOf(item);
+    if ('error' in shared) {
+      notify(shared.error, 'error');
+      return;
+    }
+    setPicked({ key: '', winners: [] });
+    apply(settleSharedLostAt(queue, { ...state, cursor: at }), `Shared leg lost (${shared.name}) · ${itemLabel(item!)}`);
   };
 
   const undo = () => apply(undoLast(state), 'Undone');
@@ -75,7 +109,13 @@ export default function SettlePage() {
       } else if (current?.kind === 'dutch') {
         if (/^[1-9]$/.test(k)) {
           e.preventDefault();
-          if (Number(k) <= current.pending.length) settleDutch(cursor, Number(k) - 1);
+          if (Number(k) <= current.pending.length) toggleWinner(current.key, Number(k) - 1);
+        } else if (k === 'enter') {
+          e.preventDefault();
+          settleDutch(cursor, winnersFor(current.key));
+        } else if (k === 's') {
+          e.preventDefault();
+          settleShared(cursor);
         } else if (k === '0') {
           e.preventDefault();
           settleDutch(cursor, 'none');
@@ -169,7 +209,17 @@ export default function SettlePage() {
                     btn={btn}
                   />
                 ) : (
-                  <DutchLine it={it} btn={btn} onPick={(w) => settleDutch(i, w)} />
+                  <DutchLine
+                    it={it}
+                    btn={btn}
+                    winners={winnersFor(it.key)}
+                    onToggle={(n) => {
+                      select();
+                      toggleWinner(it.key, n);
+                    }}
+                    onPick={(w) => settleDutch(i, w)}
+                    onShared={() => settleShared(i)}
+                  />
                 )}
               </li>
             );
@@ -178,7 +228,8 @@ export default function SettlePage() {
       )}
       {queue.length > 0 && (
         <p className="text-xs text-zinc-500">
-          {queue.length} to settle{state.undo.length ? ` · ${state.undo.length} settled here (Z undoes the last)` : ''}
+          {queue.length} to settle
+          {state.undo.length ? ` · ${state.undo.length} settled here (Z undoes the last)` : ''}
         </p>
       )}
     </div>
@@ -256,12 +307,14 @@ function BetLine(props: {
   );
 }
 
-function DutchLine({ it, btn, onPick }: { it: Extract<QueueItem, { kind: 'dutch' }>; btn: string; onPick(w: number | 'none' | 'void'): void }) {
+function DutchLine(props: { it: Extract<QueueItem, { kind: 'dutch' }>; btn: string; winners: number[]; onToggle(n: number): void; onPick(w: number[] | 'none' | 'void'): void; onShared(): void }) {
+  const { it, btn, winners, onPick } = props;
   const s = dutchSummary(it.bets);
+  const shared = sharedLegOf(it);
   const first = it.bets[0]!;
   const leg = first.legs[0];
   const settled = it.bets.filter((b) => b.result !== 'pending');
-  const click = (w: number | 'none' | 'void') => (e: React.MouseEvent) => {
+  const click = (w: number[] | 'none' | 'void') => (e: React.MouseEvent) => {
     e.stopPropagation();
     onPick(w);
   };
@@ -283,6 +336,22 @@ function DutchLine({ it, btn, onPick }: { it: Extract<QueueItem, { kind: 'dutch'
         </span>
         <span />
         <span className="flex gap-1">
+          <button className={`${btn} border border-emerald-700`} title="Confirm: toggled splits won, the rest lost (Enter)" aria-label="Settle dutch: confirm winners" onClick={click(winners)}>
+            ↵ {winners.length ? `${winners.length} won` : 'none won'}
+          </button>
+          {!('error' in shared) && (
+            <button
+              className={btn}
+              title={`Shared leg lost (${shared.name}): every split lost`}
+              aria-label="Settle dutch: shared leg lost"
+              onClick={(e) => {
+                e.stopPropagation();
+                props.onShared();
+              }}
+            >
+              S
+            </button>
+          )}
           <button className={btn} title="None won: all lost" aria-label="Settle dutch: none won" onClick={click('none')}>
             0
           </button>
@@ -292,20 +361,34 @@ function DutchLine({ it, btn, onPick }: { it: Extract<QueueItem, { kind: 'dutch'
         </span>
       </div>
       <ul className="ml-[6.75rem] space-y-1 text-xs">
-        {it.pending.map((b, n) => (
-          <li key={b.id} className="flex items-center gap-3" data-testid="queue-dutch-bet">
-            <button className={`${btn} w-6 border border-zinc-700`} aria-label={`Settle dutch: ${selectionOf(b)} won`} title="This one won, the others lost" onClick={click(n)}>
-              {n + 1}
-            </button>
-            <span className="w-48 truncate text-zinc-200">{selectionOf(b)}</span>
-            <span className="w-24 truncate text-zinc-500">{b.book}</span>
-            <span className="w-20 text-right tabular-nums">{formatBRL(b.stake)}</span>
-            <span className="w-14 text-right tabular-nums">@{formatOdds(b.odds)}</span>
-            <span className="w-24 text-right tabular-nums text-zinc-500" title="Returns if it wins">
-              {formatBRL(potentialReturn(b.stake, b.odds))}
-            </span>
-          </li>
-        ))}
+        {it.pending.map((b, n) => {
+          const on = winners.includes(n);
+          return (
+            <li key={b.id} className="flex items-center gap-3" data-testid="queue-dutch-bet" data-won={on || undefined}>
+              <button
+                className={`${btn} w-6 border ${on ? 'border-emerald-500 bg-emerald-500/20 text-emerald-300' : 'border-zinc-700'}`}
+                aria-label={`Toggle won: ${selectionOf(b)}`}
+                aria-pressed={on}
+                title="Toggle: this one won (Enter confirms)"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  props.onToggle(n);
+                }}
+              >
+                {n + 1}
+              </button>
+              <span className={`w-72 truncate ${on ? 'text-emerald-300' : 'text-zinc-200'}`} title={selectionOf(b)}>
+                {selectionOf(b)}
+              </span>
+              <span className="w-24 truncate text-zinc-500">{b.book}</span>
+              <span className="w-20 text-right tabular-nums">{formatBRL(b.stake)}</span>
+              <span className="w-14 text-right tabular-nums">@{formatOdds(b.odds)}</span>
+              <span className="w-24 text-right tabular-nums text-zinc-500" title="Returns if it wins">
+                {formatBRL(potentialReturn(b.stake, b.odds))}
+              </span>
+            </li>
+          );
+        })}
         {settled.map((b) => (
           <li key={b.id} className="flex items-center gap-3 text-zinc-500">
             <span className="w-6 text-center">·</span>

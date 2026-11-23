@@ -28,7 +28,7 @@ export interface Bet {
   type: BetType;
   situation: Situation;
   stake: number;
-  /** Total decimal odds, entered by the user (never computed from legs). */
+  /** Total decimal odds, entered by the user (never computed from legs; the Betting Tool only prefills an editable estimate). */
   odds: number;
   result: Result;
   /** Amount returned by a cash-out; null unless result is cash-out. */

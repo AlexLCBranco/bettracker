@@ -126,7 +126,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     async (id: string, patch: Partial<BetInput>) => {
       const before = betsRef.current.find((b) => b.id === id);
       // optimistic: show the change at once, put it back if the server refuses
-      if (before && !patch.legs) setBets((bs) => bs.map((b) => (b.id === id ? { ...b, ...patch } as Bet : b)));
+      // (legs patched from the settle queue get the bet's existing leg ids until the server answers)
+      if (before) setBets((bs) => bs.map((b) => (b.id === id ? ({ ...b, ...patch, legs: patch.legs ? patch.legs.map((l, i) => ({ ...l, id: b.legs[i]?.id ?? `new-${i}` })) : b.legs } as Bet) : b)));
       const token = updates.begin(id);
       try {
         const bet = await api<Bet>(`/api/bets/${id}`, { method: 'PATCH', body: JSON.stringify(patch) });

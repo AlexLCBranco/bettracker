@@ -2,7 +2,7 @@
 
 import { Fragment, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { formatDate, parseDateInput } from '@/lib/dates';
-import { duplicateDutchDraft, dutchSummary, groupRows, type GroupOutcome } from '@/lib/dutch';
+import { betLabel, duplicateDutchDraft, dutchSummary, groupRows, type GroupOutcome } from '@/lib/dutch';
 import { duplicateForm } from '@/lib/form';
 import { formatBRL, formatOdds, parseNumber, profit } from '@/lib/money';
 import { RESULT_LABEL, RESULTS, type Bet, type BetInput, type Leg, type Result } from '@/lib/types';
@@ -108,7 +108,7 @@ function DutchRow({ bets, dutchId, expanded, toggle }: { bets: Bet[]; dutchId: s
   const { removeDutch, openDutch } = useApp();
   const s = dutchSummary(bets);
   const o = OUTCOME[s.outcome];
-  const names = bets.map((b) => b.legs[0]?.selection || b.betText || '?').join(' / ');
+  const names = bets.map(betLabel).join(' / ');
   const books = [...new Set(bets.map((b) => b.book).filter(Boolean))].join(', ');
   const placed = bets.map((b) => b.placedDate).sort()[0]!;
   const game = bets.map((b) => b.gameDate).sort()[0]!;

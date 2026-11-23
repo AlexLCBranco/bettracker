@@ -34,6 +34,34 @@ export function groupRows(bets: Bet[]): BetRow[] {
   return rows;
 }
 
+/** What a bet is called in a dutch: a combination's bet text (its legs joined), else its selection. */
+export function betLabel(b: Bet): string {
+  if (b.type === 'combination')
+    return (
+      b.betText ||
+      b.legs
+        .map((l) => l.selection)
+        .filter(Boolean)
+        .join(' + ') ||
+      'combination'
+    );
+  return b.legs[0]?.selection || b.betText || 'selection';
+}
+
+const legKey = (selection: string) => selection.trim().toLowerCase();
+
+/**
+ * The legs every bet of a dutch has in common (same selection, ignoring case): its shared legs. Only when every bet
+ * is a combination with legs; in the order they appear on the first bet.
+ */
+export function sharedLegNames(bets: Bet[]): string[] {
+  if (bets.length < 2 || !bets.every((b) => b.type === 'combination' && b.legs.length >= 2)) return [];
+  const sets = bets.map((b) => new Set(b.legs.map((l) => legKey(l.selection)).filter(Boolean)));
+  return bets[0]!.legs.map((l) => l.selection.trim()).filter((s, i, a) => s && a.indexOf(s) === i && sets.every((set) => set.has(legKey(s))));
+}
+
+export const isLeg = (selection: string, name: string) => legKey(selection) === legKey(name);
+
 /** The bets of a row, flattened back. */
 export const rowBets = (r: BetRow): Bet[] => (r.kind === 'bet' ? [r.bet] : r.bets);
 
@@ -108,9 +136,18 @@ export function withWholeGroups(all: Bet[], matched: Bet[]): Bet[] {
 
 // ---- The "log as bets" form ----
 
-export interface DutchDraftRow {
+export interface DraftLeg {
   selection: string;
-  /** Unrounded decimal odds. */
+  /** Unrounded decimal odds; null = not entered. */
+  odds: number | null;
+}
+
+export interface DutchDraftRow {
+  /** For a combination split: its leg names joined with " + ". */
+  selection: string;
+  /** 2+ legs (own then shared) = a combination bet; missing or fewer = a solo bet. */
+  legs?: DraftLeg[];
+  /** Unrounded decimal odds (a combination's total odds). */
   odds: number;
   stake: number;
   /** null = same book as the row above (the first row: the last-used book). */
@@ -128,7 +165,7 @@ export interface DutchDraft {
   gameDate: string;
 }
 
-export function newDutchDraft(rows: { selection: string; odds: number; stake: number }[], defaults: { sport: string; situation: Situation }, today = todayISO()): DutchDraft {
+export function newDutchDraft(rows: { selection: string; odds: number; stake: number; legs?: DraftLeg[] }[], defaults: { sport: string; situation: Situation }, today = todayISO()): DutchDraft {
   return {
     rows: rows.map((r) => ({ ...r, book: null })),
     sport: defaults.sport,
@@ -144,7 +181,17 @@ export function newDutchDraft(rows: { selection: string; odds: number; stake: nu
 export function duplicateDutchDraft(bets: Bet[], today = todayISO()): DutchDraft {
   const first = bets[0]!.legs[0];
   return {
-    rows: bets.map((b) => ({ selection: b.legs[0]?.selection || b.betText, odds: b.odds, stake: b.stake, book: b.book })),
+    rows: bets.map((b) => ({
+      selection: betLabel(b),
+      odds: b.odds,
+      stake: b.stake,
+      book: b.book,
+      ...(b.type === 'combination' && b.legs.length >= 2
+        ? {
+            legs: b.legs.map((l) => ({ selection: l.selection, odds: l.odds })),
+          }
+        : {}),
+    })),
     sport: first?.sport ?? '',
     game: first?.game ?? '',
     market: first?.market ?? '',
@@ -172,11 +219,20 @@ export function draftToBets(d: DutchDraft, lastBook: string, dutchId: string, to
   const out: BetInput[] = [];
   for (const [i, r] of d.rows.entries()) {
     const result: Result = 'pending';
+    const combo = (r.legs?.length ?? 0) >= 2;
+    const leg = (selection: string, odds: number | null) => ({
+      sport: d.sport,
+      game: d.game,
+      market: d.market,
+      selection,
+      odds,
+      result,
+    });
     const v = validateBet({
       book: books[i],
       placedDate,
       gameDate,
-      type: 'solo',
+      type: combo ? 'combination' : 'solo',
       situation: d.situation,
       stake: r.stake,
       odds: r.odds,
@@ -184,11 +240,15 @@ export function draftToBets(d: DutchDraft, lastBook: string, dutchId: string, to
       cashout: null,
       preAnalysis: '',
       postAnalysis: '',
-      betText: '',
+      betText: combo ? r.legs!.map((l) => l.selection.trim()).join(' + ') : '',
       dutchId,
-      legs: [{ sport: d.sport, game: d.game, market: d.market, selection: r.selection, odds: r.odds, result }],
+      legs: combo ? r.legs!.map((l) => leg(l.selection, l.odds)) : [leg(r.selection, r.odds)],
     });
-    if (!v.ok) return { ok: false, error: `${r.selection || `Selection ${i + 1}`}: ${v.error}` };
+    if (!v.ok)
+      return {
+        ok: false,
+        error: `${r.selection || `Selection ${i + 1}`}: ${v.error}`,
+      };
     out.push(v.value);
   }
   return { ok: true, value: out };
