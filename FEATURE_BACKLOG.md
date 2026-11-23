@@ -32,26 +32,28 @@ splits the owner needs the whole picture.
   rounding to R$ 1, shared-leg row present only with shared legs, break-even row. e2e: 3 selections, check the
   table rows and the highlighted break-even row.
 
-### BT-8 — Log dutch: game (and market) per leg, "Game(s)" field
-**In short:** In the "Log dutch as bets" form, legs from different games each get their own game (and market), instead of one Game box for the whole dutch.
+### BT-8 — Log dutch: "Game(s)" and "Market(s)", picked per leg
+**In short:** In the "Log dutch as bets" form, Game and Market both take several values as chips, and each leg picks its own game and market from them, instead of one game and one market for the whole dutch.
 
 Today the form has one Game and one Market box and copies them onto every leg of every bet. A dutch often mixes
-games (one player prop in one game, a shared result in another), so the saved legs get the wrong game.
+games and markets (a player-points prop in one game, a moneyline in another), so the saved legs get the wrong
+game and market. The owner currently types "ML / PTS" in Market as a workaround.
 
-- Rename the top field to "Game(s)". It accepts several games: Enter or comma adds the typed game as a chip
-  (autocomplete as today, narrowed by sport); Backspace on an empty box removes the last chip.
-- Leg table in the form: every leg (own legs and shared legs) gets a Game cell and a Market cell.
-  - Game cell: a select of the chips from "Game(s)", plus "Other…" to type one (autocomplete). With one chip,
-    every leg defaults to it and the column can stay collapsed (shows the game in grey, click to change). With
-    several chips, a leg with no game picked marks the form invalid ("Pick the game for each leg").
-  - Market cell: autocomplete, defaults to the top Market box (rename it "Market (default)"); changing a leg
-    keeps that leg's value even if the default changes later.
+- Rename the top fields to "Game(s)" and "Market(s)". Both work the same way: Enter or comma adds the typed value
+  as a chip (autocomplete as today, narrowed by sport); Backspace on an empty box removes the last chip.
+- Leg table in the form: every leg (own legs and shared legs) gets a Game cell and a Market cell, each a select of
+  that field's chips, plus "Other…" to type one (autocomplete).
+  - With one chip, every leg defaults to it and the column can stay collapsed (shows the value in grey, click to
+    change).
+  - With several chips, a leg with nothing picked marks the form invalid ("Pick the game / market for each leg").
+  - Quick fill: picking a value on a leg suggests it for the legs below that have nothing picked yet, like the
+    book column does.
   - A shared leg's game and market are set once and copied to that leg on every bet.
 - Each saved leg stores its own game and market. A solo split uses its leg's game and market.
-- History / dashboard: where a bet's legs span more than one game, the Game cell shows "2 games" (tooltip lists
-  them), as it already does for several sports.
+- History / dashboard: where a bet's legs span more than one game or market, those cells show "2 games" /
+  "2 markets" (tooltip lists them), as they already do for several sports.
 - Game date stays one field for the whole dutch.
-- Autocomplete learns games and markets from legs as today.
-- Tests: unit for draft-to-bets with one game, two games (each leg gets its own), shared leg game copied to every
-  bet, missing game with several chips is invalid; e2e: owner's example with Celtics W in one game and a player
-  prop in another, saved legs carry the right games.
+- Autocomplete learns games and markets from legs as today; a typed "A / B" is not split automatically.
+- Tests: unit for draft-to-bets with one game and market, two of each (each leg gets its own), shared leg values
+  copied to every bet, missing pick with several chips is invalid; e2e: owner's example (Celtics W = ML in one
+  game, McCain 25 / Mitchell 30 = PTS), saved legs carry the right game and market.
