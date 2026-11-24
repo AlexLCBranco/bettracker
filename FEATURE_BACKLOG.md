@@ -24,31 +24,6 @@ Words the owner uses (keep them in the UI):
   works in volume. Before, it was done in Excalidraw with AIs inventing the scheme per batch, the history lived only
   in the bookmaker's app and vanished, and both building and following 100 PPs was the part that broke.
 
-### BT-41 — Analytics: dutch split stats
-**In short:** A "Dutches" block on the Analytics page showing how his dutches do as a whole and which of their splits are the ones that hit.
-
-From the owner, 2026-11-24: "add dutching split stats to the analytics page". He gave no list of numbers; the
-figures below are the session's reading of it, to be corrected by him. Analytics already has the "Dutch hits"
-tiles (all / some / none hit, sunk by a shared leg alone, `dutchHitReport` in `src/lib/hits.ts`): keep them, and put
-them inside this block rather than building them again.
-
-- Where: one "Dutches" section on `src/app/(app)/analytics/page.tsx`, following the page's date / filter scope like
-  every other section. New maths in `src/lib/hits.ts` or a new `src/lib/dutchStats.ts`, unit tested.
-- Money tiles (settled dutches only, a dutch counted as ONE bet by the existing rule): dutches, wagered, net profit,
-  ROI, win rate, average combined odds. Combined odds of a dutch = `1 / sum of (1 / split odds)`, with the split's
-  total odds for a combination split.
-- Split record: settled splits that hit / missed (void left out), with hit rate, using `splitMark`.
-- "Which split hits" table, one row per position by odds inside its dutch: lowest-odds split, middle splits,
-  highest-odds split. Columns: splits, hit, hit rate, average odds, net profit of the dutches where that split hit.
-  Splits with equal odds share the lower position.
-- "By number of splits" table: 2, 3, 4+. Columns as the page's breakdown table (bets, wagered, profit, ROI, win
-  rate), a dutch as one bet.
-- "By combined odds" table with the page's existing odds ranges (`src/lib/analytics.ts`), same columns.
-- No settled dutches → the block shows one "No settled dutches yet" line; ratios with nothing behind them show "-",
-  never NaN. Table alignment and no "…" cut text, as elsewhere.
-- Tests: unit tests for the combined odds, the position rule (ties, two-split dutch has no middle row) and the empty
-  case; one e2e that logs two throwaway dutches, settles them and reads the tiles.
-
 ### BT-42 — Game page links (Hoops Junkie / Sofascore)
 **In short:** From a bet, one click opens that game's page on Hoops Junkie or Sofascore, after the link was pasted once for that game.
 

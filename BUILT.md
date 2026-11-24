@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-24
+- BT-41 — Analytics: dutch split stats (v0.36.0)
+  A "Dutches" block on Analytics: settled dutches, wagered, net profit, ROI, win rate and average combined odds, the splits hit record with the all / some / none hit tiles, which split hits (lowest, middle, highest odds) and tables by number of splits and by combined odds.
 - BT-40 — Betting Tool: target odds mode for a dutch (v0.35.0)
   A "Target odds" switch in the Betting Tool: type the odds you have and the combined odds you want, leave one split empty, and it shows what that split needs (2.76 / +176), the stakes and the return, the real combined odds for what you found, and "Use in dutch" fills the normal dutch with it.
 - A bet quick-added while the page is still loading stays on the page (v0.34.2)

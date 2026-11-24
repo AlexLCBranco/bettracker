@@ -6,6 +6,7 @@ import { ProfitText } from '@/components/BetTable';
 import { breakdown, comboReport, DIMENSION_LABEL, DIMENSIONS, type Dimension, type Row } from '@/lib/analytics';
 import { formatDate } from '@/lib/dates';
 import { dutchHitReport } from '@/lib/hits';
+import { dutchStats } from '@/lib/dutchStats';
 import { ladderReport } from '@/lib/rollover';
 import { formatMoney, formatOdds, type MoneyScope } from '@/lib/money';
 import { byMoney } from '@/lib/scope';
@@ -49,6 +50,7 @@ export default function AnalyticsPage() {
   const maxAbsProfit = Math.max(...rows.map((r) => Math.abs(r.profit)), 0);
   const combos = useMemo(() => comboReport(bets), [bets]);
   const hits = useMemo(() => dutchHitReport(bets), [bets]);
+  const dutches = useMemo(() => dutchStats(bets), [bets]);
   const ladders = useMemo(() => ladderReport(bets), [bets]);
   const verdict = useMemo(() => cashoutVerdict(bets), [bets]);
   const profitScope: MoneyScope = scope === 'bonus' ? 'real' : scope;
@@ -135,24 +137,6 @@ export default function AnalyticsPage() {
           </div>
         )}
 
-        {dim === 'type' && hits.settled > 0 && (
-          <div className="mt-6" data-testid="dutch-hits">
-            <h3 className="mb-1 text-sm font-medium text-zinc-300">Dutch hits</h3>
-            <p className="mb-3 text-xs text-zinc-500">Settled dutches by how many of their selections hit (void selections left out).</p>
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <Tile label="All hit" value={String(hits.allHit)} sub={`of ${hits.settled} settled dutches`} testId="hits-all" />
-              <Tile label="Some hit" value={String(hits.someHit)} sub={formatPercent(hits.someHit / hits.settled)} testId="hits-some" />
-              <Tile label="None hit" value={String(hits.noneHit)} sub={formatPercent(hits.noneHit / hits.settled)} testId="hits-none" />
-              <Tile
-                label="Sunk by a shared leg alone"
-                value={String(hits.sunkByShared)}
-                sub={hits.noneHit ? `of the ${hits.noneHit} none-hit` : 'no none-hit dutches'}
-                testId="hits-shared"
-              />
-            </div>
-          </div>
-        )}
-
         {/* BT-35: ladders, next to the Rollover group */}
         {dim === 'type' && ladders.started > 0 && (
           <div className="mt-6" data-testid="ladder-report">
@@ -164,6 +148,80 @@ export default function AnalyticsPage() {
               <Tile label="Best ladder" value={ladders.best ? fmt(ladders.best.profit, true) : '-'} sub={ladders.best ? `${ladders.best.rungs} ${ladders.best.rungs === 1 ? 'rung' : 'rungs'}` : 'none closed yet'} testId="ladders-best" />
               <Tile label="Reached their goal" value={String(ladders.reachedGoal)} sub={`of ${ladders.withGoal} with a goal`} testId="ladders-goal" />
               <Tile label="Net profit" value={fmt(ladders.netProfit, true)} sub="closed ladders" testId="ladders-net" />
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* BT-41: dutches as a whole and which of their splits hit; the BT-6 hit tiles live here */}
+      <section className="card p-5" data-testid="dutches">
+        <h2 className="font-semibold">Dutches</h2>
+        <p className="mb-4 text-sm text-zinc-400">Each dutch is one bet: a win when its net profit is above 0. Money figures count settled dutches only.</p>
+        {dutches.settled === 0 ? (
+          <p className="py-6 text-center text-sm text-zinc-500" data-testid="dutches-empty">
+            No settled dutches yet.
+          </p>
+        ) : (
+          <div className="space-y-6">
+            <div className="grid gap-4 sm:grid-cols-3 xl:grid-cols-6">
+              <Tile label="Dutches" value={String(dutches.settled)} sub={dutches.pending ? `settled · ${dutches.pending} pending` : 'settled'} testId="dutches-count" />
+              <Tile label="Wagered" value={fmt(dutches.wagered)} sub="settled dutches" testId="dutches-wagered" />
+              <Tile label="Net profit" value={<span className={tone(dutches.profit)}>{fmt(dutches.profit, true, profitScope)}</span>} sub="settled dutches" testId="dutches-profit" />
+              <Tile label="ROI" value={<span className={tone(dutches.roi)}>{formatPercent(dutches.roi, true)}</span>} sub="profit / wagered" testId="dutches-roi" />
+              <Tile label="Win rate" value={formatPercent(dutches.winRate)} sub={`${dutches.wins}W / ${dutches.losses}L`} testId="dutches-winrate" />
+              <Tile label="Average combined odds" value={dutches.averageOdds == null ? '-' : formatOdds(dutches.averageOdds, 2)} sub="1 / Σ(1 / split odds)" testId="dutches-odds" />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6" data-testid="dutch-hits">
+              <Tile
+                label="Splits hit"
+                value={`${dutches.splitHits}/${dutches.splitHits + dutches.splitMisses}`}
+                sub={`${formatPercent(dutches.splitHitRate)} hit rate · void left out`}
+                testId="dutches-splits"
+              />
+              <Tile label="All hit" value={String(hits.allHit)} sub={`of ${hits.settled} settled dutches`} testId="hits-all" />
+              <Tile label="Some hit" value={String(hits.someHit)} sub={hits.settled ? formatPercent(hits.someHit / hits.settled) : '-'} testId="hits-some" />
+              <Tile label="None hit" value={String(hits.noneHit)} sub={hits.settled ? formatPercent(hits.noneHit / hits.settled) : '-'} testId="hits-none" />
+              <Tile
+                label="Sunk by a shared leg alone"
+                value={String(hits.sunkByShared)}
+                sub={hits.noneHit ? `of the ${hits.noneHit} none-hit` : 'no none-hit dutches'}
+                testId="hits-shared"
+              />
+            </div>
+
+            <div className="grid gap-6 xl:grid-cols-2">
+              <div>
+                <h3 className="mb-2 text-sm font-medium text-zinc-300">Which split hits</h3>
+                <table className="w-full text-sm" aria-label="Which split hits">
+                  <thead>
+                    <tr className="border-b border-zinc-800 text-left text-xs text-zinc-400">
+                      <th className="py-2 pr-3 font-medium">Position by odds</th>
+                      <th className="px-3 py-2 text-right font-medium">Splits</th>
+                      <th className="px-3 py-2 text-right font-medium">Hit</th>
+                      <th className="px-3 py-2 text-right font-medium">Hit rate</th>
+                      <th className="px-3 py-2 text-right font-medium">Avg odds</th>
+                      <th className="py-2 pl-3 text-right font-medium" title="Net profit of the dutches where a split in this position hit">
+                        Profit when hit
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dutches.positions.map((p) => (
+                      <tr key={p.key} className="border-b border-zinc-900" data-testid="position-row">
+                        <td className="whitespace-nowrap py-2 pr-3 text-zinc-100">{p.label}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{p.splits}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{p.hit}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{formatPercent(p.hitRate)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{p.averageOdds == null ? '-' : formatOdds(p.averageOdds, 2)}</td>
+                        <td className={`whitespace-nowrap py-2 pl-3 text-right tabular-nums ${tone(p.profitWhenHit)}`}>{fmt(p.profitWhenHit, true, profitScope)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <DutchTable label="By number of splits" rows={dutches.bySplits} scope={scope} fmt={fmt} units={!!unitBets} />
+              <DutchTable label="By combined odds" rows={dutches.byOdds} scope={scope} fmt={fmt} units={!!unitBets} />
             </div>
           </div>
         )}
@@ -261,6 +319,34 @@ function BreakdownRow({ r, maxAbsProfit, scope, fmt, units }: { r: Row; maxAbsPr
         </div>
       </td>
     </tr>
+  );
+}
+
+/** BT-41: a dutch breakdown, same columns as the page's breakdown table (a dutch as one bet). */
+function DutchTable({ label, rows, scope, fmt, units }: { label: string; rows: Row[]; scope: MoneyScope; fmt(n: number): string; units: boolean }) {
+  const maxAbsProfit = Math.max(...rows.map((r) => Math.abs(r.profit)), 0);
+  return (
+    <div>
+      <h3 className="mb-2 text-sm font-medium text-zinc-300">{label}</h3>
+      <table className="w-full text-sm" aria-label={label}>
+        <thead>
+          <tr className="border-b border-zinc-800 text-left text-xs text-zinc-400">
+            <th className="py-2 pr-3 font-medium">{label.replace(/^By /, '').replace(/^./, (c) => c.toUpperCase())}</th>
+            {COLUMNS.map((c) => (
+              <th key={c.key} className="px-3 py-2 text-right font-medium" title={c.title}>
+                {c.label === 'Bets' ? 'Dutches' : c.label}
+              </th>
+            ))}
+            <th className="w-[18%] py-2 pl-3 font-medium" aria-hidden />
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <BreakdownRow key={r.key} r={r} maxAbsProfit={maxAbsProfit} scope={scope} fmt={fmt} units={units} />
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
