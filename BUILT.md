@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-24
+- BT-40 — Betting Tool: target odds mode for a dutch (v0.35.0)
+  A "Target odds" switch in the Betting Tool: type the odds you have and the combined odds you want, leave one split empty, and it shows what that split needs (2.76 / +176), the stakes and the return, the real combined odds for what you found, and "Use in dutch" fills the normal dutch with it.
 - A bet quick-added while the page is still loading stays on the page (v0.34.2)
   On the live site the first load could answer after a quick-added bet was saved and wipe it from view (it was saved, and came back on reload); the first load now waits for such saves and loads again.
 - Editing a ladder rung in the full form keeps it in its ladder (v0.34.1)

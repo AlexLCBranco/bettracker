@@ -5,7 +5,7 @@ import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react
 import { useApp } from '@/components/AppProvider';
 import { OutcomeTable } from '@/components/OutcomeTable';
 import { newDutchDraft } from '@/lib/dutch';
-import { dutch, outcomeTable, type DutchError } from '@/lib/dutching';
+import { combinedOdds, dutch, formatAmerican, outcomeTable, solveTarget, type DutchError } from '@/lib/dutching';
 import { formatBRL, formatMoney, formatOdds, ODDS_FORMAT_LABEL, ODDS_FORMATS, parseOdds, type OddsFormat } from '@/lib/money';
 import { previewText, readStake } from '@/lib/units';
 import { sharedUsed, showsLegs, splitCalc, type LegText, type SplitText } from '@/lib/splits';
@@ -17,6 +17,13 @@ interface ToolState {
   rows: SplitText[];
   /** Legs that are part of every split, typed once. Missing in calculations saved before BT-5. */
   shared?: LegText[];
+  /** BT-40: "target" solves the one split left with empty odds for a wanted combined odds. Missing = "dutch". */
+  mode?: 'dutch' | 'target';
+  /** The combined odds wanted, as typed, and how to read it. */
+  target?: string;
+  targetFormat?: OddsFormat;
+  /** The odds the book really offers on the solved split ("What I found"), any format. */
+  found?: string;
 }
 
 const STORAGE_KEY = 'bettracker.dutching';
@@ -72,7 +79,7 @@ export default function BettingToolPage() {
 const ROW_GRID = 'grid grid-cols-[minmax(0,1fr)_7rem_7.5rem_2rem] gap-2';
 
 /** What "Clear all" leaves: no selections or shared legs; the total stake and rounding are kept. */
-const cleared =(s: ToolState): ToolState => ({ ...INITIAL, stake: s.stake, step: s.step });
+const cleared = (s: ToolState): ToolState => ({ ...INITIAL, stake: s.stake, step: s.step, mode: s.mode, target: s.target, targetFormat: s.targetFormat });
 
 function Tool() {
   const { defaults, openDutch, units } = useApp();
@@ -125,6 +132,40 @@ function Tool() {
     const c = calcs.get(r.id)!;
     if (!c.combo) return r.name.trim() || `Selection ${n}`;
     return c.legs.map((l, k) => l.name || (k === 0 ? `Selection ${n}` : `Leg ${k + 1}`)).join(' + ');
+  };
+
+  // ---- BT-40: target odds mode ----
+  const mode = s.mode ?? 'dutch';
+  // the split being solved: the first one with nothing typed in its odds (other empty ones are left out)
+  const missing = mode === 'target' ? s.rows.find((r) => !calcs.get(r.id)!.used) : undefined;
+  const targetP = parseOdds(s.target ?? '', s.targetFormat ?? 'auto');
+  const solve = mode === 'target' && missing && targetP ? solveTarget(oddsValues, targetP.decimal) : null;
+  const solved = solve?.ok ? solve : null;
+  const foundP = solved && (s.found ?? '').trim() ? parseOdds(s.found!, 'auto') : null;
+  /** Odds per split in row order, the solved split filled in with `missingOdds`. */
+  const withMissing = (missingOdds: number) => s.rows.flatMap((r) => (r === missing ? [missingOdds] : byId.has(r.id) ? [oddsValues[byId.get(r.id)!]!] : []));
+  const targetRows = missing ? s.rows.filter((r) => r === missing || byId.has(r.id)) : [];
+  const targetMessage = (() => {
+    if (mode !== 'target') return null;
+    if (!(s.target ?? '').trim()) return 'Enter the combined odds you want.';
+    if (!targetP) return 'Cannot read the target odds.';
+    if (!missing) return 'Leave one selection’s odds empty: that is the split the tool solves.';
+    if (!solve || solve.ok) return null;
+    if (solve.error === 'too-high') return `Not possible: with these odds the combined odds can only go up to ${formatOdds(solve.limit, 2)}. Any target below ${formatOdds(solve.limit, 2)} works.`;
+    if (solve.error === 'known') return 'Enter the odds of at least one other split; every odds value must be readable and above 1.00.';
+    return 'The target must be above 1.00 as decimal odds.';
+  })();
+  /** Hand-off: the found odds (or the needed odds) go into the solved split and the tool switches to the dutch. */
+  const useInDutch = () => {
+    if (!solved || !missing) return;
+    const text = foundP ? s.found!.trim() : formatOdds(solved.needed, 2);
+    const combo = calcs.get(missing.id)!.combo;
+    setS((x) => ({
+      ...x,
+      mode: 'dutch',
+      found: '',
+      rows: x.rows.map((r) => (r.id !== missing.id ? r : combo ? { ...r, total: text } : { ...r, odds: text, format: 'auto' })),
+    }));
   };
 
   const sharedCount = sharedUsed(s.shared).length;
@@ -198,6 +239,42 @@ function Tool() {
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <section className="card space-y-4 p-5">
+          <div className="flex gap-1 rounded-md border border-zinc-800 p-1 text-sm" role="group" aria-label="Betting Tool mode">
+            {(['dutch', 'target'] as const).map((m) => (
+              <button
+                key={m}
+                className={`flex-1 rounded px-3 py-1 ${mode === m ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white'}`}
+                aria-pressed={mode === m}
+                onClick={() => setS((x) => ({ ...x, mode: m }))}
+                title={m === 'target' ? 'Type the odds you have and the combined odds you want: the tool tells you what the missing split needs' : 'Split a total stake across selections'}
+              >
+                {m === 'dutch' ? 'Dutch' : 'Target odds'}
+              </button>
+            ))}
+          </div>
+          {mode === 'target' && (
+            <div className="space-y-1">
+              <div className={ROW_GRID}>
+                <span className="self-center text-sm text-zinc-300">Target combined odds</span>
+                <input
+                  className={`field tabular-nums ${(s.target ?? '').trim() && !targetP ? 'border-red-500' : ''}`}
+                  value={s.target ?? ''}
+                  placeholder="1.60"
+                  onChange={(e) => setS((x) => ({ ...x, target: e.target.value }))}
+                  aria-label="Target combined odds"
+                />
+                <select className="field" value={s.targetFormat ?? 'auto'} onChange={(e) => setS((x) => ({ ...x, targetFormat: e.target.value as OddsFormat }))} aria-label="Target odds format">
+                  {ODDS_FORMATS.map((f) => (
+                    <option key={f} value={f}>
+                      {ODDS_FORMAT_LABEL[f]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {targetP && !targetP.plain && <p className="pl-1 text-xs text-zinc-400">= {formatOdds(targetP.decimal)} decimal · {targetP.label}</p>}
+              <p className="text-xs text-zinc-500">Leave one selection’s odds empty: the tool works out what it needs. The total stake is optional.</p>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <Label text="Total stake (R$)">
               <span className="relative flex flex-col">
@@ -281,6 +358,32 @@ function Tool() {
                         />
                       </div>
                     ))}
+                    {r === missing && (
+                      <div className="mt-2 rounded-md border border-sky-900 bg-sky-950/40 p-2 text-sm" data-testid="target-missing">
+                        <div className="flex flex-wrap items-baseline gap-x-2">
+                          <span className="text-sky-300">Solving this split</span>
+                          {solved && (
+                            <span className="tabular-nums text-zinc-200">
+                              needs <b>{formatOdds(solved.needed, 2)}</b> ({formatAmerican(solved.needed)})
+                            </span>
+                          )}
+                        </div>
+                        {solved && (
+                          <label className="mt-2 flex items-center gap-2 text-xs text-zinc-400">
+                            <span className="shrink-0">What I found</span>
+                            <input
+                              className={`field w-28 py-0.5 tabular-nums ${(s.found ?? '').trim() && !foundP ? 'border-red-500' : ''}`}
+                              value={s.found ?? ''}
+                              placeholder={formatOdds(solved.needed, 2)}
+                              onChange={(e) => setS((x) => ({ ...x, found: e.target.value }))}
+                              aria-label="What I found odds"
+                            />
+                            {foundP && !foundP.plain && <span>= {formatOdds(foundP.decimal)}</span>}
+                            {(s.found ?? '').trim() && !foundP && <span className="text-red-400">Cannot read these odds</span>}
+                          </label>
+                        )}
+                      </div>
+                    )}
                     {withLegs && shared.length > 0 && <p className="mt-1 pl-4 text-xs text-zinc-500">+ shared: {shared.map((l, k) => l.name.trim() || `Shared leg ${k + 1}`).join(', ')}</p>}
                     <div className="mt-1 flex items-center gap-3 pl-1 text-xs">
                       <button className="text-zinc-400 hover:text-white" onClick={() => setLegs(r.id, (ls) => [...ls, blankLeg(nextId(ls))])} aria-label={`Add leg to selection ${n + 1}`}>
@@ -303,12 +406,37 @@ function Tool() {
             <button className="btn" onClick={() => setS(cleared(s))}>
               Clear all
             </button>
-            <button className="btn btn-primary ml-auto" disabled={!ok} onClick={logAsBets} title={ok ? 'Save one pending bet per selection, linked as one dutch' : 'Needs a valid calculation'}>
-              Log as bets
-            </button>
+            {mode === 'target' ? (
+              <button className="btn btn-primary ml-auto" disabled={!solved} onClick={useInDutch} title={solved ? 'Fill the dutch calculator with these splits and odds (what you found, or the needed odds)' : 'Needs a solved target'}>
+                Use in dutch
+              </button>
+            ) : (
+              <button className="btn btn-primary ml-auto" disabled={!ok} onClick={logAsBets} title={ok ? 'Save one pending bet per selection, linked as one dutch' : 'Needs a valid calculation'}>
+                Log as bets
+              </button>
+            )}
           </div>
         </section>
 
+        {mode === 'target' ? (
+          <section className="card space-y-4 p-5" data-testid="target-result">
+            {targetMessage || !solved || !missing ? (
+              <p className="py-10 text-center text-sm text-zinc-500" role={solve && !solve.ok ? 'alert' : undefined} data-testid="target-message">
+                {targetMessage ?? 'Enter the odds of the other splits.'}
+              </p>
+            ) : (
+              <TargetResult
+                needed={solved.needed}
+                target={solved.target}
+                found={foundP?.decimal ?? null}
+                stake={stake}
+                step={s.step}
+                rows={targetRows.map((r) => ({ id: r.id, name: splitName(r), solved: r === missing }))}
+                odds={withMissing(foundP?.decimal ?? solved.needed)}
+              />
+            )}
+          </section>
+        ) : (
         <section className="card space-y-4 p-5" data-testid="dutch-result">
           {!ok ? (
             <p className="py-10 text-center text-sm text-zinc-500" data-testid="dutch-error">
@@ -369,8 +497,76 @@ function Tool() {
             </>
           )}
         </section>
+        )}
       </div>
     </div>
+  );
+}
+
+/** BT-40: the needed odds; with a total stake, the stake per split and the equal return; with "what I found", the
+ *  real combined odds next to the target and the stakes for those real odds. `odds` is per row, solved one filled. */
+function TargetResult(props: { needed: number; target: number; found: number | null; stake: number; step: 0.01 | 1; rows: { id: number; name: string; solved: boolean }[]; odds: number[] }) {
+  const { needed, target, found, odds } = props;
+  const real = found != null ? combinedOdds(odds) : null;
+  const d = props.stake > 0 ? dutch(props.stake, odds, props.step) : null;
+  const split = d && !('error' in d) ? d : null;
+  const diff = real == null ? 0 : real - target;
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
+        <Tile label="Missing split needs" testId="target-needed" sub="decimal · American">
+          {formatOdds(needed, 2)} <span className="text-base font-semibold text-zinc-400">{formatAmerican(needed)}</span>
+        </Tile>
+        <Tile label={real == null ? 'Target combined odds' : 'Real combined odds'} testId="target-combined" sub={real == null ? undefined : `target ${formatOdds(target, 2)}`}>
+          {real == null ? (
+            formatOdds(target, 2)
+          ) : (
+            <>
+              {formatOdds(real, 2)}{' '}
+              <span className={`text-sm font-semibold ${Math.abs(diff) < 0.005 ? 'text-zinc-400' : diff > 0 ? 'text-emerald-400' : 'text-amber-300'}`} data-testid="target-vs">
+                {Math.abs(diff) < 0.005 ? 'on target' : diff > 0 ? `above by ${formatOdds(diff, 2)}` : `below by ${formatOdds(-diff, 2)}`}
+              </span>
+            </>
+          )}
+        </Tile>
+        {split && (
+          <Tile label="Every split returns" testId="target-return" sub="± a few centavos of rounding">
+            {formatBRL(Math.round(props.stake * combinedOdds(odds) * 100) / 100)}
+          </Tile>
+        )}
+      </div>
+      {split ? (
+        <table className="w-full text-sm" aria-label="Stake per split">
+          <thead>
+            <tr className="border-b border-zinc-800 text-left text-xs text-zinc-400">
+              <th className="py-2 pr-3 font-medium">Selection</th>
+              <th className="px-3 py-2 text-right font-medium">Odds</th>
+              <th className="px-3 py-2 text-right font-medium">Stake</th>
+              <th className="px-3 py-2 text-right font-medium">Share</th>
+              <th className="py-2 pl-3 text-right font-medium">Returns</th>
+            </tr>
+          </thead>
+          <tbody>
+            {props.rows.map((r, i) => (
+              <tr key={r.id} className="border-b border-zinc-900" data-testid="target-row">
+                <td className="py-2 pr-3 text-zinc-100">
+                  {r.name}
+                  {r.solved && <span className="ml-2 text-xs text-sky-300">{found != null ? 'found' : 'needed'}</span>}
+                </td>
+                <td className="px-3 py-2 text-right tabular-nums">{formatOdds(odds[i], 2)}</td>
+                <td className="px-3 py-2 text-right font-semibold tabular-nums text-white" data-testid="target-stake">
+                  {formatBRL(split.stakes[i]!)}
+                </td>
+                <td className="px-3 py-2 text-right tabular-nums text-zinc-400">{formatPercent(split.stakes[i]! / props.stake)}</td>
+                <td className="py-2 pl-3 text-right tabular-nums">{formatBRL(split.returns[i]!)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <p className="text-xs text-zinc-500">Type a total stake to see the stake per split and what each returns.</p>
+      )}
+    </>
   );
 }
 

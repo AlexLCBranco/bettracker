@@ -24,34 +24,6 @@ Words the owner uses (keep them in the UI):
   works in volume. Before, it was done in Excalidraw with AIs inventing the scheme per batch, the history lived only
   in the bookmaker's app and vanished, and both building and following 100 PPs was the part that broke.
 
-### BT-40 — Betting Tool: target odds mode for a dutch
-**In short:** In the Betting Tool, type the odds you already have and the combined odds you want, and it tells you what odds the missing split needs.
-
-From the owner, 2026-11-24. Today he asks an AI things like "I have a +280 first leg and want a full dutching split
-with total odds of about 1.6, what do I need on the second leg". The tool should answer that.
-
-- Where: a "Target odds" mode on the Betting Tool page (`src/app/(app)/betting-tool`), next to the normal dutch
-  calculator, not a new page. Maths goes in `src/lib/dutching.ts` beside `dutch()`.
-- Inputs: the total odds of every split already known (any odds format, same `OddsInput` as the rest of the tool;
-  a combination split counts by its total odds box), the target combined odds, and the total stake (optional).
-  Exactly one split is left with empty odds: that is the one being solved.
-- Maths (equal-return dutch): `1/target = sum of 1/odds of all splits`. So the missing split needs
-  `1 / (1/target − sum of 1/known odds)`. Stake share of a split = `target / its odds`.
-  Check: known 3.80 (+280), target 1.6 → needed 2.76 (+176); on 100 total the stakes are 42.11 and 57.89,
-  return 160 either way.
-- Output: the needed odds in decimal and American at once, and, when a total stake is typed, the stake per split and
-  the equal return. Updates as he types, no button.
-- "What I found" box on the missing split: he types the odds the book really offers; the tool then shows the real
-  combined odds next to the target (above or below it) and the stakes for those real odds.
-- Impossible target: when `1/target − sum of 1/known odds` is zero or negative (e.g. target 3.8 or more with a 3.80
-  split), show a plain message with the highest combined odds the known splits allow (anything below that limit
-  works). Never a negative number, NaN or Infinity.
-- Hand-off: one button turns the result into the normal dutch form, with the splits, odds (the "what I found" odds
-  when typed, otherwise the needed odds) and total stake filled in, so it can be saved as a dutch as today.
-- Table alignment and no "…" cut text, as in the rest of the tool.
-- Tests: unit tests for the solver (the check above, three splits with one missing, the impossible case, American
-  and decimal input mixed); one e2e that types the example and reads 2.76 / +176 and the two stakes.
-
 ### BT-41 — Analytics: dutch split stats
 **In short:** A "Dutches" block on the Analytics page showing how his dutches do as a whole and which of their splits are the ones that hit.
 

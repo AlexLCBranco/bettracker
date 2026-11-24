@@ -90,3 +90,33 @@ export function outcomeTable(total: number, stakes: number[], odds: number[], ha
   if (first) first.breakEven = true;
   return rows;
 }
+
+// ---- Target odds (BT-40) ----
+// Equal-return dutch: 1/combined = Σ 1/odds. Knowing every split but one and the combined odds wanted, the missing
+// split needs 1 / (1/target − Σ 1/known). Stake share of a split = target / its odds.
+
+export type TargetSolve =
+  | { ok: true; needed: number; known: number[]; target: number }
+  /** The known splits alone cap the combined odds at `limit`: anything below it works. (A target above 1 never
+   *  needs odds of 1 or less on the missing split: 1/target − Σ is then below 1.) */
+  | { ok: false; error: 'too-high'; limit: number }
+  | { ok: false; error: 'target' | 'known' };
+
+export function solveTarget(known: number[], target: number): TargetSolve {
+  if (!(target > 1) || !Number.isFinite(target)) return { ok: false, error: 'target' };
+  if (!known.length || known.some((o) => !(o > 1) || !Number.isFinite(o))) return { ok: false, error: 'known' };
+  const book = known.reduce((s, o) => s + 1 / o, 0);
+  const rest = 1 / target - book;
+  if (!(rest > 1e-12)) return { ok: false, error: 'too-high', limit: 1 / book };
+  return { ok: true, needed: 1 / rest, known, target };
+}
+
+/** Decimal odds as American: 3.80 → "+280", 1.50 → "-200", 2.00 → "+100". Rounded to whole points. */
+export function formatAmerican(decimal: number): string {
+  if (!(decimal > 1) || !Number.isFinite(decimal)) return '';
+  if (decimal >= 2) return `+${Math.round((decimal - 1) * 100)}`;
+  return `-${Math.round(100 / (decimal - 1))}`;
+}
+
+/** The single odds a set of splits behaves like as an equal-return dutch: 1 / Σ(1/odds). */
+export const combinedOdds = (odds: number[]): number => 1 / odds.reduce((s, o) => s + 1 / o, 0);
