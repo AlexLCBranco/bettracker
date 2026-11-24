@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-23
+- Bank a won dutch split for a rollover (v0.30.0)
+  A won split in a dutch has Bank (or B when selected), which starts a rollover shot with that split's payout shown in its own row next to the dutch; the dutch and its shot count as one bet, pending while the shot is open, and its net is the shot's result plus the other splits.
 - Ctrl+Z undoes the last change to your bets, and a bet can be taken out of a ladder (v0.29.0)
   Ctrl+Z (or Z on the Bets page, or Ctrl+Z in the empty quick-add box) undoes adding, editing, deleting, settling and every ladder or rollover step, newest first; the Bets page shows "↶ Undo: <last change>" and toasts after a change carry an Undo button; deleted bets come back as they were; a bet in a ladder or rollover has "Remove from ladder" (or "Remove from rollover") in its ⋯ menu, which keeps it as a plain bet with its own stake, odds and money (then editable) and closes the ladder up behind it.
 - BT-36 — Ladder simulator: plan a ladder rung by rung before betting it (v0.28.0)

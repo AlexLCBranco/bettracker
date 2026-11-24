@@ -34,7 +34,7 @@ export function useRollover(settle: Settler): Rollover {
     chainOf,
     canBank: (b) => canBank(b, chainOf(b)),
     bank(b) {
-      if (!canBank(b, chainOf(b))) return notify('Only a won bet (not in a dutch, not bonus money, not a ladder rung) can be banked', 'error');
+      if (!canBank(b, chainOf(b))) return notify('Only a won bet (not bonus money, not a ladder rung) can be banked', 'error');
       const before = { rolloverId: b.rolloverId, banked: b.banked };
       const id = b.rolloverId ?? newRolloverId();
       save(b.id, { rolloverId: id, banked: true });

@@ -3,7 +3,7 @@
 
 import { formatDate, parseDateInput, todayISO } from './dates';
 import { profit } from './money';
-import { chainPending, chainSummary } from './rollover';
+import { chainAsBet, chainPending, chainsOf, chainSummary } from './rollover';
 import type { Bet, BetInput, Leg, Money, Result, Situation } from './types';
 import { validateBet } from './validate';
 
@@ -13,24 +13,30 @@ const byCreated = (a: Bet, b: Bet) => (a.createdAt < b.createdAt ? -1 : a.create
 
 /**
  * Table rows: a dutch (or a rollover shot, BT-29) becomes one row at the position of its first bet in `bets` (which
- * keeps its order otherwise), holding its bets in the order they were logged.
+ * keeps its order otherwise), holding its bets in the order they were logged. A dutch split banked for a rollover is
+ * in both: its dutch, and its shot's row (where it is the first bet).
  */
 export function groupRows(bets: Bet[]): BetRow[] {
   const rows: BetRow[] = [];
   const groups = new Map<string, Bet[]>();
+  const seen = new Set<string>();
   for (const b of bets) {
-    const id = b.dutchId ? `d:${b.dutchId}` : b.rolloverId ? `r:${b.rolloverId}` : null;
-    if (!id) {
+    if (seen.has(b.id)) continue;
+    seen.add(b.id);
+    if (!b.dutchId && !b.rolloverId) {
       rows.push({ kind: 'bet', bet: b });
       continue;
     }
-    let g = groups.get(id);
-    if (!g) {
-      g = [];
-      groups.set(id, g);
-      rows.push(b.dutchId ? { kind: 'dutch', dutchId: b.dutchId, bets: g } : { kind: 'rollover', rolloverId: b.rolloverId!, bets: g });
+    for (const id of [b.dutchId && `d:${b.dutchId}`, b.rolloverId && `r:${b.rolloverId}`]) {
+      if (!id) continue;
+      let g = groups.get(id);
+      if (!g) {
+        g = [];
+        groups.set(id, g);
+        rows.push(id.startsWith('d:') ? { kind: 'dutch', dutchId: b.dutchId!, bets: g } : { kind: 'rollover', rolloverId: b.rolloverId!, bets: g });
+      }
+      g.push(b);
     }
-    g.push(b);
   }
   for (const g of groups.values()) g.sort(byCreated);
   return rows;
@@ -115,7 +121,10 @@ export interface Counts {
  */
 export function countBets(bets: Bet[]): Counts {
   const c: Counts = { count: 0, pending: 0, wins: 0, losses: 0 };
+  const chains = chainsOf(bets);
   for (const r of groupRows(bets)) {
+    // a shot started from a dutch split is counted with its dutch: dutch + shot are ONE bet
+    if (r.kind === 'rollover' && r.bets.some((b) => b.dutchId)) continue;
     c.count++;
     if (r.kind === 'bet') {
       if (r.bet.result === 'pending') c.pending++;
@@ -123,7 +132,7 @@ export function countBets(bets: Bet[]): Counts {
       else if (r.bet.result === 'lost') c.losses++;
       continue;
     }
-    const o = r.kind === 'dutch' ? groupOutcome(r.bets) : chainOutcomeForCount(r.bets);
+    const o = r.kind === 'dutch' ? groupOutcome(r.bets.map((b) => (b.rolloverId ? chainAsBet(chains.get(b.rolloverId)!) : b))) : chainOutcomeForCount(r.bets);
     if (o === 'pending') c.pending++;
     else if (o === 'won') c.wins++;
     else if (o === 'lost') c.losses++;

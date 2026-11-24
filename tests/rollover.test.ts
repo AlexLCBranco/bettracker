@@ -6,7 +6,7 @@ import { countBets, groupRows, withWholeGroups } from '@/lib/dutch';
 import { canBank, chainSummary, collapseRollovers, neededOdds, needsText, SHOT_TARGET, TIERS, tierOf } from '@/lib/rollover';
 import { cumulativeProfit, summarize } from '@/lib/stats';
 import { dayGroups } from '@/lib/table';
-import { tabDays } from '@/lib/view';
+import { tabBets, tabDays } from '@/lib/view';
 import { validateBet } from '@/lib/validate';
 import { parseImport, buildExport } from '@/lib/transfer';
 import type { Bet } from '@/lib/types';
@@ -179,26 +179,68 @@ describe('table rows', () => {
 });
 
 describe('bank rules, validation, export', () => {
-  it('only a won bet outside a dutch, or the won last bet of a closed chain, can be banked', () => {
+  it('a won bet (a dutch split too), or the won last bet of a closed chain, can be banked', () => {
     expect(canBank(bet({ result: 'won' }))).toBe(true);
     expect(canBank(bet({ result: 'pending' }))).toBe(false);
-    expect(canBank(bet({ result: 'won', dutchId: 'd' }))).toBe(false);
+    expect(canBank(bet({ result: 'won', dutchId: 'd' }))).toBe(true);
+    expect(canBank(bet({ result: 'lost', dutchId: 'd' }))).toBe(false);
     const c = chain('r', [{ odds: 1.6, banked: true }, { odds: 1.2 }]);
     expect(canBank(c[0]!, c)).toBe(false);
     expect(canBank(c[1]!, c)).toBe(true);
   });
 
-  it('validation keeps rollover id and banked; banked needs a chain; a dutch bet cannot be in one', () => {
+  it('validation keeps rollover id and banked; banked needs a chain; a dutch split can start one, not a ladder', () => {
     const base = { stake: 10, odds: 2, result: 'won', placedDate: '2026-11-20', legs: [] };
     expect(validateBet({ ...base, rolloverId: 'ro-1', banked: true })).toMatchObject({ ok: true, value: { rolloverId: 'ro-1', banked: true } });
     expect(validateBet({ ...base, banked: true })).toMatchObject({ ok: true, value: { rolloverId: null, banked: false } });
     expect(validateBet({ ...base, rolloverId: 'bad id!' }).ok).toBe(false);
-    expect(validateBet({ ...base, rolloverId: 'ro-1', dutchId: 'd1' }).ok).toBe(false);
+    expect(validateBet({ ...base, rolloverId: 'ro-1', dutchId: 'd1', banked: true })).toMatchObject({ ok: true, value: { rolloverId: 'ro-1', dutchId: 'd1', banked: true } });
+    expect(validateBet({ ...base, rolloverId: 'ro-1', dutchId: 'd1', ladder: { taken: false } }).ok).toBe(false);
   });
 
   it('export / import carry rolloverId and banked', () => {
     const c = chain('ro-7', [{ odds: 1.6, banked: true }]);
     const back = parseImport(JSON.parse(JSON.stringify(buildExport(c, '0.21.0'))));
     expect(back.ok && back.bets[0]!.input).toMatchObject({ rolloverId: 'ro-7', banked: true });
+  });
+});
+
+describe("a dutch split's win banked for a rollover", () => {
+  // dutch: A R$ 50 @ 2.00 won (pays 100), B R$ 50 @ 2.20 lost; A banked, then R$ 100 @ 1.50 on the shot
+  const A = bet({ id: 'A', dutchId: 'd1', rolloverId: 'ro-d', banked: true, stake: 50, odds: 2, result: 'won', createdAt: at(0) });
+  const B = bet({ id: 'B', dutchId: 'd1', stake: 50, odds: 2.2, result: 'lost', createdAt: at(1) });
+  const leg2 = (result: Bet['result']) => bet({ id: 'L2', rolloverId: 'ro-d', stake: 100, odds: 1.5, result, createdAt: at(2) });
+
+  it("open: the dutch and its shot are ONE pending bet; the split's payout is not profit yet", () => {
+    expect(countBets([A, B])).toEqual({ count: 1, pending: 1, wins: 0, losses: 0 });
+    const s = summarize([A, B]);
+    expect(s.totalWagered).toBe(100);
+    expect(s.pendingAmount).toBe(50);
+    expect(s.netProfit).toBe(-50);
+    expect(chainSummary([A]).banked).toBe(100);
+  });
+
+  it('the dutch keeps its split and the shot gets its own row starting from it', () => {
+    const rows = groupRows([leg2('pending'), B, A]);
+    expect(rows.map((r) => r.kind)).toEqual(['rollover', 'dutch']);
+    expect(rows[0]!.kind === 'rollover' && rows[0]!.bets.map((b) => b.id)).toEqual(['A', 'L2']);
+    expect(rows[1]!.kind === 'dutch' && rows[1]!.bets.map((b) => b.id)).toEqual(['A', 'B']);
+  });
+
+  it('shot won: one win, net = shot profit + the other splits (100 + -50)', () => {
+    const bets = [A, B, leg2('won')];
+    expect(countBets(bets)).toEqual({ count: 1, pending: 0, wins: 1, losses: 0 });
+    expect(summarize(bets)).toMatchObject({ totalWagered: 100, netProfit: 50, betCount: 1, winRate: 1 });
+  });
+
+  it('shot lost: one loss of the whole dutch stake', () => {
+    const bets = [A, B, leg2('lost')];
+    expect(countBets(bets)).toEqual({ count: 1, pending: 0, wins: 0, losses: 1 });
+    expect(summarize(bets).netProfit).toBe(-100);
+  });
+
+  it('the stats strip counts the split once though it shows in two rows', () => {
+    const days = tabDays([leg2('won'), B, A], 'all', '2026-11-20');
+    expect(summarize(tabBets(days))).toMatchObject({ betCount: 1, netProfit: 50, totalWagered: 100 });
   });
 });

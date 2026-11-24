@@ -99,3 +99,35 @@ test('BT-29: Z after adding a leg removes it and the shot is open again', async 
   await expect(shot.getByTestId('result')).toHaveText('Open');
   await expect.poll(async () => (await betsTagged(request, tag)).length).toBe(1);
 });
+
+test('a won dutch split banks: its shot starts from the split payout, dutch + shot count as ONE bet', async ({ page, request, tag }) => {
+  const d = `${tag}-d`.replace(/[^A-Za-z0-9_-]/g, '');
+  const won = await createBet(request, { dutchId: d, betText: `${tag} home`, stake: 50, odds: 2, result: 'won', money: 'real' });
+  await createBet(request, { dutchId: d, betText: `${tag} away`, stake: 40, odds: 2.2, result: 'lost', money: 'real' });
+  await search(page, tag);
+  await expect(page.getByTestId('stat-winrate')).toContainText('1W / 0L');
+
+  await page.locator(`[data-split-of="${d}"][data-bet-id="${won.id}"]`).getByTestId('bank').click();
+  const shot = page.getByTestId('rollover-row');
+  await expect(shot.getByTestId('result')).toHaveText('Open');
+  await expect(shot.getByTestId('shot-line')).toHaveText(/^Banked R\$\s100,00 @ 2\.00/);
+  await expect(page.getByTestId('dutch-row')).toHaveCount(1);
+  // one bet, pending while the shot is open
+  await expect(page.getByTestId('stat-pending-value')).toHaveText('1');
+  await expect(page.getByTestId('stat-wagered')).toContainText('1 of');
+  await expect.poll(async () => (await betsTagged(request, tag)).find((b) => b.id === won.id)).toMatchObject({ banked: true, dutchId: d });
+
+  await shot.getByTestId('add-leg').click();
+  const form = page.getByRole('dialog', { name: 'Add rollover leg' });
+  await expect(form.getByLabel('Stake')).toHaveValue('100');
+  await form.getByLabel('Odds').fill('1.5');
+  await form.getByLabel('Bet text').fill(`${tag} next`);
+  await form.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(form).toBeHidden();
+  await shot.getByRole('button', { name: 'Mark Won' }).click();
+  await expect(shot.getByTestId('result')).toHaveText('Won');
+  // shot +R$ 100 (150 − 50), the lost split −R$ 40: one win, +R$ 60 on R$ 90
+  await expect(page.getByTestId('stat-winrate')).toContainText('1W / 0L');
+  await expect(page.getByTestId('stat-wagered-value')).toHaveText(/R\$\s90,00/);
+  await expect(page.getByTestId('stat-net-value')).toHaveText(/\+R\$\s60,00/);
+});

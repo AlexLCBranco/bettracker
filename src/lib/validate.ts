@@ -38,7 +38,6 @@ export function validateBet(raw: unknown): Validated {
   let rolloverId: string | null = null;
   if (r.rolloverId != null && r.rolloverId !== "") {
     if (typeof r.rolloverId !== "string" || !/^[A-Za-z0-9_-]{1,100}$/.test(r.rolloverId)) return { ok: false, error: "Rollover id is not valid" };
-    if (dutchId) return { ok: false, error: "A bet in a dutch cannot be part of a rollover" };
     rolloverId = r.rolloverId;
   }
   const banked = rolloverId != null && r.banked === true;
@@ -47,6 +46,7 @@ export function validateBet(raw: unknown): Validated {
   if (r.ladder != null) {
     if (typeof r.ladder !== 'object') return { ok: false, error: 'Ladder must be an object' };
     if (!rolloverId) return { ok: false, error: 'A ladder rung needs its ladder (rollover) id' };
+    if (dutchId) return { ok: false, error: 'A bet in a dutch cannot be a ladder rung' };
     const l = r.ladder as Record<string, unknown>;
     const goalRungs = l.goalRungs == null || l.goalRungs === '' ? null : num(l.goalRungs);
     if (l.goalRungs != null && l.goalRungs !== '' && (goalRungs == null || !Number.isInteger(goalRungs) || goalRungs < 1 || goalRungs > 100)) return { ok: false, error: 'A ladder goal in rungs must be 1 to 100' };

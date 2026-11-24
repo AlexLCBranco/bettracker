@@ -35,8 +35,8 @@ export function tabDays(bets: Bet[], tab: Tab, today: string): DayGroup[] {
   return dayGroups(rows, (r) => (r.kind === 'bet' ? due(r.bet) : r.bets.filter((b) => b.result === 'pending').map(due).sort()[0]!));
 }
 
-/** The bets a tab shows (for the stats strip). */
-export const tabBets = (days: DayGroup[]): Bet[] => days.flatMap((d) => d.rows.flatMap((r) => (r.kind === 'bet' ? [r.bet] : r.bets)));
+/** The bets a tab shows (for the stats strip), each once (a banked dutch split is in two rows). */
+export const tabBets = (days: DayGroup[]): Bet[] => [...new Map(days.flatMap((d) => d.rows.flatMap((r) => (r.kind === 'bet' ? [r.bet] : r.bets))).map((b) => [b.id, b])).values()];
 
 /** The rows' keys in the order shown: what ↑ ↓ move through. */
 export const rowKeys = (days: DayGroup[]): string[] => days.flatMap((d) => d.rows.map(rowKey));

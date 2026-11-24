@@ -653,8 +653,8 @@ function BetRow({ b, open, toggle, selected, select, settle, split, link, annota
   const key = `bet:${b.id}`;
   const indent = nested || !!link;
   const isSel = selected === key || (nested && selected === split.dutchKey) || (!!link && selected === link.chainKey);
-  // BT-29: Bank on a won bet (not in a dutch; in a shot only its last bet, once closed)
-  const bankable = !nested && rollover.canBank(b);
+  // BT-29: Bank on a won bet or dutch split (in a shot only its last bet, once closed)
+  const bankable = rollover.canBank(b);
   // BT-35: a won plain bet can become rung 1 of a ladder
   const startable = !nested && !link && rollover.canStartLadder(b);
   // a dutch's bets are logged without bet text: its selection is the text, edited on the leg
@@ -732,7 +732,7 @@ function BetRow({ b, open, toggle, selected, select, settle, split, link, annota
                 </span>
               )}
               {chip && <LabelChip label={chip} />}
-              {(link || b.banked) && !b.ladder && <TierChip odds={b.odds} banked={b.banked && !!link && link.index === link.chain.length - 1} />}
+              {(link || b.banked) && !b.ladder && <TierChip odds={b.odds} banked={b.banked && (link ? link.index === link.chain.length - 1 : rollover.chainOf(b).length === 1)} />}
             </div>
           </div>
           <SubLine
@@ -785,6 +785,19 @@ function BetRow({ b, open, toggle, selected, select, settle, split, link, annota
             <span className="inline-flex items-center gap-0.5">
               {pending && <CashoutButton onClick={() => settle.startCashout(b.id)} />}
               <span className={HOVER_ONLY} data-testid="row-actions">
+                {bankable && (
+                  <button
+                    className="rounded px-1.5 py-0.5 text-xs font-semibold text-sky-300 hover:bg-sky-600/30"
+                    title="Bank for rollover: this split's payout starts a shot (B)"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      rollover.bank(b);
+                    }}
+                    data-testid="bank"
+                  >
+                    Bank
+                  </button>
+                )}
                 <AnnotateButton onClick={annotateHere} />
               </span>
             </span>
