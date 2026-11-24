@@ -13,7 +13,7 @@ import { DateField } from '@/components/BetFormModal';
 import { MoneySelect } from '@/components/Money';
 import { MONEY_TEXT } from '@/components/moneyStyle';
 import { OddsInput } from '@/components/OddsInput';
-import { isTyping } from '@/components/Shell';
+import { isTyping, isUndoKey } from '@/components/Shell';
 import { Builder } from './Builder';
 import { BatchStats } from './PPStats';
 import { formatDate, parseDateInput } from '@/lib/dates';
@@ -129,9 +129,14 @@ export function BatchView({ id, extraTabs = [] }: { id: string; extraTabs?: Extr
   const handler = useRef<(e: KeyboardEvent) => void>(() => {});
   useEffect(() => {
     handler.current = (e) => {
-      if (!batch || form || dutchForm || moneyForm || isTyping(e) || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (!batch || form || dutchForm || moneyForm || isTyping(e)) return;
       if ((e.target as HTMLElement | null)?.closest?.('[role=dialog], [role=menu]')) return;
       if (tab !== 'legs') return;
+      if (isUndoKey(e)) {
+        e.preventDefault();
+        return doUndo();
+      }
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
       const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
       if (k === 'ArrowDown' || k === 'ArrowUp') {
         e.preventDefault();

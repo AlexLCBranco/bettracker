@@ -4,7 +4,7 @@
 // BT-35: ladders: start one from a won bet, add the next rung, take the money, set the goal.
 import { betLabel } from '@/lib/dutch';
 import { formatMoney, formatOdds } from '@/lib/money';
-import { canBank, canStartLadder, chainOrder, chainSummary, isLadder, ladderOf, newRolloverId } from '@/lib/rollover';
+import { canBank, canStartLadder, chainOrder, chainSummary, detachPlan, isLadder, ladderOf, newRolloverId } from '@/lib/rollover';
 import type { Bet, Ladder } from '@/lib/types';
 import { useApp } from './AppProvider';
 import type { Settler } from './useSettle';
@@ -22,6 +22,8 @@ export interface Rollover {
   /** Closes an open ladder as won at the amount banked. */
   take(chain: Bet[]): void;
   setGoal(chain: Bet[], goal: Pick<Ladder, 'goalRungs' | 'goalAmount'>): void;
+  /** Takes a bet out of its ladder or rollover: it stays, as a plain bet. */
+  detach(b: Bet): void;
 }
 
 export function useRollover(settle: Settler): Rollover {
@@ -52,7 +54,7 @@ export function useRollover(settle: Settler): Rollover {
           money: first.money,
           ladder: ladder ? { ...ladderOf(chain), taken: false } : undefined,
           onSaved: (bet) =>
-            settle.record(`rollover:${id}`, `${ladder ? 'Rung' : 'Leg'} added: ${formatMoney(bet.stake, bet.money)} @ ${formatOdds(bet.odds)} ${bet.betText || betLabel(bet)}`, () => void remove(bet.id)),
+            settle.record(`rollover:${id}`, `${ladder ? 'Rung' : 'Leg'} added: ${formatMoney(bet.stake, bet.money)} @ ${formatOdds(bet.odds)} ${bet.betText || betLabel(bet)}`, () => void remove(bet.id, false)),
         },
       );
     },
@@ -82,6 +84,14 @@ export function useRollover(settle: Settler): Rollover {
       const before = last.ladder;
       save(last.id, { ladder: { ...ladderOf(chain), taken: true } });
       settle.record(`rollover:${last.rolloverId}`, `Taken: ${formatMoney(s.banked, last.money)}`, () => save(last.id, { ladder: before }));
+    },
+    detach(b) {
+      const chain = chainOf(b);
+      const plan = detachPlan(chain, b);
+      if (!plan.length) return;
+      const before = plan.map((c) => ({ id: c.id, patch: Object.fromEntries(Object.keys(c.patch).map((k) => [k, chain.find((x) => x.id === c.id)![k as keyof Bet] ?? null])) as Partial<Bet> }));
+      for (const c of plan) save(c.id, c.patch);
+      settle.record(`bet:${b.id}`, `Taken out of the ${isLadder(chain) ? 'ladder' : 'rollover'}: ${b.betText || betLabel(b) || 'bet'}`, () => before.forEach((c) => save(c.id, c.patch)));
     },
     setGoal(chain, goal) {
       const before = chain.map((b) => ({ id: b.id, ladder: b.ladder }));

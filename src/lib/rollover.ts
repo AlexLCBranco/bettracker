@@ -277,3 +277,16 @@ export function ladderReport(bets: Bet[]): LadderReport {
   }
   return { started: ladders.length, avgRungs: ladders.length ? rungs / ladders.length : null, best, withGoal, reachedGoal: reached, netProfit: round2(net) };
 }
+
+/**
+ * Taking a bet out of its ladder or rollover (added there by mistake): the bet stays, as a plain bet with its own stake,
+ * odds, money and result; the chain closes up behind it. A ladder's "taken" mark moves to the rung now last.
+ */
+export function detachPlan(chain: Bet[], b: Bet): { id: string; patch: Partial<Bet> }[] {
+  if (!b.rolloverId) return [];
+  const out: { id: string; patch: Partial<Bet> }[] = [{ id: b.id, patch: { rolloverId: null, banked: false, ladder: null } }];
+  const rest = chainOrder(chain.filter((x) => x.id !== b.id && x.rolloverId === b.rolloverId));
+  const last = rest.at(-1);
+  if (b.ladder?.taken && last && !rest.some((x) => x.ladder?.taken)) out.push({ id: last.id, patch: { ladder: { ...(last.ladder ?? ladderOf(chain)), taken: true } } });
+  return out;
+}

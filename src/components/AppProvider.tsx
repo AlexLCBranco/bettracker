@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { betNames, buildIndex, lastUsed, stakePresets, suggest, type Field, type SuggestIndex } from '@/lib/autocomplete';
-import type { DutchDraft } from '@/lib/dutch';
+import { betLabel, type DutchDraft } from '@/lib/dutch';
 import type { BetForm } from '@/lib/form';
 import { latestGate } from '@/lib/latest';
 import { REFRESH_MIN_MS, refreshGate } from '@/lib/refresh';
@@ -11,6 +11,14 @@ import type { Bet, BetInput, Ladder, Money } from '@/lib/types';
 import { bankroll as computeBankroll, type Bankroll, type EntryInput, type MoneyEntry } from '@/lib/bankroll';
 import { todayISO } from '@/lib/dates';
 import { ticketMoney, type BatchInput, type PPBatch, type PPLeg } from '@/lib/pp';
+import { revertPatch, UndoHistory, type UndoStep } from '@/lib/undo';
+
+/** How a write goes into the undo history: false keeps it out (a step recorded elsewhere covers it). */
+export type UndoAs = false | { label?: string; key?: string };
+
+/** The bet's text, short, for undo labels. */
+const describe = (b: Bet) => (b.betText || betLabel(b) || 'bet').slice(0, 60);
+const keyOf = (b: Bet) => (b.dutchId ? `dutch:${b.dutchId}` : b.rolloverId ? `rollover:${b.rolloverId}` : `bet:${b.id}`);
 
 /** BT-20: names typed "Mccain" saved as "McCain" once that spelling is known (the server tidies games and units). */
 function tidyPatch<T extends Partial<BetInput>>(p: T, names: NameCasing): T {
@@ -38,19 +46,29 @@ interface AppCtx {
   bets: Bet[];
   loaded: boolean;
   loadError: string;
-  create(input: BetInput): Promise<Bet>;
+  /** Adding and deleting go into the undo history (Ctrl+Z) unless `undo` is false. */
+  create(input: BetInput, undo?: UndoAs): Promise<Bet>;
   /** Creates several bets in one request (all or none). */
-  createMany(inputs: BetInput[]): Promise<Bet[]>;
+  createMany(inputs: BetInput[], undo?: UndoAs): Promise<Bet[]>;
   /** Deletes every bet of a dutch. */
-  removeDutch(dutchId: string): Promise<void>;
+  removeDutch(dutchId: string, undo?: UndoAs): Promise<void>;
   /** The "log as bets" form for a dutch (from the Betting Tool, or Duplicate on a dutch). */
   /** `edit`: editing a logged dutch (BT-12), its id and bets as they were when the form opened. */
   dutchForm: { draft: DutchDraft; key: number; onSaved?: (bets: Bet[]) => void; edit?: { dutchId: string; bets: Bet[] } } | null;
   /** `onSaved` runs after the bets are saved (the Betting Tool clears itself, BT-9). */
   openDutch(draft: DutchDraft, onSaved?: (bets: Bet[]) => void, edit?: { dutchId: string; bets: Bet[] }): void;
   closeDutch(): void;
-  update(id: string, patch: Partial<BetInput>): Promise<Bet>;
-  remove(id: string): Promise<void>;
+  /** Not undoable unless `undo` is given (settling records its own steps). */
+  update(id: string, patch: Partial<BetInput>, undo?: UndoAs): Promise<Bet>;
+  remove(id: string, undo?: UndoAs): Promise<void>;
+  /** Puts deleted bets back as they were (ids, timestamps). */
+  restore(bets: Bet[]): Promise<void>;
+  /** The undo history: `recordUndo` adds a step, `undoGroup` makes everything recorded while `fn` runs one step. */
+  recordUndo(step: UndoStep): void;
+  undoGroup<T>(label: string, key: string | undefined, fn: () => Promise<T>): Promise<T>;
+  /** Undoes the last step (and says so); returns it, so a page can select its row again. */
+  undo(): UndoStep | undefined;
+  lastUndo: UndoStep | undefined;
   /** Sends a JSON export to the server (adds missing bets only), then reloads all bets. */
   importExport(json: unknown): Promise<{ added: number; skipped: number }>;
   index: SuggestIndex;
@@ -63,8 +81,9 @@ interface AppCtx {
   openNew(prefill?: Partial<BetForm>, rollover?: RolloverAdd, ladder?: LadderStart): void;
   openEdit(bet: Bet): void;
   closeForm(): void;
-  toast: { text: string; kind: 'ok' | 'error'; id: number } | null;
-  notify(text: string, kind?: 'ok' | 'error'): void;
+  /** `undoable`: the toast offers Undo (when there is something to undo). */
+  toast: { text: string; kind: 'ok' | 'error'; id: number; undoable: boolean } | null;
+  notify(text: string, kind?: 'ok' | 'error', undoable?: boolean): void;
   /** BT-33: the bankroll's money entries, newest first, and the balances they make with the bets. */
   entries: MoneyEntry[];
   bankroll: Bankroll;
@@ -181,44 +200,99 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return r;
   }, [write]);
 
-  const notify = useCallback((text: string, kind: 'ok' | 'error' = 'ok') => setToast({ text, kind, id: Date.now() }), []);
+  const [, setUndoTick] = useState(0);
+  const [history] = useState(() => new UndoHistory(() => setUndoTick((t) => t + 1)));
+  // a toast right after an undo step was added offers Undo
+  const notify = useCallback(
+    (text: string, kind: 'ok' | 'error' = 'ok', undoable?: boolean) =>
+      setToast({ text, kind, id: Date.now(), undoable: undoable ?? (kind === 'ok' && Date.now() - history.recordedAt < 1500) }),
+    [history],
+  );
+  const lastUndo = history.peek();
 
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), toast.kind === 'error' ? 6000 : 2500);
+    const t = setTimeout(() => setToast(null), toast.kind === 'error' ? 6000 : toast.undoable ? 5000 : 2500);
     return () => clearTimeout(t);
   }, [toast]);
 
-  const create = useCallback(async (raw: BetInput) => {
-    const input = tidyPatch(raw, namesRef.current);
-    const bet = await write<Bet>('/api/bets', { method: 'POST', body: JSON.stringify(input) });
-    setBets((bs) => [bet, ...bs]);
-    return bet;
-  }, [write]);
+  // Deleting without an undo step: what undoing an add does.
+  const drop = useCallback(
+    async (ids: string[]) => {
+      const gone = new Set(ids);
+      const before = betsRef.current;
+      setBets((bs) => bs.filter((b) => !gone.has(b.id)));
+      try {
+        for (const id of ids) await write(`/api/bets/${id}`, { method: 'DELETE' });
+      } catch (e) {
+        setBets(before);
+        notify((e as Error).message, 'error');
+        throw e;
+      }
+    },
+    [notify, write],
+  );
 
-  const createMany = useCallback(async (raw: BetInput[]) => {
-    const inputs = raw.map((i) => tidyPatch(i, namesRef.current));
-    const made = await write<Bet[]>('/api/bets', { method: 'POST', body: JSON.stringify(inputs) });
-    setBets((bs) => [...[...made].reverse(), ...bs]);
-    return made;
-  }, [write]);
+  const restore = useCallback(
+    async (gone: Bet[]) => {
+      const back = await write<Bet[]>('/api/bets/restore', { method: 'POST', body: JSON.stringify(gone) }).catch((e: Error) => {
+        notify(e.message, 'error');
+        throw e;
+      });
+      const ids = new Set(back.map((b) => b.id));
+      setBets((bs) => [...back, ...bs.filter((b) => !ids.has(b.id))].sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0)));
+    },
+    [notify, write],
+  );
+
+  const create = useCallback(
+    async (raw: BetInput, undo: UndoAs = {}) => {
+      const input = tidyPatch(raw, namesRef.current);
+      const bet = await write<Bet>('/api/bets', { method: 'POST', body: JSON.stringify(input) });
+      setBets((bs) => [bet, ...bs]);
+      if (undo) history.record({ label: undo.label ?? `Added: ${describe(bet)}`, key: undo.key ?? keyOf(bet), revert: () => drop([bet.id]) });
+      return bet;
+    },
+    [write, history, drop],
+  );
+
+  const createMany = useCallback(
+    async (raw: BetInput[], undo: UndoAs = {}) => {
+      const inputs = raw.map((i) => tidyPatch(i, namesRef.current));
+      const made = await write<Bet[]>('/api/bets', { method: 'POST', body: JSON.stringify(inputs) });
+      setBets((bs) => [...[...made].reverse(), ...bs]);
+      if (undo && made.length)
+        history.record({
+          label: undo.label ?? (made.length === 1 ? `Added: ${describe(made[0]!)}` : `Added ${made.length} bets`),
+          key: undo.key ?? keyOf(made[0]!),
+          revert: () => drop(made.map((b) => b.id)),
+        });
+      return made;
+    },
+    [write, history, drop],
+  );
 
   const removeDutch = useCallback(
-    async (dutchId: string) => {
+    async (dutchId: string, undo: UndoAs = {}) => {
       const before = betsRef.current;
+      const gone = before.filter((b) => b.dutchId === dutchId);
       setBets((bs) => bs.filter((b) => b.dutchId !== dutchId));
       try {
         await write(`/api/dutch/${dutchId}`, { method: 'DELETE' });
       } catch (e) {
         setBets(before);
         notify((e as Error).message, 'error');
+        return;
       }
+      if (undo && gone.length) history.record({ label: undo.label ?? `Deleted a dutch (${gone.length} bets)`, key: undo.key ?? `dutch:${dutchId}`, revert: () => restore(gone) });
     },
-    [notify, write],
+    [notify, write, history, restore],
   );
 
+  // undoing an edit patches the bet back (through update itself, without a new undo step)
+  const updateRef = useRef<AppCtx['update'] | null>(null);
   const update = useCallback(
-    async (id: string, raw: Partial<BetInput>) => {
+    async (id: string, raw: Partial<BetInput>, undo: UndoAs = false) => {
       const patch = tidyPatch(raw, namesRef.current);
       const before = betsRef.current.find((b) => b.id === id);
       // optimistic: show the change at once, put it back if the server refuses
@@ -229,6 +303,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const bet = await write<Bet>(`/api/bets/${id}`, { method: 'PATCH', body: JSON.stringify(patch) });
         // a newer edit of this bet is in flight or done: its response (read after both writes) is the one to show
         if (updates.isLatest(id, token)) setBets((bs) => bs.map((b) => (b.id === id ? bet : b)));
+        if (undo && before) {
+          const back = revertPatch(before, patch);
+          history.record({ label: undo.label ?? `Edited: ${describe(before)}`, key: undo.key ?? keyOf(before), revert: () => updateRef.current?.(id, back).catch(() => undefined) });
+        }
         return bet;
       } catch (e) {
         if (before && updates.isLatest(id, token)) setBets((bs) => bs.map((b) => (b.id === id ? before : b)));
@@ -236,22 +314,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
         throw e;
       }
     },
-    [notify, updates, write],
+    [notify, updates, write, history],
   );
+  useEffect(() => {
+    updateRef.current = update;
+  }, [update]);
 
   const remove = useCallback(
-    async (id: string) => {
+    async (id: string, undo: UndoAs = {}) => {
       const before = betsRef.current;
+      const gone = before.find((b) => b.id === id);
       setBets((bs) => bs.filter((b) => b.id !== id));
       try {
         await write(`/api/bets/${id}`, { method: 'DELETE' });
       } catch (e) {
         setBets(before);
         notify((e as Error).message, 'error');
+        return;
       }
+      if (undo && gone) history.record({ label: undo.label ?? `Deleted: ${describe(gone)}`, key: undo.key ?? keyOf(gone), revert: () => restore([gone]) });
     },
-    [notify, write],
+    [notify, write, history, restore],
   );
+
+  const undo = useCallback(() => {
+    const step = history.undo();
+    if (step) notify(`Undone: ${step.label}`, 'ok', false);
+    else notify('Nothing to undo', 'error');
+    return step;
+  }, [history, notify]);
+  const undoGroup = useCallback(<T,>(label: string, key: string | undefined, fn: () => Promise<T>) => history.group(label, key, fn), [history]);
+  const recordUndo = useCallback((step: UndoStep) => history.record(step), [history]);
 
   const byNewest = (a: MoneyEntry, b: MoneyEntry) => (a.date !== b.date ? (a.date < b.date ? 1 : -1) : a.createdAt < b.createdAt ? 1 : -1);
   const saveEntry = useCallback(
@@ -372,6 +465,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     closeDutch: () => setDutchForm(null),
     update,
     remove,
+    restore,
+    recordUndo,
+    undoGroup,
+    undo,
+    lastUndo,
     importExport,
     index,
     names,

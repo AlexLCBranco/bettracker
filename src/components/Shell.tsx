@@ -13,6 +13,7 @@ import { BankrollBar, MoneyFormModal } from './Bankroll';
 import { DutchFormModal } from './DutchFormModal';
 import { MoneyScopeSwitch, useMoneyScope } from './Money';
 import { QuickAdd } from './QuickAdd';
+import { isUndoKey } from '@/lib/undo';
 
 export function Shell({ children }: { children: ReactNode }) {
   return (
@@ -21,6 +22,8 @@ export function Shell({ children }: { children: ReactNode }) {
     </AppProvider>
   );
 }
+
+export { isUndoKey };
 
 /** True when a key press is meant for a field, not a page shortcut. */
 export function isTyping(e: KeyboardEvent): boolean {
@@ -41,7 +44,7 @@ const LINKS = [
 ];
 
 function Frame({ children }: { children: ReactNode }) {
-  const { bets, openNew, form, dutchForm, toast, loadError, moneyForm, openMoney } = useApp();
+  const { bets, openNew, form, dutchForm, toast, loadError, moneyForm, openMoney, undo, lastUndo } = useApp();
   const path = usePathname();
   const due = useMemo(() => settleQueue(bets, todayISO()).length, [bets]);
   const pending = useMemo(() => countBets(bets).pending, [bets]);
@@ -49,7 +52,15 @@ function Frame({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (form || dutchForm || moneyForm || isTyping(e) || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (form || dutchForm || moneyForm || isTyping(e)) return;
+      // Ctrl+Z undoes the last change to the bets; the Bets, Bankroll and PP pages handle it themselves
+      if (isUndoKey(e) && !(path === '/' || path.startsWith('/bankroll') || path.startsWith('/pp'))) {
+        if ((e.target as HTMLElement | null)?.closest?.('[role=dialog]')) return;
+        e.preventDefault();
+        undo();
+        return;
+      }
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.key === 'n' || e.key === 'N') {
         e.preventDefault();
         openNew();
@@ -62,7 +73,7 @@ function Frame({ children }: { children: ReactNode }) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [form, dutchForm, moneyForm, openNew, openMoney]);
+  }, [form, dutchForm, moneyForm, openNew, openMoney, undo, path]);
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -104,6 +115,11 @@ function Frame({ children }: { children: ReactNode }) {
       {toast && (
         <div role="status" className={`fixed bottom-6 left-6 z-50 rounded-md border px-4 py-2 text-sm shadow-lg ${toast.kind === 'error' ? 'border-red-700 bg-red-950 text-red-200' : 'border-zinc-700 bg-zinc-900 text-zinc-100'}`}>
           {toast.text}
+          {toast.undoable && lastUndo && (
+            <button className="ml-3 font-semibold text-amber-300 hover:text-amber-200" title={`Undo: ${lastUndo.label} (Ctrl+Z)`} onClick={() => undo()}>
+              Undo
+            </button>
+          )}
         </div>
       )}
       <SiteVersion />

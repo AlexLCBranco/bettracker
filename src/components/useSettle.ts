@@ -6,15 +6,6 @@ import { beforeOf, betResultChanges, legResultChanges, settleDutchRow, type Dutc
 import { RESULT_LABEL, type Bet, type Result } from '@/lib/types';
 import { useApp } from './AppProvider';
 
-/** One undo step: what the bets were, and the row to select again. */
-interface Undo {
-  before: SettleChange[];
-  key: string;
-  dutchId?: string;
-  /** BT-29: a step made outside settling (bank, add leg, close): how to put it back. */
-  revert?: () => void;
-}
-
 export interface Settler {
   /** Settles a plain bet (or one split of a dutch); cash-out without an amount opens the amount box. */
   settleBet(b: Bet, r: Result, cashout?: number | null, group?: Bet[]): void;
@@ -45,8 +36,7 @@ const ACTION_LABEL = (a: DutchRowAction, bets: Bet[]) =>
  * `restored(key)` after an undo (to select that row again).
  */
 export function useSettle({ settled, restored }: { settled(key: string): void; restored(key: string): void }): Settler {
-  const { update, notify } = useApp();
-  const [stack, setStack] = useState<Undo[]>([]);
+  const { update, notify, recordUndo, undo: undoLast, lastUndo } = useApp();
   const [undoShown, setUndoShown] = useState<string | null>(null);
   const [cashoutFor, setCashoutFor] = useState<string | null>(null);
   const [picked, setPicked] = useState<{ dutchId: string; winners: number[] }>({ dutchId: '', winners: [] });
@@ -55,14 +45,15 @@ export function useSettle({ settled, restored }: { settled(key: string): void; r
     if (!undoShown) return;
     const t = setTimeout(() => setUndoShown(null), 8000);
     return () => clearTimeout(t);
-  }, [undoShown, stack]);
+  }, [undoShown, lastUndo]);
 
   const apply = (changes: SettleChange[]) => {
     for (const c of changes) void update(c.id, { result: c.result, cashout: c.cashout, ...(c.legs ? { legs: c.legs } : {}) }).catch(() => undefined);
   };
-  const push = (step: SettleStep, key: string, label: string, dutchId?: string) => {
+  const push = (step: SettleStep, key: string, label: string) => {
     apply(step.changes);
-    setStack((s) => [...s, { before: step.state.undo.at(-1)!.before, key, dutchId }]);
+    const before = step.state.undo.at(-1)!.before;
+    recordUndo({ label, key, revert: () => apply(before) });
     notify(label);
     settled(key);
   };
@@ -71,7 +62,7 @@ export function useSettle({ settled, restored }: { settled(key: string): void; r
   const pushChanges = (bets: Bet[], changes: SettleChange[], key: string, label: string) => {
     const before = beforeOf(bets, changes);
     apply(changes);
-    setStack((st) => [...st, { before, key }]);
+    recordUndo({ label, key, revert: () => apply(before) });
     notify(label);
     settled(key);
   };
@@ -94,24 +85,19 @@ export function useSettle({ settled, restored }: { settled(key: string): void; r
       if (!step) return;
       setPicked({ dutchId: '', winners: [] });
       setUndoShown(dutchId);
-      push(step, `dutch:${dutchId}`, `${ACTION_LABEL(action, bets)} · dutch (${bets.length} bets)`, dutchId);
+      push(step, `dutch:${dutchId}`, `${ACTION_LABEL(action, bets)} · dutch (${bets.length} bets)`);
     },
     undo() {
-      const last = stack.at(-1);
-      if (!last) return;
-      if (last.revert) last.revert();
-      else apply(last.before);
-      setStack((s) => s.slice(0, -1));
+      const last = undoLast();
       setUndoShown(null);
-      notify('Undone');
-      restored(last.key);
+      if (last?.key) restored(last.key);
     },
     record(key, label, revert) {
-      setStack((s) => [...s, { before: [], key, revert }]);
+      recordUndo({ label, key, revert });
       notify(label);
       restored(key);
     },
-    canUndo: stack.length > 0,
+    canUndo: !!lastUndo,
     undoShown,
     cashoutFor,
     startCashout: setCashoutFor,

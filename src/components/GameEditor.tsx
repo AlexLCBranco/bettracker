@@ -69,7 +69,7 @@ function place(anchor: RefObject<HTMLSpanElement | null>, fields: number): Place
 }
 
 function GameEditor({ bets, anchor, at: first, close }: { bets: Bet[]; anchor: RefObject<HTMLSpanElement | null>; at: Place; close(): void }) {
-  const { update, suggestFor, names } = useApp();
+  const { update, suggestFor, names, undoGroup } = useApp();
   const fields = gameFields(bets, names) ?? [];
   const [values, setValues] = useState(() => fields.map((f) => f.value));
   const [at, setAt] = useState(first);
@@ -80,7 +80,8 @@ function GameEditor({ bets, anchor, at: first, close }: { bets: Bet[]; anchor: R
   const save = () => {
     if (done.current) return;
     done.current = true;
-    for (const { id, patch } of applyGames(bets, fields, values)) void update(id, patch).catch(() => undefined);
+    const plan = applyGames(bets, fields, values);
+    if (plan.length) void undoGroup('Games edited', undefined, () => Promise.all(plan.map(({ id, patch }) => update(id, patch, {}).catch(() => undefined))));
     close();
   };
   const cancel = () => {

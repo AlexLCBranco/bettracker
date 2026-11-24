@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-23
+- Ctrl+Z undoes the last change to your bets, and a bet can be taken out of a ladder (v0.29.0)
+  Ctrl+Z (or Z on the Bets page, or Ctrl+Z in the empty quick-add box) undoes adding, editing, deleting, settling and every ladder or rollover step, newest first; the Bets page shows "↶ Undo: <last change>" and toasts after a change carry an Undo button; deleted bets come back as they were; a bet in a ladder or rollover has "Remove from ladder" (or "Remove from rollover") in its ⋯ menu, which keeps it as a plain bet with its own stake, odds and money (then editable) and closes the ladder up behind it.
 - BT-36 — Ladder simulator: plan a ladder rung by rung before betting it (v0.28.0)
   A new "Ladder sim" page: start, odds (any format) and rungs on top, one compact row per rung (odds typed over per rung with a reset x and its tier chip, stake in, pays, profit, total odds "×6.86", fair chance with "1 in 613", a one-line note, a log-scale bar), a target that marks its rung and dims the rest with the odds per rung it needs, a summary line, a random "Try it" with a running tally, the plan kept across reloads (Reset clears), "Start this ladder" opening the bet form as rung 1 with the goal, and "Open in sim" on an open ladder loading its placed rungs locked.
 - BT-35 — Ladder: let the whole payout ride from one bet to the next, shown as rungs (v0.27.0)

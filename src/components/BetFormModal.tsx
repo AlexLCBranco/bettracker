@@ -61,8 +61,13 @@ function FormBody() {
     setError('');
     try {
       // the form has no dutch or rollover field: an edited bet stays in its dutch / rollover (and banked)
-      if (editing) await update(editing.id, { ...v.value, dutchId: editing.dutchId, rolloverId: editing.rolloverId, banked: editing.banked, ...(editing.rolloverId ? { money: editing.money } : {}) });
-      else if (rollover) rollover.onSaved?.(await create({ ...v.value, stake: rollover.stake, money: rollover.money, rolloverId: rollover.rolloverId, banked: false, ladder: rollover.ladder ?? null }));
+      if (editing) await update(editing.id, { ...v.value, dutchId: editing.dutchId, rolloverId: editing.rolloverId, banked: editing.banked, ...(editing.rolloverId ? { money: editing.money } : {}) }, {});
+      else if (rollover) {
+        const input = { ...v.value, stake: rollover.stake, money: rollover.money, rolloverId: rollover.rolloverId, banked: false, ladder: rollover.ladder ?? null };
+        // the rollover records its own undo step ("Rung added")
+        if (rollover.onSaved) rollover.onSaved(await create(input, false));
+        else await create(input);
+      }
       else if (ladderOn) {
         const gr = goalRungs.trim() ? Math.round(parseNumber(goalRungs) ?? NaN) : null;
         const ga = goalAmount.trim() ? parseNumber(goalAmount) : null;

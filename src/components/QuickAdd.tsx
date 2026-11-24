@@ -6,12 +6,13 @@ import { emptyLeg, formToBet, newForm } from '@/lib/form';
 import { formatMoney, formatOdds } from '@/lib/money';
 import { parseQuickAdd, quickAddLegs, splitQuickAddText } from '@/lib/quickadd';
 import { newRolloverId } from '@/lib/rollover';
+import { isUndoKey } from '@/lib/undo';
 import { useApp } from './AppProvider';
 import { Autocomplete } from './Autocomplete';
 
 /** One line, e.g. "150 @2.10 lakers ml" + Enter: saved as pending with the last-used defaults. */
 export function QuickAdd() {
-  const { bets, suggestFor, defaults, create, openNew, notify } = useApp();
+  const { bets, suggestFor, defaults, create, openNew, notify, undo } = useApp();
   const [line, setLine] = useState('');
   const [busy, setBusy] = useState(false);
   const ref = useRef<HTMLInputElement>(null);
@@ -77,7 +78,17 @@ export function QuickAdd() {
         void submit();
       }}
     >
-      <div className="flex-1">
+      <div
+        className="flex-1"
+        // the box is empty after a bet is added: Ctrl+Z there undoes that bet (with text in it, it undoes typing)
+        onKeyDownCapture={(e) => {
+          if (!line && isUndoKey(e.nativeEvent)) {
+            e.preventDefault();
+            e.stopPropagation();
+            undo();
+          }
+        }}
+      >
         <Autocomplete
           ref={ref}
           value={line}

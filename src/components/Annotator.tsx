@@ -50,7 +50,7 @@ const NEXT: Partial<Record<Result, Result>> = { pending: 'won', won: 'lost', los
 const MARK: Partial<Record<Result, string>> = { won: '✓', lost: '✗', 'half-won': '½✓', 'half-lost': '½✗', void: '–' };
 
 export function Annotator(props: Props) {
-  const { update, suggestFor, notify } = useApp();
+  const { update, suggestFor, notify, undoGroup } = useApp();
   const group = props.kind === 'dutch' ? props.bets : props.group;
   const soloBet = props.kind === 'bet' && props.bet.type === 'solo' ? props.bet : null;
   const initialLabel = props.kind === 'dutch' ? sharedLabel(props.bets) : props.bet.label;
@@ -87,7 +87,7 @@ export function Annotator(props: Props) {
     const plan = planActuals(group, { legs: edits, ...(labelChanged ? { label: newLabel, labelFor } : {}) });
     props.onClose();
     if (!plan.length) return;
-    void Promise.all(plan.map((p) => update(p.id, p.patch)))
+    void undoGroup('Label / actual result saved', undefined, () => Promise.all(plan.map((p) => update(p.id, p.patch, {}))))
       .then(() => notify('Saved'))
       .catch(() => undefined);
   };

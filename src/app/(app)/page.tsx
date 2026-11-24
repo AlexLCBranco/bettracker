@@ -8,7 +8,7 @@ import { BetTable } from '@/components/BetTable';
 import { DateField } from '@/components/BetFormModal';
 import { DataTransfer } from '@/components/DataTransfer';
 import { useMoneyScope } from '@/components/Money';
-import { isTyping } from '@/components/Shell';
+import { isTyping, isUndoKey } from '@/components/Shell';
 import { useSettle } from '@/components/useSettle';
 import { useRollover } from '@/components/useRollover';
 import { chainSummary } from '@/lib/rollover';
@@ -45,7 +45,7 @@ const HELP: [string, string][] = [
   ['B', 'Bank a won bet for a rollover; on an open shot, close it'],
   ['A', 'Open shot: add the next leg'],
   ['T', 'Label and actual result'],
-  ['Z', 'Undo the last settle'],
+  ['Ctrl+Z or Z', 'Undo the last change: add, edit, delete, settle, ladder or rollover step'],
   ['N', 'New bet'],
   ['M', 'Insert money (bankroll)'],
   ['?', 'Show these keys'],
@@ -59,7 +59,7 @@ const DUTCH_KEYS_HELP = 'A dutch settles with 1-9 to toggle the splits that won,
  * is selected.
  */
 function Bets() {
-  const { bets: all, loaded, suggestFor, form, dutchForm, moneyForm, notify } = useApp();
+  const { bets: all, loaded, suggestFor, form, dutchForm, moneyForm, notify, lastUndo } = useApp();
   const [scope] = useMoneyScope();
   const params = useSearchParams();
   const router = useRouter();
@@ -116,8 +116,13 @@ function Bets() {
   const handler = useRef<(e: KeyboardEvent) => void>(() => {});
   useEffect(() => {
     handler.current = (e) => {
-      if (form || dutchForm || moneyForm || isTyping(e) || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (form || dutchForm || moneyForm || isTyping(e)) return;
       if ((e.target as HTMLElement | null)?.closest?.('[role=dialog], [role=menu]')) return;
+      if (isUndoKey(e)) {
+        e.preventDefault();
+        return settle.undo();
+      }
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
       const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
       if (k === '?') {
         e.preventDefault();
@@ -329,7 +334,11 @@ function Bets() {
             )}
           </button>
         ))}
-        {settle.canUndo && <span className="ml-auto text-xs text-zinc-500">Z undoes the last settle</span>}
+        {settle.canUndo && lastUndo && (
+          <button className="ml-auto max-w-md truncate text-xs text-zinc-400 hover:text-white" title={`Undo: ${lastUndo.label} (Ctrl+Z or Z)`} onClick={settle.undo} data-testid="undo-last">
+            ↶ Undo: {lastUndo.label} <span className="text-zinc-600">· Ctrl+Z</span>
+          </button>
+        )}
       </div>
 
       <section className="card px-2 pb-2">

@@ -25,7 +25,7 @@ export function DutchFormModal() {
 const CHIPS: Record<PickField, 'games' | 'markets'> = { game: 'games', market: 'markets' };
 
 function Body() {
-  const { dutchForm, bets, defaults, suggestFor, createMany, update, remove, closeDutch, notify } = useApp();
+  const { dutchForm, bets, defaults, suggestFor, createMany, update, remove, closeDutch, notify, undoGroup } = useApp();
   /** BT-12: editing a logged dutch: selections, odds and stakes become editable, splits can be added and removed. */
   const edit = dutchForm!.edit;
   const [d, setD] = useState<DutchDraft>(() => dutchForm!.draft);
@@ -73,9 +73,11 @@ function Body() {
     }
     setSaving(true);
     try {
-      for (const u of v.plan.updates) await update(u.id, u.patch);
-      if (v.plan.creates.length) await createMany(v.plan.creates);
-      for (const id of v.plan.deletes) await remove(id);
+      await undoGroup('Dutch edited', `dutch:${e.dutchId}`, async () => {
+        for (const u of v.plan.updates) await update(u.id, u.patch, {});
+        if (v.plan.creates.length) await createMany(v.plan.creates);
+        for (const id of v.plan.deletes) await remove(id);
+      });
       const parts = [`${v.plan.updates.length} updated`, v.plan.creates.length && `${v.plan.creates.length} added`, v.plan.deletes.length && `${v.plan.deletes.length} removed`].filter(Boolean);
       notify(`Dutch saved: ${parts.join(', ')}`);
       closeDutch();

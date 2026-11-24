@@ -362,7 +362,7 @@ function DutchGroup({ bets, dutchId, open, toggle, selected, select, settle, ann
                     icon: '🗑',
                     danger: true,
                     onClick: () => {
-                      if (window.confirm(`Delete this dutch and its ${bets.length} bets (${formatMoney(s.stake, money)} in all: ${names})? This cannot be undone.`)) void removeDutch(dutchId);
+                      if (window.confirm(`Delete this dutch and its ${bets.length} bets (${formatMoney(s.stake, money)} in all: ${names})? Ctrl+Z undoes it.`)) void removeDutch(dutchId);
                     },
                   },
                   { label: 'Label / result', icon: '#', onClick: annotateHere },
@@ -408,7 +408,7 @@ const CHAIN_LABEL: Record<ChainOutcome, string> = { pending: 'Pending', open: 'O
  * bet needs, with Add leg and Close.
  */
 function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, select, settle, annotating, annotate, rollover }: { bets: Bet[]; rolloverId: string } & RowProps) {
-  const { names: nameCasing, remove } = useApp();
+  const { names: nameCasing, remove, undoGroup } = useApp();
   const s = chainSummary(raw);
   const bets = s.bets;
   const tone = groupTone(chainPending(s.outcome) ? 'pending' : (s.outcome as GroupOutcome));
@@ -582,7 +582,10 @@ function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, select, 
                     icon: '🗑',
                     danger: true,
                     onClick: () => {
-                      if (window.confirm(`Delete this rollover and its ${bets.length} bets (${names})? This cannot be undone.`)) for (const b of bets) void remove(b.id);
+                      if (window.confirm(`Delete this ${ladder ? 'ladder' : 'rollover'} and its ${bets.length} bets (${names})? Ctrl+Z undoes it.`))
+                        void undoGroup(`Deleted a ${ladder ? 'ladder' : 'rollover'} (${bets.length} bets)`, undefined, async () => {
+                          for (const b of bets) await remove(b.id);
+                        });
                     },
                   },
                 ]}
@@ -638,7 +641,8 @@ interface Split {
 
 function BetRow({ b, open, toggle, selected, select, settle, split, link, annotating, annotate, rollover }: { b: Bet; split?: Split; link?: ChainLink } & RowProps) {
   const { update, remove, openEdit, openNew, names } = useApp();
-  const save = (patch: Partial<BetInput>) => update(b.id, patch).catch(() => undefined);
+  // an edit in a cell is one undo step (Ctrl+Z)
+  const save = (patch: Partial<BetInput>) => update(b.id, patch, {}).catch(() => undefined);
   const saveLeg = (i: number, patch: Partial<Leg>) => save({ legs: b.legs.map((l, j) => (j === i ? { ...l, ...patch } : l)) });
 
   const nested = !!split;
@@ -831,13 +835,14 @@ function BetRow({ b, open, toggle, selected, select, settle, split, link, annota
                     items={[
                       ...(bankable ? [{ label: 'Bank for rollover', icon: '⤴', onClick: () => rollover.bank(b) }] : []),
                       ...(startable ? [{ label: 'Start ladder', icon: '⇈', onClick: () => rollover.startLadder(b) }] : []),
+                      ...(b.rolloverId && !nested ? [{ label: `Remove from ${link?.ladder ? 'ladder' : 'rollover'}`, icon: '⤓', onClick: () => rollover.detach(b) }] : []),
                       { label: 'Duplicate', icon: '⧉', onClick: () => openNew(duplicateForm(b)) },
                       {
                         label: 'Delete',
                         icon: '🗑',
                         danger: true,
                         onClick: () => {
-                          if (window.confirm(`Delete this bet (${formatMoney(b.stake, b.money)} @${formatOdds(b.odds)} ${text})? This cannot be undone.`)) void remove(b.id);
+                          if (window.confirm(`Delete this bet (${formatMoney(b.stake, b.money)} @${formatOdds(b.odds)} ${text})? Ctrl+Z undoes it.`)) void remove(b.id);
                         },
                       },
                     ]}

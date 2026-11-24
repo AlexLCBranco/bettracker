@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/components/AppProvider';
 import { Autocomplete } from '@/components/Autocomplete';
 import { MONEY_TEXT } from '@/components/moneyStyle';
-import { isTyping } from '@/components/Shell';
+import { isTyping, isUndoKey } from '@/components/Shell';
 import { normalize } from '@/lib/autocomplete';
 import { MONEY_LABEL, type MoneyEntry } from '@/lib/bankroll';
 import { formatDate } from '@/lib/dates';
@@ -35,8 +35,8 @@ export default function BankrollPage() {
   };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (form || dutchForm || moneyForm || isTyping(e) || e.ctrlKey || e.metaKey || e.altKey) return;
-      if (e.key === 'z' || e.key === 'Z') {
+      if (form || dutchForm || moneyForm || isTyping(e)) return;
+      if (isUndoKey(e) || (!e.ctrlKey && !e.metaKey && !e.altKey && (e.key === 'z' || e.key === 'Z'))) {
         e.preventDefault();
         void doUndo();
       }
