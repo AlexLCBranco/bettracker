@@ -7,7 +7,8 @@ import { Autocomplete } from '@/components/Autocomplete';
 import { BetTable } from '@/components/BetTable';
 import { DateField } from '@/components/BetFormModal';
 import { DataTransfer } from '@/components/DataTransfer';
-import { useMoneyScope } from '@/components/Money';
+import { useMoneyScope, useUnitsView } from '@/components/Money';
+import { asUnitBets, formatUnits } from '@/lib/units';
 import { isTyping, isUndoKey } from '@/components/Shell';
 import { useSettle } from '@/components/useSettle';
 import { useRollover } from '@/components/useRollover';
@@ -39,6 +40,7 @@ const HELP: [string, string][] = [
   ['C', 'Cash-out (the amount returned, or a % of the full payout)'],
   ['W L', 'On a cash-out: woulda won / lost (again: clear)'],
   ['H J', 'Half-won, half-lost'],
+  ['U', 'Show amounts as money or units'],
   ['1-9', 'Dutch: toggle a split that won'],
   ['Enter', 'Dutch: confirm (toggled won, rest lost)'],
   ['0', 'Dutch: none won'],
@@ -81,7 +83,10 @@ function Bets() {
   const shown = useMemo(() => tabBets(days), [days]);
   const keys = useMemo(() => rowKeys(days), [days]);
   const counts = useMemo(() => ({ pending: rowKeys(tabDays(filtered, 'pending', today)).length, banked: rowKeys(tabDays(filtered, 'banked', today)).length, settle: settleQueue(filtered, today).length }), [filtered, today]);
-  const s = summarize(shown);
+  // BT-38: in the units view the strip counts units, when every bet shown has a unit size and one money type
+  const [unitsView] = useUnitsView();
+  const unitBets = useMemo(() => (unitsView ? asUnitBets(shown) : null), [unitsView, shown]);
+  const s = summarize(unitBets ?? shown);
   const totalCount = countBets(scoped).count;
 
   // selection: a row key, or a dutch split's "bet:<id>"; the To settle tab starts on its first row, like the old queue
@@ -225,13 +230,13 @@ function Bets() {
     if (selected) document.querySelector(`[data-key="${selected}"]`)?.scrollIntoView({ block: 'nearest' });
   }, [selected]);
 
-  const fmt = (n: number, signed = false) => formatMoney(n, scope, signed);
+  const fmt = (n: number, signed = false) => (unitBets ? formatUnits(n, signed) : formatMoney(n, scope, signed));
   const tone = (n: number) => (n > 0 ? 'text-emerald-400' : n < 0 ? 'text-red-400' : 'text-zinc-200');
 
   return (
     <div className="space-y-3">
       <h1 className="sr-only">Bets</h1>
-      <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-400" data-testid="stats">
+      <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-400" data-testid="stats" data-units={unitBets ? 'true' : undefined} title={unitsView && !unitBets ? 'Shown in money: some of these bets have no unit size, or money types are mixed' : undefined}>
         <Stat label="Net" testId="stat-net" value={<span className={tone(s.netProfit)}>{fmt(s.netProfit, true)}</span>} sub={`on ${fmt(s.settledStake)} settled`} />
         <Stat label="ROI" testId="stat-roi" value={<span className={tone(s.roi ?? 0)}>{formatPercent(s.roi, true)}</span>} />
         <Stat label="Wagered" testId="stat-wagered" value={fmt(s.totalWagered)} sub={`${s.betCount} of ${totalCount} ${totalCount === 1 ? 'bet' : 'bets'}`} />

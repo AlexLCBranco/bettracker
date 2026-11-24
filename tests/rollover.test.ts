@@ -158,7 +158,7 @@ describe('table rows', () => {
     const days = dayGroups(rows);
     expect(days).toHaveLength(1);
     expect(days[0]!.count).toBe(2);
-    expect(days[0]!.nets).toEqual([{ money: 'real', value: 92 }]);
+    expect(days[0]!.nets).toEqual([{ money: 'real', value: 92, units: null }]);
   });
 
   it('the Pending tab shows an open shot; filters keep a chain whole', () => {

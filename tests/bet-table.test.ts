@@ -23,8 +23,8 @@ describe('day groups', () => {
     ]);
     // 100 + (100 - 50) real; -30 H$
     expect(days[0]!.nets).toEqual([
-      { money: 'real', value: 150 },
-      { money: 'hypothetical', value: -30 },
+      { money: 'real', value: 150, units: null },
+      { money: 'hypothetical', value: -30, units: null },
     ]);
     expect(days[1]!.nets).toEqual([]);
   });

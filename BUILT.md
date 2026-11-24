@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-24
+- BT-38 — Units: type a stake as "1u" and view everything in units (v0.34.0)
+  Each money type gets a unit size on the Bankroll page; a stake can be typed as `1,5u` (quick-add, bet form, Dutch tool, cash-out box) with a preview `1,5u = H$ 150,00`, and the `$ | u` switch (or U) shows stakes, profit, cash-outs, day totals and Analytics in units without moving any column.
 - BT-37 — "Woulda won / woulda lost" on a cashed-out bet (v0.33.0)
   On a cash-out, W or L (or the dim W / L beside the pill on hover) records what would have happened: the row shows `WOULDA WON · LEFT R$ 43,00` or `WOULDA LOST · SAVED R$ 145,00`, a cash-out without it has a faint "?" in its pill, and Analytics shows the Cash-out verdict (saved − left).
 - BT-39 — A shot banked from a dutch split shows the dutch's real odds (v0.32.2)

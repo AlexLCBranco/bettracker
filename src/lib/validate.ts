@@ -57,6 +57,9 @@ export function validateBet(raw: unknown): Validated {
   // BT-37: what a cash-out would have done; dropped once the result is anything else
   if (r.wouldHave != null && r.wouldHave !== '' && !WOULD_HAVE.includes(r.wouldHave as WouldHave)) return { ok: false, error: 'Would-have must be won or lost' };
   const wouldHave = result === 'cash-out' && r.wouldHave ? (r.wouldHave as WouldHave) : null;
+  // BT-38: the unit size in force when the bet was placed
+  const unitSize = r.unitSize == null || r.unitSize === '' ? null : num(r.unitSize);
+  if (r.unitSize != null && r.unitSize !== '' && (unitSize == null || unitSize <= 0)) return { ok: false, error: 'Unit size must be above 0' };
   let cashout: number | null = null;
   if (result === 'cash-out') {
     cashout = num(r.cashout);
@@ -109,6 +112,7 @@ export function validateBet(raw: unknown): Validated {
       banked,
       ladder,
       wouldHave,
+      unitSize,
       money,
       // BT-27: one label per bet, kept as typed (shown uppercase)
       label: str(r.label).replace(/\s+/g, ' ').slice(0, 60),

@@ -70,3 +70,44 @@ export function MoneyScopeSwitch({ scope, onChange }: { scope: MoneyScope; onCha
     </div>
   );
 }
+
+// BT-38: the money / units view, remembered; U toggles it on every page
+const UNITS_KEY = 'bettracker:units-view';
+const unitListeners = new Set<() => void>();
+
+export function useUnitsView(): [boolean, (on: boolean) => void] {
+  const on = useSyncExternalStore(
+    (cb) => {
+      unitListeners.add(cb);
+      return () => unitListeners.delete(cb);
+    },
+    () => localStorage.getItem(UNITS_KEY) === 'units',
+    () => false,
+  );
+  return [
+    on,
+    (v) => {
+      localStorage.setItem(UNITS_KEY, v ? 'units' : 'money');
+      unitListeners.forEach((l) => l());
+    },
+  ];
+}
+
+export function UnitsToggle({ on, onChange }: { on: boolean; onChange(on: boolean): void }) {
+  return (
+    <div role="radiogroup" aria-label="Amounts shown in" className="inline-flex rounded-md border border-zinc-700 p-0.5 text-xs" title="Show amounts as money or as units (U)" data-testid="units-toggle">
+      {([false, true] as const).map((u) => (
+        <button
+          key={String(u)}
+          role="radio"
+          aria-checked={on === u}
+          aria-label={u ? 'Units' : 'Money'}
+          className={`rounded px-2 py-1 ${on === u ? 'bg-zinc-700 font-semibold text-white' : 'text-zinc-400 hover:text-white'}`}
+          onClick={() => onChange(u)}
+        >
+          {u ? 'u' : '$'}
+        </button>
+      ))}
+    </div>
+  );
+}

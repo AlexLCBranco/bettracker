@@ -5,6 +5,7 @@ import { normalize } from '@/lib/autocomplete';
 import { emptyLeg, formToBet, newForm } from '@/lib/form';
 import { formatMoney, formatOdds } from '@/lib/money';
 import { parseQuickAdd, quickAddLegs, splitQuickAddText } from '@/lib/quickadd';
+import { previewText, unitsToMoney } from '@/lib/units';
 import { newRolloverId } from '@/lib/rollover';
 import { isUndoKey } from '@/lib/undo';
 import { useApp } from './AppProvider';
@@ -12,7 +13,7 @@ import { Autocomplete } from './Autocomplete';
 
 /** One line, e.g. "150 @2.10 lakers ml" + Enter: saved as pending with the last-used defaults. */
 export function QuickAdd() {
-  const { bets, suggestFor, defaults, create, openNew, notify, undo } = useApp();
+  const { bets, suggestFor, defaults, create, openNew, notify, undo, units } = useApp();
   const [line, setLine] = useState('');
   const [busy, setBusy] = useState(false);
   const ref = useRef<HTMLInputElement>(null);
@@ -32,10 +33,26 @@ export function QuickAdd() {
     return out;
   }, [bets]);
 
+  // BT-38: a stake typed in units ("1,5u") shows what it is in money before Enter, or why it cannot be read
+  const unitPreview = useMemo(() => {
+    const p = parseQuickAdd(line);
+    if (!p.units || p.stake == null) return null;
+    const money = p.money ?? defaults.money;
+    const r = unitsToMoney(p.stake, money, units.unitSizes);
+    return r.ok ? { ok: true as const, text: previewText(p.stake, r.amount, money, formatMoney) } : { ok: false as const, text: r.error };
+  }, [line, defaults.money, units.unitSizes]);
+
   const submit = async () => {
     const text = line.trim();
     if (!text || busy) return;
-    const p = parseQuickAdd(text);
+    const parsed = parseQuickAdd(text);
+    let p = parsed;
+    if (parsed.units && parsed.stake != null) {
+      const r = unitsToMoney(parsed.stake, parsed.money ?? defaults.money, units.unitSizes);
+      // no unit size for that money type: nothing is saved, the line stays
+      if (!r.ok) return notify(r.error, 'error');
+      p = { ...parsed, stake: r.amount };
+    }
     const legs = quickAddLegs(p.betText);
     const base = {
       ...newForm(defaults),
@@ -79,7 +96,7 @@ export function QuickAdd() {
       }}
     >
       <div
-        className="flex-1"
+        className="relative flex-1"
         // the box is empty after a bet is added: Ctrl+Z there undoes that bet (with text in it, it undoes typing)
         onKeyDownCapture={(e) => {
           if (!line && isUndoKey(e.nativeEvent)) {
@@ -97,11 +114,19 @@ export function QuickAdd() {
           toQuery={(v) => splitQuickAddText(v).text}
           applySuggestion={(v, s) => (v.trim() ? splitQuickAddText(v).prefix + s : s)}
           placeholder="Quick add: 150 @2.10 lakers ml"
-          title='Quick add: "150 @2.10 lakers ml" then Enter. "B$150" = bonus money, "H$150" = hypothetical, "R$150" = real. "ladder" (or "ladder:5" rungs, "ladder:R$1600" amount) starts a ladder.'
+          title='Quick add: "150 @2.10 lakers ml" then Enter. "1u" = 1 unit (unit sizes on the Bankroll page). "B$150" = bonus money, "H$150" = hypothetical, "R$150" = real. "ladder" (or "ladder:5" rungs, "ladder:R$1600" amount) starts a ladder.'
           aria-label="Quick add"
           data-testid="quick-add"
           className="field w-full"
         />
+        {unitPreview && (
+          <span
+            className={`pointer-events-none absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded bg-zinc-900 px-1.5 text-[11px] tabular-nums ${unitPreview.ok ? 'text-sky-300' : 'text-amber-300'}`}
+            data-testid="unit-preview"
+          >
+            {unitPreview.text}
+          </span>
+        )}
       </div>
       <button type="submit" className="btn btn-primary" disabled={busy}>
         Add

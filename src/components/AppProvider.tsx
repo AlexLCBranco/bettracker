@@ -12,6 +12,7 @@ import { bankroll as computeBankroll, type Bankroll, type EntryInput, type Money
 import { todayISO } from '@/lib/dates';
 import { ticketMoney, type BatchInput, type PPBatch, type PPLeg } from '@/lib/pp';
 import { revertPatch, UndoHistory, type UndoStep } from '@/lib/undo';
+import { NO_UNITS, type UnitSettings } from '@/lib/units';
 
 /** How a write goes into the undo history: false keeps it out (a step recorded elsewhere covers it). */
 export type UndoAs = false | { label?: string; key?: string };
@@ -97,6 +98,11 @@ interface AppCtx {
   moneyForm: MoneyFormRequest | null;
   openMoney(req?: Omit<MoneyFormRequest, 'key'>): void;
   closeMoney(): void;
+  /** BT-38: the unit size per money type (Bankroll page) and which types were offered "apply to older bets". */
+  units: UnitSettings;
+  saveUnits(s: UnitSettings): Promise<void>;
+  /** Gives the older bets of a money type (no unit size) its current unit size; returns how many changed. */
+  applyUnits(money: Money): Promise<number>;
   /** BT-30: PP batches, newest first. */
   batches: PPBatch[];
   /** Creates (no id) or replaces a whole batch; shown at once, put back if the server refuses. */
@@ -143,6 +149,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [toast, setToast] = useState<AppCtx['toast']>(null);
   const [entries, setEntries] = useState<MoneyEntry[]>([]);
   const [batches, setBatches] = useState<PPBatch[]>([]);
+  const [units, setUnits] = useState<UnitSettings>({ unitSizes: NO_UNITS, offered: [] });
   const [moneyForm, setMoneyForm] = useState<MoneyFormRequest | null>(null);
   const betsRef = useRef(bets);
   const names = useMemo(() => betNames(bets), [bets]);
@@ -155,11 +162,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const formKey = useRef(0);
 
   useEffect(() => {
-    Promise.all([api<Bet[]>('/api/bets'), api<MoneyEntry[]>('/api/money'), api<PPBatch[]>('/api/pp')])
-      .then(([b, e, p]) => {
+    Promise.all([api<Bet[]>('/api/bets'), api<MoneyEntry[]>('/api/money'), api<PPBatch[]>('/api/pp'), api<UnitSettings>('/api/units')])
+      .then(([b, e, p, u]) => {
         setBets(b);
         setEntries(e);
         setBatches(p);
+        setUnits(u);
         setLoaded(true);
       })
       .catch((e: Error) => setLoadError(e.message));
@@ -486,7 +494,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const defaults = useMemo(() => lastUsed(bets), [bets]);
   const presets = useMemo(() => stakePresets(bets), [bets]);
 
+  const saveUnits = useCallback(
+    async (next: UnitSettings) => {
+      const before = units;
+      setUnits(next);
+      try {
+        setUnits(await write<UnitSettings>('/api/units', { method: 'PUT', body: JSON.stringify(next) }));
+      } catch (e) {
+        setUnits(before);
+        notify((e as Error).message, 'error');
+        throw e;
+      }
+    },
+    [units, write, notify],
+  );
+  const applyUnits = useCallback(
+    async (money: Money) => {
+      const { updated } = await write<{ updated: number }>('/api/units/apply', { method: 'POST', body: JSON.stringify({ money }) });
+      setBets(await api<Bet[]>('/api/bets'));
+      return updated;
+    },
+    [write],
+  );
+
   const value: AppCtx = {
+    units,
+    saveUnits,
+    applyUnits,
     bets,
     loaded,
     saving,

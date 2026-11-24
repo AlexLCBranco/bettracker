@@ -2,7 +2,8 @@ import 'server-only';
 import { createClient, type Client, type InStatement, type Row } from '@libsql/client';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import type { Bet, BetInput, Leg } from '../types';
+import { MONEY, type Bet, type BetInput, type Leg, type Money } from '../types';
+import { readUnitSizes, type UnitSettings } from '../units';
 import type { ImportBet } from '../transfer';
 import type { EntryInput, MoneyEntry } from '../bankroll';
 import type { BatchInput, PPBatch, PPLeg, PPTicket } from '../pp';
@@ -44,6 +45,7 @@ const SCHEMA = [
     banked INTEGER NOT NULL DEFAULT 0,
     ladder TEXT,
     would_have TEXT,
+    unit_size REAL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   )`,
@@ -142,6 +144,8 @@ async function migrate(c: Client): Promise<void> {
   if (!cols.has('ladder')) await c.execute('ALTER TABLE bets ADD COLUMN ladder TEXT');
   // BT-37: existing cash-outs have no would-have set
   if (!cols.has('would_have')) await c.execute('ALTER TABLE bets ADD COLUMN would_have TEXT');
+  // BT-38: existing bets were placed before any unit size
+  if (!cols.has('unit_size')) await c.execute('ALTER TABLE bets ADD COLUMN unit_size REAL');
   const legCols = new Set((await c.execute('PRAGMA table_info(legs)')).rows.map((r) => String(r.name)));
   if (!legCols.has('actual')) await c.execute("ALTER TABLE legs ADD COLUMN actual TEXT NOT NULL DEFAULT ''");
   await repairLegsOnce(c);
@@ -188,6 +192,7 @@ function rowToBet(r: Row, legs: Leg[]): Bet {
     banked: Number(r.banked ?? 0) === 1,
     ladder: readLadder(r.ladder),
     wouldHave: r.would_have === 'won' || r.would_have === 'lost' ? r.would_have : null,
+    unitSize: r.unit_size == null ? null : Number(r.unit_size),
     createdAt: s(r.created_at),
     updatedAt: s(r.updated_at),
   });
@@ -248,9 +253,9 @@ function writeStatements(bet: Bet): InStatement[] {
   return [
     {
       sql: `INSERT OR REPLACE INTO bets (id, book, placed_date, game_date, type, situation, stake, odds, result, cashout,
-            pre_analysis, post_analysis, bet_text, dutch_id, money, label, rollover_id, banked, ladder, would_have, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+            pre_analysis, post_analysis, bet_text, dutch_id, money, label, rollover_id, banked, ladder, would_have, unit_size, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       args: [bet.id, bet.book, bet.placedDate, bet.gameDate, bet.type, bet.situation, bet.stake, bet.odds, bet.result, bet.cashout,
-        bet.preAnalysis, bet.postAnalysis, bet.betText, bet.dutchId, bet.money, bet.label, bet.rolloverId, bet.banked ? 1 : 0, bet.ladder ? JSON.stringify(bet.ladder) : null, bet.wouldHave, bet.createdAt, bet.updatedAt],
+        bet.preAnalysis, bet.postAnalysis, bet.betText, bet.dutchId, bet.money, bet.label, bet.rolloverId, bet.banked ? 1 : 0, bet.ladder ? JSON.stringify(bet.ladder) : null, bet.wouldHave ?? null, bet.unitSize ?? null, bet.createdAt, bet.updatedAt],
     },
     { sql: 'DELETE FROM legs WHERE bet_id = ?', args: [bet.id] },
     ...bet.legs.map((l, i) => ({
@@ -280,7 +285,7 @@ export async function createBets(inputs: BetInput[]): Promise<Bet[]> {
 
 const COLUMNS = {
   book: 'book', placedDate: 'placed_date', gameDate: 'game_date', type: 'type', situation: 'situation', stake: 'stake',
-  odds: 'odds', result: 'result', cashout: 'cashout', preAnalysis: 'pre_analysis', postAnalysis: 'post_analysis', betText: 'bet_text', dutchId: 'dutch_id', money: 'money', label: 'label', rolloverId: 'rollover_id', banked: 'banked', ladder: 'ladder', wouldHave: 'would_have',
+  odds: 'odds', result: 'result', cashout: 'cashout', preAnalysis: 'pre_analysis', postAnalysis: 'post_analysis', betText: 'bet_text', dutchId: 'dutch_id', money: 'money', label: 'label', rolloverId: 'rollover_id', banked: 'banked', ladder: 'ladder', wouldHave: 'would_have', unitSize: 'unit_size',
 } as const satisfies Partial<Record<keyof Bet, string>>;
 
 const sameLegs = (a: BetInput['legs'], b: Leg[]) =>
@@ -560,4 +565,42 @@ export async function importBatches(items: PPBatch[]): Promise<{ added: number; 
   const fresh = items.filter((b) => !existing.has(b.id));
   if (fresh.length) await c.batch(fresh.flatMap(batchStatements), 'write');
   return { added: fresh.length, skipped: items.length - fresh.length };
+}
+
+// ---- BT-38: unit sizes (one per money type) and the one-time offer to apply the first one to older bets ----
+
+
+const metaJSON = async (c: Client, key: string): Promise<unknown> => {
+  const r = await c.execute({ sql: 'SELECT value FROM meta WHERE key = ?', args: [key] });
+  if (!r.rows.length) return null;
+  try {
+    return JSON.parse(String(r.rows[0]!.value));
+  } catch {
+    return null;
+  }
+};
+
+export async function getUnitSettings(): Promise<UnitSettings> {
+  const c = await db();
+  const offered = await metaJSON(c, 'unit-offered');
+  return { unitSizes: readUnitSizes(await metaJSON(c, 'unit-sizes')), offered: Array.isArray(offered) ? MONEY.filter((m) => offered.includes(m)) : [] };
+}
+
+export async function saveUnitSettings(s: UnitSettings): Promise<UnitSettings> {
+  const c = await db();
+  const clean: UnitSettings = { unitSizes: readUnitSizes(s.unitSizes), offered: MONEY.filter((m) => s.offered.includes(m)) };
+  await c.batch(
+    [
+      { sql: 'INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)', args: ['unit-sizes', JSON.stringify(clean.unitSizes)] },
+      { sql: 'INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)', args: ['unit-offered', JSON.stringify(clean.offered)] },
+    ],
+    'write',
+  );
+  return clean;
+}
+
+/** Gives every bet of a money type that has no unit size this one; returns how many changed. */
+export async function applyUnitSize(money: Money, unitSize: number): Promise<number> {
+  const r = await (await db()).execute({ sql: 'UPDATE bets SET unit_size = ?, updated_at = ? WHERE money = ? AND unit_size IS NULL', args: [unitSize, new Date().toISOString(), money] });
+  return r.rowsAffected;
 }

@@ -4,6 +4,7 @@ import { formatDate, parseDateInput, todayISO } from './dates';
 import { formatOdds, oddsFromText, parseNumber } from './money';
 import type { Bet, BetType, Money, Result, Situation } from './types';
 import { validateBet, type Validated } from './validate';
+import { NO_UNITS, readStake, type UnitSizes } from './units';
 
 export interface LegForm {
   sport: string;
@@ -140,9 +141,12 @@ export function nextForm(f: BetForm): BetForm {
   };
 }
 
-export function formToBet(f: BetForm, today = todayISO()): Validated {
-  const stake = parseNumber(f.stake);
-  if (stake == null) return { ok: false, error: 'Stake is required' };
+/** `sizes`: the unit sizes, so a stake typed in units ("1,5u", BT-38) becomes money; a prefix ("H$2u") picks the money. */
+export function formToBet(f: BetForm, today = todayISO(), sizes: UnitSizes = NO_UNITS): Validated {
+  const st = readStake(f.stake, f.money, sizes);
+  if (!st) return { ok: false, error: 'Stake is required' };
+  if (!st.ok) return { ok: false, error: st.error };
+  const stake = st.amount;
   if (!f.odds.trim()) return { ok: false, error: 'Odds are required' };
   const odds = oddsFromText(f.odds);
   if (odds == null) return { ok: false, error: 'Odds: cannot read "' + f.odds.trim() + '" (decimal, American, fractional…)' };
@@ -176,7 +180,7 @@ export function formToBet(f: BetForm, today = todayISO()): Validated {
     postAnalysis: f.postAnalysis,
     betText: f.betText,
     legs,
-    money: f.money,
+    money: st.money,
     label: f.label,
   });
 }

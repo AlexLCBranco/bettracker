@@ -14,6 +14,7 @@ import { useApp } from './AppProvider';
 import { Autocomplete } from './Autocomplete';
 import { MoneySelect } from './Money';
 import { OddsInput } from './OddsInput';
+import { previewText, readStake } from '@/lib/units';
 
 /** The full bet form, as a modal. New bets, edits and duplicates. */
 export function BetFormModal() {
@@ -23,7 +24,7 @@ export function BetFormModal() {
 }
 
 function FormBody() {
-  const { form: req, bets, defaults, presets, suggestFor, create, update, closeForm, notify } = useApp();
+  const { form: req, bets, defaults, presets, suggestFor, create, update, closeForm, notify, units } = useApp();
   const editing: Bet | null = req?.mode === 'edit' ? req.bet : null;
   // BT-29: adding the next bet of a rollover shot: stake and money are fixed (a different stake is not a rollover)
   const rollover = req?.mode === 'new' ? req.rollover : undefined;
@@ -52,7 +53,7 @@ function FormBody() {
 
   const save = async (another: boolean) => {
     if (saving) return;
-    const v = formToBet(f);
+    const v = formToBet(f, undefined, units.unitSizes);
     if (!v.ok) {
       setError(v.error);
       return;
@@ -61,7 +62,7 @@ function FormBody() {
     setError('');
     try {
       // the form has no dutch or rollover field: an edited bet stays in its dutch / rollover (and banked)
-      if (editing) await update(editing.id, { ...v.value, dutchId: editing.dutchId, rolloverId: editing.rolloverId, banked: editing.banked, wouldHave: editing.wouldHave, ...(editing.rolloverId ? { money: editing.money } : {}) }, {});
+      if (editing) await update(editing.id, { ...v.value, dutchId: editing.dutchId, rolloverId: editing.rolloverId, banked: editing.banked, wouldHave: editing.wouldHave, unitSize: v.value.money === editing.money ? editing.unitSize : units.unitSizes[v.value.money], ...(editing.rolloverId ? { money: editing.money } : {}) }, {});
       else if (rollover) {
         const input = { ...v.value, stake: rollover.stake, money: rollover.money, rolloverId: rollover.rolloverId, banked: false, ladder: rollover.ladder ?? null };
         // the rollover records its own undo step ("Rung added")
@@ -96,7 +97,10 @@ function FormBody() {
     }
   };
 
-  const stake = parseNumber(f.stake);
+  // BT-38: "1,5u" is units: the money it makes is shown over the field's right end, never moving the form
+  const typed = readStake(f.stake, f.money, units.unitSizes);
+  const stake = typed?.ok ? typed.amount : null;
+  const unitHint = typed && (!typed.ok ? { ok: false, text: typed.error } : typed.units != null ? { ok: true, text: previewText(typed.units, typed.amount, typed.money, formatMoney) } : null);
   const odds = oddsFromText(f.odds);
   // BT-33: a bonus bet returns its winnings only
   const potential = stake && odds ? winReturn({ stake, odds, money: f.money }) : 0;
@@ -125,7 +129,14 @@ function FormBody() {
 
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <L label={`Stake (${MONEY_SYMBOL[f.money]}) *`}>
-            <input ref={stakeRef} className="field" inputMode="decimal" value={f.stake} readOnly={!!rollover} title={rollover ? 'The banked payout: the whole of it rolls on' : undefined} onChange={(e) => set('stake', e.target.value)} aria-label="Stake" />
+            <span className="relative flex flex-col">
+              <input ref={stakeRef} className="field" inputMode="decimal" value={f.stake} readOnly={!!rollover} title={rollover ? 'The banked payout: the whole of it rolls on' : 'An amount, or units: "1u", "0,5u"'} onChange={(e) => set('stake', e.target.value)} aria-label="Stake" />
+              {unitHint && (
+                <span className={`pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 truncate rounded bg-zinc-900 px-1 text-[11px] tabular-nums ${unitHint.ok ? 'text-sky-300' : 'text-amber-300'}`} style={{ maxWidth: '90%' }} title={unitHint.text} data-testid="unit-preview">
+                  {unitHint.text}
+                </span>
+              )}
+            </span>
           </L>
           <L label="Total odds *">
             <OddsInput value={f.odds} onChange={(v) => set('odds', v)} placeholder="2.10, -114, 5/2" aria-label="Odds" />

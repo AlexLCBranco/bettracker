@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '@/components/AppProvider';
 import { Autocomplete } from '@/components/Autocomplete';
+import { UnitSizesCard } from '@/components/Bankroll';
 import { MONEY_TEXT } from '@/components/moneyStyle';
 import { isTyping, isUndoKey } from '@/components/Shell';
 import { normalize } from '@/lib/autocomplete';
@@ -56,6 +57,7 @@ export default function BankrollPage() {
           Insert money
         </button>
       </div>
+      <UnitSizesCard />
       <div className="flex items-end gap-2">
         <label className="flex flex-col gap-0.5">
           <span className="text-[11px] text-zinc-500">Type</span>

@@ -10,9 +10,10 @@ export interface QuickLadder {
   goalAmount: number | null;
 }
 
+/** `units`: the stake was typed in units ("1,5u", BT-38): `stake` is that number of units, not money yet. */
 export type QuickAdd =
-  | { ok: true; stake: number; odds: number; betText: string; money?: Money; ladder?: QuickLadder }
-  | { ok: false; stake: number | null; odds: number | null; betText: string; reason: string; money?: Money; ladder?: QuickLadder };
+  | { ok: true; stake: number; odds: number; betText: string; money?: Money; ladder?: QuickLadder; units?: true }
+  | { ok: false; stake: number | null; odds: number | null; betText: string; reason: string; money?: Money; ladder?: QuickLadder; units?: true };
 
 const NUM = String.raw`\d+(?:[.,]\d+)?`;
 /** An odds token after "@": decimal, signed (American / Indonesian / Malay), fractional or a percentage. */
@@ -38,9 +39,15 @@ export function parseQuickAdd(line: string): QuickAdd {
   let stake: number | null = null;
   // "H$150" = hypothetical money (BT-14), "B$150" = bonus (BT-33), "R$150" = real; no prefix = the last-used money
   let money: Money | undefined;
-  const stakeIdx = tokens.findIndex((t) => new RegExp(String.raw`^(?:[RHB]\$)?${NUM}$`, 'i').test(t));
+  // BT-38: "1u", "0,5u", "H$2u": a stake in units
+  let units = false;
+  const stakeIdx = tokens.findIndex((t) => new RegExp(String.raw`^(?:[RHB]\$)?${NUM}u?$`, 'i').test(t));
   if (stakeIdx >= 0) {
-    const t = tokens[stakeIdx]!;
+    let t = tokens[stakeIdx]!;
+    if (/u$/i.test(t)) {
+      units = true;
+      t = t.slice(0, -1);
+    }
     if (/^H\$/i.test(t)) money = 'hypothetical';
     else if (/^B\$/i.test(t)) money = 'bonus';
     else if (/^R\$/i.test(t)) money = 'real';
@@ -48,7 +55,7 @@ export function parseQuickAdd(line: string): QuickAdd {
     tokens.splice(stakeIdx, 1);
   }
   const betText = tokens.join(' ');
-  const m = { ...(money ? { money } : {}), ...(ladder ? { ladder } : {}) };
+  const m = { ...(money ? { money } : {}), ...(ladder ? { ladder } : {}), ...(units ? { units: true as const } : {}) };
   if (stake == null || !(stake > 0)) return { ok: false, stake: stake && stake > 0 ? stake : null, odds, betText, reason: 'No stake found', ...m };
   if (odds == null) return { ok: false, stake, odds: null, betText, reason: 'No @odds found', ...m };
   if (!(odds > 1)) return { ok: false, stake, odds: null, betText, reason: 'Odds must be above 1', ...m };
@@ -59,7 +66,7 @@ export function parseQuickAdd(line: string): QuickAdd {
 export function splitQuickAddText(line: string): { prefix: string; text: string } {
   const tokens = line.match(/\S+\s*/g) ?? [];
   let i = 0;
-  while (i < tokens.length && new RegExp(String.raw`^(?:[RHB]\$)?${NUM}\s*$|^@\s*(?:${ODDS})?\s*$`, 'i').test(tokens[i]!)) i++;
+  while (i < tokens.length && new RegExp(String.raw`^(?:[RHB]\$)?${NUM}u?\s*$|^@\s*(?:${ODDS})?\s*$`, 'i').test(tokens[i]!)) i++;
   return { prefix: tokens.slice(0, i).join(''), text: tokens.slice(i).join('') };
 }
 

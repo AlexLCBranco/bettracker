@@ -12,7 +12,7 @@ import { BetFormModal } from './BetFormModal';
 import { BankrollBar, MoneyFormModal } from './Bankroll';
 import { BankedBar } from './Banked';
 import { DutchFormModal } from './DutchFormModal';
-import { MoneyScopeSwitch, useMoneyScope } from './Money';
+import { MoneyScopeSwitch, UnitsToggle, useMoneyScope, useUnitsView } from './Money';
 import { QuickAdd } from './QuickAdd';
 import { isUndoKey } from '@/lib/undo';
 
@@ -50,6 +50,7 @@ function Frame({ children }: { children: ReactNode }) {
   const due = useMemo(() => settleQueue(bets, todayISO()).length, [bets]);
   const pending = useMemo(() => countBets(bets).pending, [bets]);
   const [scope, setScope] = useMoneyScope();
+  const [unitsView, setUnitsView] = useUnitsView();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -66,6 +67,11 @@ function Frame({ children }: { children: ReactNode }) {
         e.preventDefault();
         openNew();
       }
+      // BT-38: U shows amounts as money or as units
+      if (e.key === 'u' || e.key === 'U') {
+        e.preventDefault();
+        setUnitsView(!unitsView);
+      }
       // BT-33: M inserts money
       if (e.key === 'm' || e.key === 'M') {
         e.preventDefault();
@@ -74,7 +80,7 @@ function Frame({ children }: { children: ReactNode }) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [form, dutchForm, moneyForm, openNew, openMoney, undo, path]);
+  }, [form, dutchForm, moneyForm, openNew, openMoney, undo, path, unitsView, setUnitsView]);
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -89,6 +95,7 @@ function Frame({ children }: { children: ReactNode }) {
           </div>
           {/* BT-26: one Real / Hypothetical / Both switch for every page */}
           <MoneyScopeSwitch scope={scope} onChange={setScope} />
+          <UnitsToggle on={unitsView} onChange={setUnitsView} />
           {/* BT-33: what you have now, per money type */}
           <BankrollBar />
           {/* money won and banked, waiting for its next bet */}

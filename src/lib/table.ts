@@ -7,6 +7,7 @@ import { profit, profitMoney } from './money';
 import { collapseRollovers } from './rollover';
 import { tidyGame, tidyNames, type NameCasing } from './tidy';
 import type { Bet, Leg, Money } from './types';
+import { asUnitBets } from './units';
 
 /** The day a table row sits under: a bet's date, a dutch's earliest, a rollover's latest (it sits where its newest bet is). */
 export const rowDate = (r: BetRow): string =>
@@ -15,6 +16,8 @@ export const rowDate = (r: BetRow): string =>
 export interface DayNet {
   money: Money;
   value: number;
+  /** BT-38: the same net in units, when every bet of that money that day has a unit size (else null). */
+  units: number | null;
 }
 
 export interface DayGroup {
@@ -42,7 +45,14 @@ export function dayGroups(rows: BetRow[], dateOf: (r: BetRow) => string = rowDat
     const sums = new Map<Money, number>();
     for (const b of collapseRollovers(g.rows.flatMap((r) => (r.kind === 'bet' ? [r.bet] : r.bets))))
       if (b.result !== 'pending') sums.set(profitMoney(b.money), (sums.get(profitMoney(b.money)) ?? 0) + profit(b));
-    g.nets = (['real', 'hypothetical'] as Money[]).filter((m) => sums.has(m)).map((money) => ({ money, value: round2(sums.get(money)!) }));
+    const all = g.rows.flatMap((r) => (r.kind === 'bet' ? [r.bet] : r.bets));
+    g.nets = (['real', 'hypothetical'] as Money[])
+      .filter((m) => sums.has(m))
+      .map((money) => {
+        const ub = asUnitBets(all.filter((b) => profitMoney(b.money) === money));
+        const units = ub ? round2(collapseRollovers(ub).reduce((t, b) => t + (b.result === 'pending' ? 0 : profit(b)), 0)) : null;
+        return { money, value: round2(sums.get(money)!), units };
+      });
   }
   return out;
 }

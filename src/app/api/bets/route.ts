@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createBets, listBets } from '@/lib/server/db';
+import { createBets, getUnitSettings, listBets } from '@/lib/server/db';
 import type { BetInput } from '@/lib/types';
 import { validateBet } from '@/lib/validate';
 
@@ -21,6 +21,9 @@ export async function POST(request: Request) {
     if (!v.ok) return NextResponse.json({ error: many ? `Bet ${i + 1}: ${v.error}` : v.error }, { status: 400 });
     inputs.push(v.value);
   }
+  // BT-38: a new bet keeps the unit size of its money type in force now
+  const { unitSizes } = await getUnitSettings();
+  for (const i of inputs) if (i.unitSize == null) i.unitSize = unitSizes[i.money];
   const created = await createBets(inputs);
   return NextResponse.json(many ? created : created[0], { status: 201 });
 }

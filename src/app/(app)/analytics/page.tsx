@@ -9,7 +9,8 @@ import { dutchHitReport } from '@/lib/hits';
 import { ladderReport } from '@/lib/rollover';
 import { formatMoney, formatOdds, type MoneyScope } from '@/lib/money';
 import { byMoney } from '@/lib/scope';
-import { useMoneyScope } from '@/components/Money';
+import { useMoneyScope, useUnitsView } from '@/components/Money';
+import { asUnitBets, formatUnits } from '@/lib/units';
 import { ProfitChart } from '@/components/ProfitChart';
 import { formatPercent } from '@/lib/stats';
 import { cashoutVerdict } from '@/lib/woulda';
@@ -30,7 +31,12 @@ export default function AnalyticsPage() {
   const { bets: all, loaded } = useApp();
   // BT-14: real and hypothetical money never mix unless "Both" is picked
   const [scope] = useMoneyScope();
-  const bets = useMemo(() => byMoney(all, scope), [all, scope]);
+  const money = useMemo(() => byMoney(all, scope), [all, scope]);
+  // BT-38: the units view counts every amount in units (ROI and win rate do not change), when all bets have a unit size
+  const [unitsView] = useUnitsView();
+  const unitBets = useMemo(() => (unitsView ? asUnitBets(money) : null), [unitsView, money]);
+  const bets = unitBets ?? money;
+  const fmt = (n: number, signed = false, m: MoneyScope = scope) => (unitBets ? formatUnits(n, signed) : formatMoney(n, m, signed));
   const [dim, setDim] = useState<Dimension>('sport');
   const [sort, setSort] = useState<SortKey>('natural');
 
@@ -61,7 +67,7 @@ export default function AnalyticsPage() {
       {/* BT-26: moved here from the dashboard */}
       <section className="card p-5">
         <h2 className="mb-3 font-semibold">Performance Over Time</h2>
-        <ProfitChart bets={bets} money={scope} />
+        <ProfitChart bets={money} money={scope} />
       </section>
 
       {/* BT-37: what cashing out did, by the would-haves set on cash-outs (W / L on a cashed-out bet) */}
@@ -69,13 +75,13 @@ export default function AnalyticsPage() {
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <Tile
             label="Cash-out verdict"
-            value={verdict.net == null ? '-' : <span className={tone(verdict.net)}>{formatMoney(verdict.net, profitScope, true)}</span>}
+            value={verdict.net == null ? '-' : <span className={tone(verdict.net)}>{fmt(verdict.net, true, profitScope)}</span>}
             sub={`${verdict.wouldaWon} woulda won · ${verdict.wouldaLost} woulda lost · ${verdict.notSet} not set`}
             testId="cashout-verdict-net"
           />
           <p className="self-center text-xs text-zinc-500 sm:col-span-1 xl:col-span-3">
             Saved by cashing out (it would have lost) minus left on the table (it would have won). Above 0: cashing out paid.
-            {verdict.net != null && ` Saved ${formatMoney(verdict.saved, profitScope)}, left ${formatMoney(verdict.left, profitScope)}.`}
+            {verdict.net != null && ` Saved ${fmt(verdict.saved, false, profitScope)}, left ${fmt(verdict.left, false, profitScope)}.`}
           </p>
         </div>
       </section>
@@ -122,7 +128,7 @@ export default function AnalyticsPage() {
               </thead>
               <tbody>
                 {sorted.map((r) => (
-                  <BreakdownRow key={r.key} r={r} maxAbsProfit={maxAbsProfit} scope={scope} />
+                  <BreakdownRow key={r.key} r={r} maxAbsProfit={maxAbsProfit} scope={scope} fmt={fmt} units={!!unitBets} />
                 ))}
               </tbody>
             </table>
@@ -155,9 +161,9 @@ export default function AnalyticsPage() {
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
               <Tile label="Ladders started" value={String(ladders.started)} sub="each counted as one bet" testId="ladders-started" />
               <Tile label="Average rungs climbed" value={ladders.avgRungs == null ? '-' : ladders.avgRungs.toFixed(1)} sub="per ladder" testId="ladders-rungs" />
-              <Tile label="Best ladder" value={ladders.best ? formatMoney(ladders.best.profit, scope, true) : '-'} sub={ladders.best ? `${ladders.best.rungs} ${ladders.best.rungs === 1 ? 'rung' : 'rungs'}` : 'none closed yet'} testId="ladders-best" />
+              <Tile label="Best ladder" value={ladders.best ? fmt(ladders.best.profit, true) : '-'} sub={ladders.best ? `${ladders.best.rungs} ${ladders.best.rungs === 1 ? 'rung' : 'rungs'}` : 'none closed yet'} testId="ladders-best" />
               <Tile label="Reached their goal" value={String(ladders.reachedGoal)} sub={`of ${ladders.withGoal} with a goal`} testId="ladders-goal" />
-              <Tile label="Net profit" value={formatMoney(ladders.netProfit, scope, true)} sub="closed ladders" testId="ladders-net" />
+              <Tile label="Net profit" value={fmt(ladders.netProfit, true)} sub="closed ladders" testId="ladders-net" />
             </div>
           </div>
         )}
@@ -175,7 +181,7 @@ export default function AnalyticsPage() {
               <Tile
                 label="Lost by one leg"
                 value={String(combos.lostByOne)}
-                sub={`${formatMoney(combos.lostByOneStake, scope)} staked${combos.lostUnknown ? ` · ${combos.lostUnknown} lost without leg results` : ''}`}
+                sub={`${fmt(combos.lostByOneStake)} staked${combos.lostUnknown ? ` · ${combos.lostUnknown} lost without leg results` : ''}`}
                 testId="combo-lost-by-one"
               />
             </div>
@@ -215,7 +221,7 @@ export default function AnalyticsPage() {
                       <span className="tabular-nums text-zinc-500">{formatDate(bet.gameDate || bet.placedDate)}</span>
                       <span className="text-zinc-200">{bet.betText || `${bet.legs.length} legs`}</span>
                       <span className="text-zinc-500">
-                        @{formatOdds(bet.odds)} · {formatMoney(bet.stake, bet.money)}
+                        @{formatOdds(bet.odds)} · {fmt(bet.stake, false, bet.money)}
                       </span>
                       <span className="ml-auto text-red-400">
                         lost: {[leg.game, leg.market, leg.selection].filter(Boolean).join(' · ') || 'leg'}
@@ -232,7 +238,7 @@ export default function AnalyticsPage() {
   );
 }
 
-function BreakdownRow({ r, maxAbsProfit, scope }: { r: Row; maxAbsProfit: number; scope: MoneyScope }) {
+function BreakdownRow({ r, maxAbsProfit, scope, fmt, units }: { r: Row; maxAbsProfit: number; scope: MoneyScope; fmt(n: number): string; units: boolean }) {
   const width = maxAbsProfit > 0 ? (Math.abs(r.profit) / maxAbsProfit) * 100 : 0;
   return (
     <tr className="border-b border-zinc-900" data-testid="analytics-row">
@@ -241,9 +247,9 @@ function BreakdownRow({ r, maxAbsProfit, scope }: { r: Row; maxAbsProfit: number
         {r.bets}
         {r.pending > 0 && <span className="ml-1 text-xs text-zinc-500" title={`${r.pending} pending`}>({r.pending}p)</span>}
       </td>
-      <td className="px-3 py-2 text-right tabular-nums" data-testid="cell-wagered">{formatMoney(r.wagered, scope)}</td>
+      <td className="px-3 py-2 text-right tabular-nums" data-testid="cell-wagered">{fmt(r.wagered)}</td>
       <td className="px-3 py-2 text-right tabular-nums" data-testid="cell-profit">
-        <ProfitText value={r.profit} money={scope} />
+        <ProfitText value={r.profit} money={scope} units={units ? r.profit : null} />
       </td>
       <td className={`px-3 py-2 text-right tabular-nums ${tone(r.roi)}`} data-testid="cell-roi">{formatPercent(r.roi, true)}</td>
       <td className="px-3 py-2 text-right tabular-nums" data-testid="cell-winrate">

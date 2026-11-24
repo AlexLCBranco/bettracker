@@ -6,7 +6,8 @@ import { useApp } from '@/components/AppProvider';
 import { OutcomeTable } from '@/components/OutcomeTable';
 import { newDutchDraft } from '@/lib/dutch';
 import { dutch, outcomeTable, type DutchError } from '@/lib/dutching';
-import { formatBRL, formatOdds, ODDS_FORMAT_LABEL, ODDS_FORMATS, parseNumber, parseOdds, type OddsFormat } from '@/lib/money';
+import { formatBRL, formatMoney, formatOdds, ODDS_FORMAT_LABEL, ODDS_FORMATS, parseOdds, type OddsFormat } from '@/lib/money';
+import { previewText, readStake } from '@/lib/units';
 import { sharedUsed, showsLegs, splitCalc, type LegText, type SplitText } from '@/lib/splits';
 import { formatPercent } from '@/lib/stats';
 
@@ -74,7 +75,7 @@ const ROW_GRID = 'grid grid-cols-[minmax(0,1fr)_7rem_7.5rem_2rem] gap-2';
 const cleared =(s: ToolState): ToolState => ({ ...INITIAL, stake: s.stake, step: s.step });
 
 function Tool() {
-  const { defaults, openDutch } = useApp();
+  const { defaults, openDutch, units } = useApp();
   const [s, setS] = useState<ToolState>(loadSaved);
   useEffect(() => localStorage.setItem(STORAGE_KEY, JSON.stringify(s)), [s]);
   // BT-9: after a dutch is logged the tool clears; this keeps what it held, for "Undo clear". Shown while the tool is
@@ -110,7 +111,10 @@ function Tool() {
   const used = s.rows.filter((r) => calcs.get(r.id)!.used);
   // unrounded decimal odds (a combination split's total odds): the maths and the logged bets use these
   const oddsValues = used.map((r) => calcs.get(r.id)!.odds);
-  const stake = parseNumber(s.stake) ?? NaN;
+  // BT-38: the total stake can be typed in units ("2u", real money's unit size; "H$2u" hypothetical)
+  const typed = readStake(s.stake, 'real', units.unitSizes);
+  const stake = typed?.ok ? typed.amount : NaN;
+  const unitHint = typed && (!typed.ok ? { ok: false, text: typed.error } : typed.units != null ? { ok: true, text: previewText(typed.units, typed.amount, typed.money, formatMoney) } : null);
   const result = dutch(stake, oddsValues, s.step);
   const byId = new Map(used.map((r, i) => [r.id, i]));
   const ok = 'error' in result ? null : result;
@@ -196,7 +200,14 @@ function Tool() {
         <section className="card space-y-4 p-5">
           <div className="grid grid-cols-2 gap-3">
             <Label text="Total stake (R$)">
-              <input className="field" inputMode="decimal" value={s.stake} onChange={(e) => setS((x) => ({ ...x, stake: e.target.value }))} aria-label="Total stake" />
+              <span className="relative flex flex-col">
+                <input className="field" inputMode="decimal" value={s.stake} onChange={(e) => setS((x) => ({ ...x, stake: e.target.value }))} aria-label="Total stake" title='An amount, or units: "2u"' />
+                {unitHint && (
+                  <span className={`pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 truncate rounded bg-zinc-900 px-1 text-[11px] tabular-nums ${unitHint.ok ? 'text-sky-300' : 'text-amber-300'}`} style={{ maxWidth: '90%' }} title={unitHint.text} data-testid="unit-preview">
+                    {unitHint.text}
+                  </span>
+                )}
+              </span>
             </Label>
             <Label text="Round stakes to">
               <select

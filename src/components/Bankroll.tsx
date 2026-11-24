@@ -324,3 +324,83 @@ function L({ label, children }: { label: string; children: ReactNode }) {
     </label>
   );
 }
+
+/**
+ * BT-38: the unit size per money type: a fixed amount per unit (not a share of the bankroll). Saved on Enter or when
+ * the field is left; clearing it removes the unit size. The first time a type gets one, an offer (once) to give it to
+ * that type's older bets too.
+ */
+export function UnitSizesCard() {
+  const { units, saveUnits, applyUnits, bets, notify } = useApp();
+  const [draft, setDraft] = useState<Record<Money, string>>(() => Object.fromEntries(MONEY.map((m) => [m, units.unitSizes[m] == null ? '' : String(units.unitSizes[m])])) as Record<Money, string>);
+  const [offer, setOffer] = useState<Money | null>(null);
+  const older = (m: Money) => bets.filter((b) => b.money === m && b.unitSize == null).length;
+
+  const commit = async (m: Money) => {
+    const text = draft[m].trim();
+    const value = text ? parseNumber(text) : null;
+    if (text && !(value != null && value > 0)) return notify('A unit size is an amount above 0, e.g. 100', 'error');
+    if (value === units.unitSizes[m]) return;
+    const first = units.unitSizes[m] == null && value != null && !units.offered.includes(m);
+    const wantsOffer = first && older(m) > 0;
+    // the offer is made once: a type with no older bets is marked as offered at once
+    const offered = first && !wantsOffer ? [...units.offered, m] : units.offered;
+    await saveUnits({ unitSizes: { ...units.unitSizes, [m]: value }, offered }).catch(() => undefined);
+    notify(value == null ? `${MONEY_LABEL[m]}: no unit size` : `${MONEY_LABEL[m]}: 1u = ${formatMoney(value, m)}`);
+    if (wantsOffer) setOffer(m);
+  };
+  const answer = async (m: Money, apply: boolean) => {
+    setOffer(null);
+    await saveUnits({ unitSizes: units.unitSizes, offered: [...new Set([...units.offered, m])] }).catch(() => undefined);
+    if (!apply) return;
+    const n = await applyUnits(m).catch((e: Error) => {
+      notify(e.message, 'error');
+      return null;
+    });
+    if (n != null) notify(`${n} older ${MONEY_LABEL[m]} ${n === 1 ? 'bet' : 'bets'} now count 1u = ${formatMoney(units.unitSizes[m] ?? 0, m)}`);
+  };
+
+  return (
+    <section className="card p-4" data-testid="unit-sizes">
+      <div className="flex flex-wrap items-end gap-4">
+        <div className="mr-2">
+          <h2 className="text-sm font-semibold">Unit size</h2>
+          <p className="text-xs text-zinc-500">Money per unit, per type. Type a stake as &quot;1u&quot;; U shows amounts in units.</p>
+        </div>
+        {MONEY.map((m) => (
+          <label key={m} className="flex flex-col gap-0.5">
+            <span className={`text-[11px] ${MONEY_TEXT[m] || 'text-zinc-500'}`}>{MONEY_LABEL[m]}: 1u =</span>
+            <input
+              className="field w-28 tabular-nums"
+              inputMode="decimal"
+              placeholder="not set"
+              value={draft[m]}
+              aria-label={`Unit size ${MONEY_LABEL[m]}`}
+              onChange={(e) => setDraft((d) => ({ ...d, [m]: e.target.value }))}
+              onBlur={() => void commit(m)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  (e.target as HTMLInputElement).blur();
+                }
+              }}
+            />
+          </label>
+        ))}
+      </div>
+      {offer && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-md border border-sky-800 bg-sky-950/40 px-3 py-2 text-xs text-sky-100" role="alertdialog" aria-label="Apply unit size to older bets" data-testid="unit-offer">
+          <span>
+            Give the {older(offer)} older {MONEY_LABEL[offer]} {older(offer) === 1 ? 'bet' : 'bets'} (placed before any unit size) this unit size too, 1u = {formatMoney(units.unitSizes[offer] ?? 0, offer)}? Asked once.
+          </span>
+          <button className="btn btn-primary text-xs" onClick={() => void answer(offer, true)}>
+            Apply to older bets
+          </button>
+          <button className="btn text-xs" onClick={() => void answer(offer, false)}>
+            No, keep them in money
+          </button>
+        </div>
+      )}
+    </section>
+  );
+}

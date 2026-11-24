@@ -67,6 +67,11 @@ export interface Bet {
    * kept while the result is cash-out.
    */
   wouldHave: WouldHave | null;
+  /**
+   * BT-38: the unit size (money per unit) of this bet's money type when it was placed; null for bets placed before a
+   * unit size was set. Later changes of the unit size never rewrite it.
+   */
+  unitSize: number | null;
   /** BT-27: one short free-text label ("lost by one"), shown uppercase as a chip; empty = none. */
   label: string;
   /** ISO timestamps, used for "most recent" ordering. */

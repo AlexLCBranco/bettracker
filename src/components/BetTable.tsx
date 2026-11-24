@@ -12,6 +12,8 @@ import { cashoutLabel, cashoutLine, readCashout, type CashoutMode } from '@/lib/
 import { useCashoutMode } from './useCashoutMode';
 import { RESULT_LABEL, RESULTS, type Bet, type BetInput, type Leg, type Result, type WouldHave } from '@/lib/types';
 import { WouldaChip } from './Woulda';
+import { useUnitsView } from './Money';
+import { asUnitBets, formatUnits, toUnits } from '@/lib/units';
 import type { Field } from '@/lib/autocomplete';
 import { useApp } from './AppProvider';
 import { Autocomplete } from './Autocomplete';
@@ -36,10 +38,15 @@ const QUICK_RESULTS: { r: Result; key: string; cls: string }[] = [
   { r: 'void', key: 'V', cls: 'hover:bg-zinc-600/40 text-zinc-300' },
 ];
 
-/** BT-18: one size and weight on every row (bet, combination, dutch). */
-export function ProfitText({ value, pending, money = 'real' }: { value: number; pending?: boolean; money?: MoneyScope }) {
+/**
+ * BT-18: one size and weight on every row (bet, combination, dutch). BT-38: in the units view, `units` (or the value
+ * over `unitSize`) shows as "+0,45u"; without either it stays money.
+ */
+export function ProfitText({ value, pending, money = 'real', unitSize, units }: { value: number; pending?: boolean; money?: MoneyScope; unitSize?: number | null; units?: number | null }) {
+  const [view] = useUnitsView();
   if (pending) return <span className="text-zinc-500">-</span>;
-  return <span className={`font-semibold ${value > 0 ? 'text-emerald-400' : value < 0 ? 'text-red-400' : 'text-zinc-400'}`}>{formatMoney(value, money, true)}</span>;
+  const u = view ? (units !== undefined ? units : toUnits(value, unitSize)) : null;
+  return <span className={`font-semibold ${value > 0 ? 'text-emerald-400' : value < 0 ? 'text-red-400' : 'text-zinc-400'}`}>{u != null ? formatUnits(u, true) : formatMoney(value, money, true)}</span>;
 }
 
 /** BT-29: the odds tier as a small chip ("Semi"); "Banked Semi" on a banked bet or an open shot. None under 1.10. */
@@ -177,6 +184,7 @@ interface TableProps {
  */
 export function BetTable({ days, selected, select, settle, annotating, annotate, rollover, empty = 'No bets yet. Type one in the quick-add line above.' }: TableProps) {
   const [open, setOpen] = useState<Set<string>>(new Set());
+  const [unitsView] = useUnitsView();
   const toggle = (id: string) =>
     setOpen((s) => {
       const n = new Set(s);
@@ -229,7 +237,7 @@ export function BetTable({ days, selected, select, settle, annotating, annotate,
                         <Fragment key={n.money}>
                           {' · '}
                           <span className={`font-semibold ${n.money === 'hypothetical' ? HYPO : n.value > 0 ? 'text-emerald-400' : n.value < 0 ? 'text-red-400' : 'text-zinc-400'}`} data-testid={`day-net-${n.money}`}>
-                            {formatMoney(n.value, n.money, true)}
+                            {unitsView && n.units != null ? formatUnits(n.units, true) : formatMoney(n.value, n.money, true)}
                           </span>
                         </Fragment>
                       ))}
@@ -285,6 +293,10 @@ function AnnotateButton({ onClick }: { onClick(): void }) {
 function DutchGroup({ bets, dutchId, open, toggle, selected, select, settle, annotating, annotate, rollover }: { bets: Bet[]; dutchId: string } & RowProps) {
   const { removeDutch, openDutch, names: nameCasing } = useApp();
   const s = dutchSummary(bets);
+  // BT-38: the units view, when every split has a unit size
+  const [unitsView] = useUnitsView();
+  const ub = unitsView ? asUnitBets(bets) : null;
+  const us = ub ? dutchSummary(ub) : null;
   const tone = groupTone(s.outcome);
   const money = bets[0]!.money;
   const names = bets.map((b) => tidyText(betLabel(b), nameCasing)).join(' / ');
@@ -327,13 +339,13 @@ function DutchGroup({ bets, dutchId, open, toggle, selected, select, settle, ann
           {annotating === key && <Annotator kind="dutch" bets={bets} onClose={() => annotate(null)} />}
         </td>
         <td className={NUM} data-testid="dutch-stake" data-col="stake">
-          <span className={MONEY_TEXT[money] || 'text-zinc-200'}>{formatMoney(s.stake, money)}</span>
+          <span className={MONEY_TEXT[money] || 'text-zinc-200'}>{us ? formatUnits(us.stake) : formatMoney(s.stake, money)}</span>
         </td>
         <td className={`${NUM} text-zinc-200`} data-testid="dutch-odds" data-col="odds" title="Combined odds: 1 / Σ(1/odds)">
           {formatOdds(s.combinedOdds, 2)}
         </td>
         <td className={NUM} data-testid="profit" data-col="profit">
-          <ProfitText value={s.profit} pending={s.outcome === 'pending'} money={profitMoney(money)} />
+          <ProfitText value={s.profit} pending={s.outcome === 'pending'} money={profitMoney(money)} units={us ? us.profit : null} />
         </td>
         <td className={CELL} data-col="result">
           <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${TONE_BADGE[tone]}`} title={missesTitle(dutchHits(bets))} data-testid="result">
@@ -413,6 +425,10 @@ function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, select, 
   // BT-39: a shot banked from a dutch split counts the whole dutch's stake in its odds
   const s = chainSummary(raw, allBets);
   const bets = s.bets;
+  // BT-38: the units view, when every bet of the chain has a unit size
+  const [unitsView] = useUnitsView();
+  const ub = unitsView ? asUnitBets(raw) : null;
+  const us = ub ? chainSummary(ub) : null;
   const tone = groupTone(chainPending(s.outcome) ? 'pending' : (s.outcome as GroupOutcome));
   const money = bets[0]!.money;
   const key = `rollover:${rolloverId}`;
@@ -485,13 +501,13 @@ function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, select, 
           )}
         </td>
         <td className={NUM} data-testid="rollover-stake" data-col="stake" title="The first bet's stake: the rolled stakes are the same money">
-          <span className={MONEY_TEXT[money] || 'text-zinc-200'}>{formatMoney(s.stake, money)}</span>
+          <span className={MONEY_TEXT[money] || 'text-zinc-200'}>{us ? formatUnits(us.stake) : formatMoney(s.stake, money)}</span>
         </td>
         <td className={`${NUM} text-zinc-200`} data-testid="rollover-odds" data-col="odds" title={s.baseStake !== s.stake ? `The bets' odds multiplied, the dutch split counted on the whole dutch's stake (${formatMoney(s.baseStake, money)})` : "The bets' odds multiplied (a void counts 1.00)"}>
           {formatOdds(s.odds, 2)}
         </td>
         <td className={NUM} data-testid="profit" data-col="profit">
-          <ProfitText value={s.profit} pending={chainPending(s.outcome)} money={profitMoney(money)} />
+          <ProfitText value={s.profit} pending={chainPending(s.outcome)} money={profitMoney(money)} units={us ? us.profit : null} />
         </td>
         <td className={CELL} data-col="result">
           <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${isOpen ? 'bg-sky-500/15 text-sky-300' : TONE_BADGE[tone]}`} data-testid="result">
@@ -643,6 +659,9 @@ interface Split {
 
 function BetRow({ b, open, toggle, selected, select, settle, split, link, annotating, annotate, rollover }: { b: Bet; split?: Split; link?: ChainLink } & RowProps) {
   const { update, remove, openEdit, openNew, names, bets: allBets } = useApp();
+  // BT-38: amounts in units when the view is on and the bet has a unit size
+  const [unitsView] = useUnitsView();
+  const inUnits = unitsView && b.unitSize ? (n: number, signed = false) => formatUnits(n / b.unitSize!, signed) : undefined;
   // an edit in a cell is one undo step (Ctrl+Z)
   const save = (patch: Partial<BetInput>) => update(b.id, patch, {}).catch(() => undefined);
   const saveLeg = (i: number, patch: Partial<Leg>) => save({ legs: b.legs.map((l, j) => (j === i ? { ...l, ...patch } : l)) });
@@ -736,7 +755,7 @@ function BetRow({ b, open, toggle, selected, select, settle, split, link, annota
                 </span>
               )}
               {chip && <LabelChip label={chip} />}
-              <WouldaChip bet={b} />
+              <WouldaChip bet={b} fmt={inUnits} />
               {(link || b.banked) && !b.ladder && <TierChip odds={b.dutchId && (!link || link.index === 0) ? firstFactor(b, allBets) : b.odds} banked={b.banked && (link ? link.index === link.chain.length - 1 : rollover.chainOf(b).length === 1)} />}
             </div>
           </div>
@@ -775,13 +794,13 @@ function BetRow({ b, open, toggle, selected, select, settle, split, link, annota
           {losses.length > 0 && <LossLine entries={losses} />}
           {annotating === key && <Annotator kind="bet" bet={b} group={split?.group ?? [b]} onClose={() => annotate(null)} />}
         </td>
-        <Cell kind="number" testId="stake" value={String(b.stake)} display={formatMoney(b.stake, b.money)} extraClass={MONEY_TEXT[b.money] || undefined} title={[b.money !== 'real' ? MONEY_TITLE[b.money] : '', returns].filter(Boolean).join(' · ') || undefined} label="Stake" onSave={(v) => save({ stake: parseNumber(v) ?? b.stake })} right />
+        <Cell kind="number" testId="stake" value={String(b.stake)} display={inUnits ? inUnits(b.stake) : formatMoney(b.stake, b.money)} extraClass={MONEY_TEXT[b.money] || undefined} title={[b.money !== 'real' ? MONEY_TITLE[b.money] : '', returns].filter(Boolean).join(' · ') || undefined} label="Stake" onSave={(v) => save({ stake: parseNumber(v) ?? b.stake })} right />
         <Cell kind="odds" testId="odds" value={formatOdds(b.odds)} label="Odds" onSave={(v) => save({ odds: oddsFromText(v) ?? b.odds })} right />
         <td className={NUM} data-testid="profit" data-col="profit">
-          <ProfitText value={profit(b)} pending={pending} money={profitMoney(b.money)} />
+          <ProfitText value={profit(b)} pending={pending} money={profitMoney(b.money)} unitSize={b.unitSize} />
         </td>
         <td className={CELL} data-col="result">
-          <ResultCell bet={b} title={hits ? missesTitle(hits) : undefined} onPick={(r) => settle.settleBet(b, r, null, group)} onWouldHave={(w) => {
+          <ResultCell bet={b} fmt={inUnits} title={hits ? missesTitle(hits) : undefined} onPick={(r) => settle.settleBet(b, r, null, group)} onWouldHave={(w) => {
             select(key);
             settle.wouldHave(b, w);
           }} />
@@ -990,7 +1009,11 @@ function CashoutBox({ bet, onDone, onClose }: { bet: Bet; onDone(amount: number)
   const [text, setText] = useState('');
   const [mode, setMode] = useCashoutMode();
   const box = useRef<HTMLFormElement>(null);
-  const read = readCashout(text, mode, bet.stake, bet.odds);
+  // BT-38: "1,45u" in units of the bet's own unit size (else the current one of its money type)
+  const { units } = useApp();
+  const unitSize = bet.unitSize ?? units.unitSizes[bet.money];
+  const read = readCashout(text, mode, bet.stake, bet.odds, unitSize);
+  const noUnit = !read && /\du$/i.test(text.trim()) && !unitSize;
   const shownMode: CashoutMode = text.trim().endsWith('%') ? 'percent' : mode;
   const sym = MONEY_SYMBOL[bet.money];
   return (
@@ -1043,6 +1066,11 @@ function CashoutBox({ bet, onDone, onClose }: { bet: Bet; onDone(amount: number)
           ))}
         </span>
       </span>
+      {noUnit && (
+        <span className="max-w-[260px] text-right text-[11px] leading-4 text-amber-300" data-testid="cashout-preview">
+          No unit size for {sym}: set it on the Bankroll page
+        </span>
+      )}
       {read && (
         <span className="max-w-[260px] text-right text-[11px] leading-4 text-zinc-400" data-testid="cashout-preview">
           {cashoutLine(read, bet.money)} · profit <span className={read.profit > 0 ? 'text-emerald-400' : read.profit < 0 ? 'text-red-400' : 'text-zinc-300'}>{formatMoney(read.profit, bet.money, true)}</span>
@@ -1106,7 +1134,7 @@ function LegResult({ leg, bet, n, onPick }: { leg: Leg; bet: Bet; n: number; onP
   );
 }
 
-function ResultCell({ bet, onPick, title, onWouldHave }: { bet: Bet; onPick(r: Result): void; title?: string; onWouldHave?(w: WouldHave): void }) {
+function ResultCell({ bet, onPick, title, onWouldHave, fmt }: { bet: Bet; onPick(r: Result): void; title?: string; onWouldHave?(w: WouldHave): void; fmt?: (n: number) => string }) {
   const [editing, setEditing] = useState(false);
   if (editing)
     return (
@@ -1130,7 +1158,7 @@ function ResultCell({ bet, onPick, title, onWouldHave }: { bet: Bet; onPick(r: R
       </select>
     );
   // BT-34: a cash-out shows the amount returned and its share of the full payout, on the pill and in its tooltip
-  const cashout = bet.result === 'cash-out' && bet.cashout != null ? cashoutLabel(bet.cashout, bet.stake, bet.odds, bet.money) : '';
+  const cashout = bet.result === 'cash-out' && bet.cashout != null ? cashoutLabel(bet.cashout, bet.stake, bet.odds, bet.money, fmt) : '';
   if (cashout) {
     const amount = cashout.slice('Cash-out · '.length);
     // BT-37: the pill keeps its size: the "?" (no would-have yet) sits in its padding, W / L show beside it on hover
