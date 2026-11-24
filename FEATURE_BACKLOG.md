@@ -36,15 +36,48 @@ Agreed with the owner on 2026-11-24.
   "woulda lost" (today those keys do nothing there); the same key again clears it. Mouse: hovering the Cash-out pill
   shows two small dim "W" / "L" letters that do the same. Z undoes it. Works the same on a cashed-out dutch split
   and rollover bet.
-- **Pill, second line** (example: stake 100 @ 1.88 cashed out for 145):
-  - woulda won: `woulda won · left H$ 43,00` in amber. left = profit if won − profit of the cash-out (88 − 45).
-  - woulda lost: `woulda lost · saved H$ 145,00` in green. saved = profit of the cash-out − profit if lost (45 − (−100)).
+- **Display, alignment first (owner, 2026-11-24: keeping the table aligned is very important):** the Cash-out pill
+  keeps exactly today's height and width, and no row gets taller or wider because of this item. The would-have shows
+  as a chip in the existing label / result area of the row (same style as the BT-27 label chip, next to a label if
+  there is one). Example: stake 100 @ 1.88 cashed out for 145:
+  - woulda won: chip `WOULDA WON · LEFT H$ 43,00` in amber. left = profit if won − profit of the cash-out (88 − 45).
+  - woulda lost: chip `WOULDA LOST · SAVED H$ 145,00` in green. saved = profit of the cash-out − profit if lost (45 − (−100)).
   - Use the existing profit functions in `src/lib/money.ts` for both sides so bonus-money bets come out right.
-  - No "…" cut text: the row may grow taller, as with the current two-line pill.
-- **Not forgotten:** a cash-out with no would-have set shows a faint "?" on its pill (tooltip: "W / L: what would
+  - No "…" cut text. If label + chip do not fit the area, the figure moves to the chip's tooltip (`WOULDA WON`)
+    rather than breaking the columns.
+- **Not forgotten:** a cash-out with no would-have set shows a faint "?" inside its pill, without changing the pill's size (tooltip: "W / L: what would
   have happened").
 - **Analytics:** one "Cash-out verdict" figure: sum of saved − sum of left over the cash-outs in the current filter,
   with the count "n woulda won · n woulda lost · n not set". No cash-outs with a would-have → "-".
 - **Not automatic:** never derive it from the free-text actual result ("111-112", "24 pts").
 - **Tests:** unit tests for left / saved (real, hypothetical, bonus money); e2e: cash out a bet, W, check the pill
   line, W again clears, L, check Analytics verdict.
+
+### BT-38 — Units: type a stake as money or as units ("1u"), and view everything in units
+**In short:** A stake can be typed as `100` or `1u`, each money type has a unit size, and a money / units toggle shows stakes, profit and Analytics in units.
+
+Agreed with the owner on 2026-11-24.
+
+- **Alignment is the first rule (owner: "maintaining alignment is very important"):** nothing in this item may move
+  a column, change a column's width or change a row's height. Money view and units view use the same fixed-width,
+  right-aligned, tabular-number columns, so toggling never shifts the table. The typing preview appears in a spot
+  that already exists (or overlays), never pushing fields around. No "…" cut text.
+- **Input:** anywhere a stake is typed (quick-add line, bet form, Betting Tool, cash-out box amount), a number with
+  a `u` suffix is units: `1u`, `0,5u`, `2.5u` (comma or dot, upper or lower case). A plain number stays money, as
+  today. Money prefixes still work together with it (`H$` / `B$` / `R$` choose the money type; `H$1u` is allowed but
+  not required). Before Enter a preview shows the conversion: `1,5u = H$ 150,00`.
+- **Unit size:** a fixed amount set by the owner, one per money type (real, bonus, hypothetical), on the Bankroll
+  page. Not a percentage of the bankroll. Typing `u` with no unit size set for that money type → a clear inline
+  message pointing to the setting, the bet is not saved.
+- **Stored per bet:** the stake in money (as today) plus the unit size in force when the bet was placed. A bet typed
+  as `100` with unit size 100 is 1u too. Changing the unit size later never rewrites old bets.
+- **Older bets** (placed before a unit size existed) have no unit size: in units view they keep showing money. When
+  the first unit size is set, offer once to apply it to all older bets of that money type.
+- **Display:** a money / units toggle (key **U**, also a visible control, remembered). In units view stake, profit,
+  cash-out amount and the BT-37 left / saved figures show as `1u`, `+0,45u`, `1,45u` (up to 2 decimals, trailing
+  zeros dropped). Analytics follows the toggle (net profit `+12,3u`, wagered in units); ROI and win rate do not change.
+  Units of different money types are never added together, same as money today.
+- **Tests:** unit tests for parsing (`1u`, `0,5u`, `H$2u`, plain numbers unchanged, text like "25 pts" untouched)
+  and for units of old / new bets after a unit-size change; e2e: set a unit size, quick-add with `1,5u`, check the
+  saved stake, toggle U and check the row and Analytics; a Playwright check that column x-positions and row height
+  are identical in money view and units view.
