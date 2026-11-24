@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-23
+- BT-35 — Ladder: let the whole payout ride from one bet to the next, shown as rungs (v0.27.0)
+  "Ladder" in the bet form (or "ladder", "ladder:5", "ladder:R$1600" in quick-add), or "Start ladder" next to Bank on a won bet, makes rung 1 of a ladder with an optional goal; a won rung offers "+ Next rung" (the whole payout as its fixed stake) and "Take R$ 400,00", a lost rung ends it losing the first stake only, the row shows the rungs ("R$ 100,00 → R$ 200,00 → R$ 400,00 → next: R$ 800,00 @ 2.00", "rung 3 of 5") with the current rung highlighted, Z undoes each step, and Analytics (Type) has a Ladders group.
 - BT-32 — PP stats: per batch and across batches (v0.26.0)
   A batch has a Stats tab (won / dead / alive, staked, returned, profit; per tier won–lost and hit rate next to what the odds implied, with the edge; "Lost by one": the leg that killed PPs that were otherwise complete, with its actual and note), and the top of the PP page shows the same per-tier table over all batches in a date range, hit rate per tier over time (one point per batch) and leg hit rate by sport and by market.
 - BT-31 — PP builder: scheme helper and ticket generator (v0.25.0)

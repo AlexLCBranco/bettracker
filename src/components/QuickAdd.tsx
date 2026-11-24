@@ -5,6 +5,7 @@ import { normalize } from '@/lib/autocomplete';
 import { emptyLeg, formToBet, newForm } from '@/lib/form';
 import { formatMoney, formatOdds } from '@/lib/money';
 import { parseQuickAdd, quickAddLegs, splitQuickAddText } from '@/lib/quickadd';
+import { newRolloverId } from '@/lib/rollover';
 import { useApp } from './AppProvider';
 import { Autocomplete } from './Autocomplete';
 
@@ -56,7 +57,8 @@ export function QuickAdd() {
     }
     setBusy(true);
     try {
-      await create(v.value);
+      // BT-35: "ladder" on the line: rung 1 of a new ladder
+      await create(p.ladder ? { ...v.value, rolloverId: newRolloverId(), ladder: { ...p.ladder, taken: false } } : v.value);
       setLine('');
       notify(`Saved: ${formatMoney(p.stake, v.value.money)} @${formatOdds(p.odds)} ${p.betText}`.trim());
     } catch (e) {
@@ -83,8 +85,8 @@ export function QuickAdd() {
           getSuggestions={(q) => (line.trim() ? (q.trim() ? suggestFor('betText', q) : []) : recentLines)}
           toQuery={(v) => splitQuickAddText(v).text}
           applySuggestion={(v, s) => (v.trim() ? splitQuickAddText(v).prefix + s : s)}
-          placeholder="Quick add: 150 @2.10 lakers ml (B$150 bonus, H$150 paper)"
-          title='Quick add: "150 @2.10 lakers ml" then Enter. "B$150" = bonus money, "H$150" = hypothetical, "R$150" = real.'
+          placeholder="Quick add: 150 @2.10 lakers ml"
+          title='Quick add: "150 @2.10 lakers ml" then Enter. "B$150" = bonus money, "H$150" = hypothetical, "R$150" = real. "ladder" (or "ladder:5" rungs, "ladder:R$1600" amount) starts a ladder.'
           aria-label="Quick add"
           data-testid="quick-add"
           className="field w-full"

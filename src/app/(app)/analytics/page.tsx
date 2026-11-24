@@ -6,6 +6,7 @@ import { ProfitText } from '@/components/BetTable';
 import { breakdown, comboReport, DIMENSION_LABEL, DIMENSIONS, type Dimension, type Row } from '@/lib/analytics';
 import { formatDate } from '@/lib/dates';
 import { dutchHitReport } from '@/lib/hits';
+import { ladderReport } from '@/lib/rollover';
 import { formatMoney, formatOdds, type MoneyScope } from '@/lib/money';
 import { byMoney } from '@/lib/scope';
 import { useMoneyScope } from '@/components/Money';
@@ -41,6 +42,7 @@ export default function AnalyticsPage() {
   const maxAbsProfit = Math.max(...rows.map((r) => Math.abs(r.profit)), 0);
   const combos = useMemo(() => comboReport(bets), [bets]);
   const hits = useMemo(() => dutchHitReport(bets), [bets]);
+  const ladders = useMemo(() => ladderReport(bets), [bets]);
 
   if (!loaded) return <p className="py-10 text-center text-sm text-zinc-500">Loading…</p>;
 
@@ -122,6 +124,21 @@ export default function AnalyticsPage() {
                 sub={hits.noneHit ? `of the ${hits.noneHit} none-hit` : 'no none-hit dutches'}
                 testId="hits-shared"
               />
+            </div>
+          </div>
+        )}
+
+        {/* BT-35: ladders, next to the Rollover group */}
+        {dim === 'type' && ladders.started > 0 && (
+          <div className="mt-6" data-testid="ladder-report">
+            <h3 className="mb-1 text-sm font-medium text-zinc-300">Ladders</h3>
+            <p className="mb-3 text-xs text-zinc-500">Each ladder is one bet: its first stake in, its final payout out. Rungs climbed = rungs that did not lose.</p>
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+              <Tile label="Ladders started" value={String(ladders.started)} sub="each counted as one bet" testId="ladders-started" />
+              <Tile label="Average rungs climbed" value={ladders.avgRungs == null ? '-' : ladders.avgRungs.toFixed(1)} sub="per ladder" testId="ladders-rungs" />
+              <Tile label="Best ladder" value={ladders.best ? formatMoney(ladders.best.profit, scope, true) : '-'} sub={ladders.best ? `${ladders.best.rungs} ${ladders.best.rungs === 1 ? 'rung' : 'rungs'}` : 'none closed yet'} testId="ladders-best" />
+              <Tile label="Reached their goal" value={String(ladders.reachedGoal)} sub={`of ${ladders.withGoal} with a goal`} testId="ladders-goal" />
+              <Tile label="Net profit" value={formatMoney(ladders.netProfit, scope, true)} sub="closed ladders" testId="ladders-net" />
             </div>
           </div>
         )}

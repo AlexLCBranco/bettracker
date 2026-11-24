@@ -122,6 +122,6 @@ describe('data', () => {
 
   it('CSV has label and actual columns', () => {
     const csv = toCSV([combo({ label: 'Bad beat', result: 'lost' }, [{ actual: '11' }, { actual: '111-112' }])]);
-    expect(csv.split('\r\n')[1]!.endsWith(',Bad beat,11 | 111-112,,0')).toBe(true);
+    expect(csv.split('\r\n')[1]!.endsWith(',Bad beat,11 | 111-112,,0,')).toBe(true);
   });
 });

@@ -26,6 +26,7 @@ const bet = (over: Partial<Bet> = {}): Bet => ({
   dutchId: null,
   rolloverId: null,
   banked: false,
+  ladder: null,
   createdAt: '',
   updatedAt: '',
   ...over,

@@ -9,6 +9,7 @@ import { BalanceHint } from './Bankroll';
 import { BET_TYPES, RESULT_LABEL, RESULTS, SITUATIONS, type Bet } from '@/lib/types';
 import { clashText, teamClashes } from '@/lib/clash';
 import { quickAddLegs } from '@/lib/quickadd';
+import { newRolloverId } from '@/lib/rollover';
 import { useApp } from './AppProvider';
 import { Autocomplete } from './Autocomplete';
 import { MoneySelect } from './Money';
@@ -31,6 +32,10 @@ function FormBody() {
   );
   // a bet in a rollover keeps the shot's money
   const moneyLocked = !!rollover || !!editing?.rolloverId;
+  // BT-35: a new bet can be rung 1 of a new ladder, with an optional goal (rungs or an amount)
+  const [ladderOn, setLadderOn] = useState(false);
+  const [goalRungs, setGoalRungs] = useState('');
+  const [goalAmount, setGoalAmount] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const stakeRef = useRef<HTMLInputElement>(null);
@@ -55,8 +60,13 @@ function FormBody() {
     try {
       // the form has no dutch or rollover field: an edited bet stays in its dutch / rollover (and banked)
       if (editing) await update(editing.id, { ...v.value, dutchId: editing.dutchId, rolloverId: editing.rolloverId, banked: editing.banked, ...(editing.rolloverId ? { money: editing.money } : {}) });
-      else if (rollover) rollover.onSaved?.(await create({ ...v.value, stake: rollover.stake, money: rollover.money, rolloverId: rollover.rolloverId, banked: false }));
-      else await create(v.value);
+      else if (rollover) rollover.onSaved?.(await create({ ...v.value, stake: rollover.stake, money: rollover.money, rolloverId: rollover.rolloverId, banked: false, ladder: rollover.ladder ?? null }));
+      else if (ladderOn) {
+        const gr = goalRungs.trim() ? Math.round(parseNumber(goalRungs) ?? NaN) : null;
+        const ga = goalAmount.trim() ? parseNumber(goalAmount) : null;
+        if ((gr != null && !(gr >= 1)) || (goalAmount.trim() && ga == null)) throw new Error('The ladder goal must be a number of rungs or an amount');
+        await create({ ...v.value, rolloverId: newRolloverId(), banked: false, ladder: { goalRungs: gr, goalAmount: ga, taken: false } });
+      } else await create(v.value);
       if (!rollover) notify(editing ? 'Bet updated' : 'Bet saved');
       if (another && !editing && !rollover) {
         setF(nextForm(f));
@@ -93,7 +103,7 @@ function FormBody() {
       <form
         role="dialog"
         aria-modal="true"
-        aria-label={editing ? 'Edit bet' : rollover ? 'Add rollover leg' : 'New bet'}
+        aria-label={editing ? 'Edit bet' : rollover ? (rollover.ladder ? 'Add ladder rung' : 'Add rollover leg') : 'New bet'}
         className="card w-full max-w-3xl space-y-4 p-5"
         onKeyDown={onKeyDown}
         onSubmit={(e) => {
@@ -102,7 +112,7 @@ function FormBody() {
         }}
       >
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">{editing ? 'Edit bet' : rollover ? 'Add rollover leg' : 'New bet'}</h2>
+          <h2 className="text-lg font-semibold">{editing ? 'Edit bet' : rollover ? (rollover.ladder ? 'Add ladder rung' : 'Add rollover leg') : 'New bet'}</h2>
           <span className="text-xs text-zinc-500">Enter saves · Ctrl+Shift+Enter saves and adds another · Esc closes</span>
         </div>
 
@@ -141,8 +151,29 @@ function FormBody() {
 
         {rollover && (
           <p className="rounded-md border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-sm text-sky-200" data-testid="rollover-note">
-            Rollover: the whole banked payout, {formatMoney(rollover.stake, rollover.money)}, goes on this bet. Its odds multiply the shot&apos;s.
+            {rollover.ladder ? (
+              <>Ladder: the whole payout, {formatMoney(rollover.stake, rollover.money)}, goes on this rung.</>
+            ) : (
+              <>Rollover: the whole banked payout, {formatMoney(rollover.stake, rollover.money)}, goes on this bet. Its odds multiply the shot&apos;s.</>
+            )}
           </p>
+        )}
+
+        {!editing && !rollover && (
+          <div className="flex flex-wrap items-center gap-3 text-sm" data-testid="ladder-option">
+            <label className="flex items-center gap-1.5 text-zinc-300" title="Rung 1 of a new ladder: each win puts the whole payout on the next rung, until a rung loses or you take the money">
+              <input type="checkbox" checked={ladderOn} onChange={(e) => setLadderOn(e.target.checked)} aria-label="Ladder" />
+              Ladder
+            </label>
+            {ladderOn && (
+              <>
+                <span className="text-xs text-zinc-500">goal (optional):</span>
+                <input className="field w-20 py-0.5 text-xs" inputMode="numeric" placeholder="rungs" value={goalRungs} onChange={(e) => setGoalRungs(e.target.value)} aria-label="Goal rungs" />
+                <span className="text-xs text-zinc-500">or</span>
+                <input className="field w-28 py-0.5 text-xs" inputMode="decimal" placeholder={`${MONEY_SYMBOL[f.money]} amount`} value={goalAmount} onChange={(e) => setGoalAmount(e.target.value)} aria-label="Goal amount" />
+              </>
+            )}
+          </div>
         )}
 
         {presets.length > 0 && !rollover && (

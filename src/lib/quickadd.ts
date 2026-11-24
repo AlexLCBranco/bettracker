@@ -4,9 +4,15 @@
 import { oddsFromText } from './money';
 import type { BetType, Money } from './types';
 
+/** BT-35: a ladder asked for on the quick-add line, with its optional goal. */
+export interface QuickLadder {
+  goalRungs: number | null;
+  goalAmount: number | null;
+}
+
 export type QuickAdd =
-  | { ok: true; stake: number; odds: number; betText: string; money?: Money }
-  | { ok: false; stake: number | null; odds: number | null; betText: string; reason: string; money?: Money };
+  | { ok: true; stake: number; odds: number; betText: string; money?: Money; ladder?: QuickLadder }
+  | { ok: false; stake: number | null; odds: number | null; betText: string; reason: string; money?: Money; ladder?: QuickLadder };
 
 const NUM = String.raw`\d+(?:[.,]\d+)?`;
 /** An odds token after "@": decimal, signed (American / Indonesian / Malay), fractional or a percentage. */
@@ -19,6 +25,14 @@ export function parseQuickAdd(line: string): QuickAdd {
   if (oddsMatch) {
     odds = oddsFromText(oddsMatch[2]!) ?? 0;
     rest = (rest.slice(0, oddsMatch.index) + ' ' + rest.slice(oddsMatch.index + oddsMatch[0].length)).trim();
+  }
+  // BT-35: "ladder" makes the bet rung 1 of a new ladder; "ladder:5" with a goal of 5 rungs, "ladder:R$1600" of an amount
+  let ladder: QuickLadder | undefined;
+  const lad = /(^|\s)ladder(?::(R\$|\$)?(\d+(?:[.,]\d+)?))?(?=\s|$)/i.exec(rest);
+  if (lad) {
+    const v = lad[3] ? Number(lad[3].replace(',', '.')) : null;
+    ladder = { goalRungs: v != null && !lad[2] ? Math.round(v) : null, goalAmount: v != null && lad[2] ? v : null };
+    rest = (rest.slice(0, lad.index) + ' ' + rest.slice(lad.index + lad[0].length)).trim();
   }
   const tokens = rest.split(/\s+/).filter(Boolean);
   let stake: number | null = null;
@@ -34,7 +48,7 @@ export function parseQuickAdd(line: string): QuickAdd {
     tokens.splice(stakeIdx, 1);
   }
   const betText = tokens.join(' ');
-  const m = money ? { money } : {};
+  const m = { ...(money ? { money } : {}), ...(ladder ? { ladder } : {}) };
   if (stake == null || !(stake > 0)) return { ok: false, stake: stake && stake > 0 ? stake : null, odds, betText, reason: 'No stake found', ...m };
   if (odds == null) return { ok: false, stake, odds: null, betText, reason: 'No @odds found', ...m };
   if (!(odds > 1)) return { ok: false, stake, odds: null, betText, reason: 'Odds must be above 1', ...m };

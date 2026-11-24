@@ -42,6 +42,18 @@ export function validateBet(raw: unknown): Validated {
     rolloverId = r.rolloverId;
   }
   const banked = rolloverId != null && r.banked === true;
+  // BT-35: a ladder is a rollover chain: its rungs share the chain id
+  let ladder: BetInput['ladder'] = null;
+  if (r.ladder != null) {
+    if (typeof r.ladder !== 'object') return { ok: false, error: 'Ladder must be an object' };
+    if (!rolloverId) return { ok: false, error: 'A ladder rung needs its ladder (rollover) id' };
+    const l = r.ladder as Record<string, unknown>;
+    const goalRungs = l.goalRungs == null || l.goalRungs === '' ? null : num(l.goalRungs);
+    if (l.goalRungs != null && l.goalRungs !== '' && (goalRungs == null || !Number.isInteger(goalRungs) || goalRungs < 1 || goalRungs > 100)) return { ok: false, error: 'A ladder goal in rungs must be 1 to 100' };
+    const goalAmount = l.goalAmount == null || l.goalAmount === '' ? null : num(l.goalAmount);
+    if (l.goalAmount != null && l.goalAmount !== '' && (goalAmount == null || goalAmount <= 0)) return { ok: false, error: 'A ladder goal amount must be above 0' };
+    ladder = { goalRungs, goalAmount, taken: l.taken === true };
+  }
   let cashout: number | null = null;
   if (result === 'cash-out') {
     cashout = num(r.cashout);
@@ -92,6 +104,7 @@ export function validateBet(raw: unknown): Validated {
       dutchId,
       rolloverId,
       banked,
+      ladder,
       money,
       // BT-27: one label per bet, kept as typed (shown uppercase)
       label: str(r.label).replace(/\s+/g, ' ').slice(0, 60),

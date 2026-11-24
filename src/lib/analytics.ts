@@ -82,6 +82,8 @@ function groupOf(b: Bet, d: Dimension): { key: string; label: string } {
     }
     case 'type':
       if (b.dutchId) return { key: 'dutch', label: 'Dutch' };
+      // BT-35: a ladder next to the rollover shots
+      if (b.ladder) return { key: 'ladder', label: 'Ladder' };
       if (b.rolloverId) return { key: 'rollover', label: 'Rollover' };
       return { key: b.type, label: b.type === 'solo' ? 'Solo' : 'Combination' };
     case 'situation':

@@ -57,11 +57,23 @@ export interface Bet {
   rolloverId: string | null;
   /** BT-29: a won bet kept open so a later bet can roll its payout on (only the last bet of a chain counts). */
   banked: boolean;
+  /**
+   * BT-35: set on every rung of a ladder (a rollover chain planned from its first bet, no odds target): its optional
+   * goal, and whether the money was taken (closed). Null on everything else, shots included.
+   */
+  ladder: Ladder | null;
   /** BT-27: one short free-text label ("lost by one"), shown uppercase as a chip; empty = none. */
   label: string;
   /** ISO timestamps, used for "most recent" ordering. */
   createdAt: string;
   updatedAt: string;
+}
+
+/** BT-35: a ladder's goal (either can be empty) and whether the money was taken. */
+export interface Ladder {
+  goalRungs: number | null;
+  goalAmount: number | null;
+  taken: boolean;
 }
 
 /** What a client sends to create a bet. */

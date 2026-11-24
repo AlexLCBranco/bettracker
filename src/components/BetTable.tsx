@@ -25,7 +25,7 @@ import type { Settler } from './useSettle';
 import { losingLegs, sharedLabel } from '@/lib/actuals';
 import { normalize } from '@/lib/autocomplete';
 import { Annotator, LabelChip, LossLine } from './Annotator';
-import { chainPending, chainSummary, needsText, tierOf, type ChainOutcome } from '@/lib/rollover';
+import { chainPending, chainSummary, goalText, isLadder, ladderOf, ladderProgress, ladderStrip, needsText, tierOf, type ChainOutcome } from '@/lib/rollover';
 import type { Rollover } from './useRollover';
 
 const QUICK_RESULTS: { r: Result; key: string; cls: string }[] = [
@@ -421,19 +421,36 @@ function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, select, 
   const books = [...new Set(bets.map((b) => b.book).filter(Boolean))];
   const live = bets.every((b) => b.situation === 'live');
   const shot = `Banked ${formatMoney(s.banked, money)} @ ${formatOdds(s.odds, 2)} · ${needsText(s)}`;
+  // BT-35: a ladder: rungs, no odds target, no Shot / Mini / Semi / Pepsi chip
+  const ladder = isLadder(bets);
+  const progress = ladder ? ladderProgress(bets) : null;
+  const strip = ladder ? ladderStrip(bets, (n) => formatMoney(n, money)) : '';
+  const [goalOpen, setGoalOpen] = useState(false);
   return (
     <>
       <tr className={ROW} data-testid="rollover-row" data-rollover-id={rolloverId} data-key={key} data-selected={isSel || undefined} data-tone={tone} data-money={money} data-outcome={s.outcome} onClick={() => select(key)}>
         <td className={TONE_EDGE[tone]} />
         <td className={CELL}>
           <div className={`${TEXT} flex items-center gap-1.5`} data-testid="bet-text" title={names}>
-            <span data-testid="type">Rollover ×{bets.length}</span>
-            <TierChip odds={s.odds} banked={isOpen} />
+            {ladder ? (
+              <>
+                <span data-testid="type">Ladder ×{bets.length}</span>
+                <span className={`whitespace-nowrap rounded px-1 text-[10px] font-bold uppercase leading-4 tracking-wide ${progress!.reached ? 'bg-emerald-500/15 text-emerald-300' : 'bg-indigo-500/15 text-indigo-200'}`} data-testid="ladder-goal" title={progress!.reached ? 'Goal reached' : 'Ladder progress'}>
+                  {goalText(progress!, (n) => formatMoney(n, money))}
+                  {progress!.reached && ' ✓'}
+                </span>
+              </>
+            ) : (
+              <>
+                <span data-testid="type">Rollover ×{bets.length}</span>
+                <TierChip odds={s.odds} banked={isOpen} />
+              </>
+            )}
             {live && <LiveTag />}
           </div>
           <SubLine
             parts={[
-              isOpen && {
+              isOpen && !ladder && {
                 text: shot,
                 node: (
                   <span className="text-sky-300" data-testid="shot-line">
@@ -445,6 +462,23 @@ function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, select, 
               books.length > 0 && { text: books.join(', '), node: books.join(', ') },
             ]}
           />
+          {/* BT-35: the rung strip wraps, never cut */}
+          {ladder && (
+            <div className="text-[12px] leading-5 text-indigo-200 [overflow-wrap:anywhere]" data-testid="ladder-strip">
+              {strip}
+            </div>
+          )}
+          {goalOpen && ladder && (
+            <GoalEditor
+              goal={ladderOf(bets)}
+              money={money}
+              onSave={(g) => {
+                rollover.setGoal(bets, g);
+                setGoalOpen(false);
+              }}
+              onClose={() => setGoalOpen(false)}
+            />
+          )}
         </td>
         <td className={NUM} data-testid="rollover-stake" data-col="stake" title="The first bet's stake: the rolled stakes are the same money">
           <span className={MONEY_TEXT[money] || 'text-zinc-200'}>{formatMoney(s.stake, money)}</span>
@@ -462,7 +496,34 @@ function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, select, 
         </td>
         <td className={ACTIONS}>
           <span className="inline-flex items-center gap-0.5">
-            {isOpen && (
+            {isOpen && ladder && (
+              <>
+                <button
+                  className="rounded px-1.5 py-0.5 text-xs font-semibold text-indigo-200 hover:bg-indigo-600/30"
+                  title="The next rung: the whole payout is its stake (A)"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    select(key);
+                    rollover.addLeg(bets);
+                  }}
+                  data-testid="next-rung"
+                >
+                  + Next rung
+                </button>
+                <button
+                  className="whitespace-nowrap rounded px-1.5 py-0.5 text-xs font-semibold text-emerald-300 hover:bg-emerald-600/30"
+                  title="Take the money: close the ladder as won at this amount"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    rollover.take(bets);
+                  }}
+                  data-testid="take"
+                >
+                  Take {formatMoney(s.banked, money)}
+                </button>
+              </>
+            )}
+            {isOpen && !ladder && (
               <>
                 <button
                   className="rounded px-1.5 py-0.5 text-xs font-semibold text-sky-300 hover:bg-sky-600/30"
@@ -507,12 +568,13 @@ function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, select, 
             {pendingBet && <CashoutButton onClick={() => settle.startCashout(pendingBet.id)} />}
             <span className={HOVER_ONLY} data-testid="row-actions">
               <RowMenu
-                label="More rollover actions"
+                label={ladder ? 'More ladder actions' : 'More rollover actions'}
                 items={[
                   ...(rollover.canBank(last) ? [{ label: 'Bank for rollover', icon: '⤴', onClick: () => rollover.bank(last) }] : []),
-                  ...(isOpen ? [{ label: 'Close shot', icon: '■', onClick: () => rollover.close(bets) }] : []),
+                  ...(isOpen && !ladder ? [{ label: 'Close shot', icon: '■', onClick: () => rollover.close(bets) }] : []),
+                  ...(ladder ? [{ label: 'Set goal', icon: '◎', onClick: () => setGoalOpen(true) }] : []),
                   {
-                    label: 'Delete rollover',
+                    label: ladder ? 'Delete ladder' : 'Delete rollover',
                     icon: '🗑',
                     danger: true,
                     onClick: () => {
@@ -537,7 +599,7 @@ function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, select, 
           annotating={annotating}
           annotate={annotate}
           rollover={rollover}
-          link={{ index: i, last: i === bets.length - 1 && !open.has(b.id), chainKey: key, chain: bets }}
+          link={{ index: i, last: i === bets.length - 1 && !open.has(b.id), chainKey: key, chain: bets, ladder, current: ladder && (b.result === 'pending' || (isOpen && i === bets.length - 1)) }}
         />
       ))}
     </>
@@ -550,6 +612,9 @@ interface ChainLink {
   last: boolean;
   chainKey: string;
   chain: Bet[];
+  /** BT-35: a ladder's rung ("Rung 2"); the rung being played is highlighted. */
+  ladder?: boolean;
+  current?: boolean;
 }
 
 interface Split {
@@ -582,6 +647,8 @@ function BetRow({ b, open, toggle, selected, select, settle, split, link, annota
   const isSel = selected === key || (nested && selected === split.dutchKey) || (!!link && selected === link.chainKey);
   // BT-29: Bank on a won bet (not in a dutch; in a shot only its last bet, once closed)
   const bankable = !nested && rollover.canBank(b);
+  // BT-35: a won plain bet can become rung 1 of a ladder
+  const startable = !nested && !link && rollover.canStartLadder(b);
   // a dutch's bets are logged without bet text: its selection is the text, edited on the leg
   const textOnLeg = !b.betText && solo && nested;
   const rawText = b.betText || (nested ? betLabel(b) : '');
@@ -619,8 +686,8 @@ function BetRow({ b, open, toggle, selected, select, settle, split, link, annota
         <td className={`${CELL} ${indent ? 'pl-5' : ''}`}>
           <div className="flex items-start gap-1.5">
             {link && (
-              <span className="mt-px shrink-0 text-[10px] leading-4 text-zinc-500" data-testid="chain-label">
-                Bet {link.index + 1}
+              <span className={`mt-px shrink-0 text-[10px] leading-4 ${link.current ? 'rounded bg-indigo-500/20 px-1 font-semibold text-indigo-200' : 'text-zinc-500'}`} data-testid="chain-label" data-current={link.current || undefined}>
+                {link.ladder ? 'Rung' : 'Bet'} {link.index + 1}
               </span>
             )}
             {nested &&
@@ -657,7 +724,7 @@ function BetRow({ b, open, toggle, selected, select, settle, split, link, annota
                 </span>
               )}
               {chip && <LabelChip label={chip} />}
-              {(link || b.banked) && <TierChip odds={b.odds} banked={b.banked && !!link && link.index === link.chain.length - 1} />}
+              {(link || b.banked) && !b.ladder && <TierChip odds={b.odds} banked={b.banked && !!link && link.index === link.chain.length - 1} />}
             </div>
           </div>
           <SubLine
@@ -738,6 +805,19 @@ function BetRow({ b, open, toggle, selected, select, settle, split, link, annota
                       Bank
                     </button>
                   )}
+                  {startable && (
+                    <button
+                      className="whitespace-nowrap rounded px-1.5 py-0.5 text-xs font-semibold text-indigo-200 hover:bg-indigo-600/30"
+                      title="Start a ladder: this win is rung 1, its whole payout goes on the next rung"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        rollover.startLadder(b);
+                      }}
+                      data-testid="start-ladder"
+                    >
+                      Start ladder
+                    </button>
+                  )}
                   <AnnotateButton onClick={annotateHere} />
                   <IconButton label="Edit" onClick={() => openEdit(b)}>
                     ✎
@@ -746,6 +826,7 @@ function BetRow({ b, open, toggle, selected, select, settle, split, link, annota
                     label="More actions"
                     items={[
                       ...(bankable ? [{ label: 'Bank for rollover', icon: '⤴', onClick: () => rollover.bank(b) }] : []),
+                      ...(startable ? [{ label: 'Start ladder', icon: '⇈', onClick: () => rollover.startLadder(b) }] : []),
                       { label: 'Duplicate', icon: '⧉', onClick: () => openNew(duplicateForm(b)) },
                       {
                         label: 'Delete',
@@ -815,6 +896,41 @@ function BetRow({ b, open, toggle, selected, select, settle, split, link, annota
           );
         })}
     </>
+  );
+}
+
+/** BT-35: a ladder's goal: a number of rungs or a target amount (either can be empty). Enter saves, Esc closes. */
+function GoalEditor({ goal, money, onSave, onClose }: { goal: { goalRungs: number | null; goalAmount: number | null }; money: MoneyScope; onSave(g: { goalRungs: number | null; goalAmount: number | null }): void; onClose(): void }) {
+  const [rungs, setRungs] = useState(goal.goalRungs == null ? '' : String(goal.goalRungs));
+  const [amount, setAmount] = useState(goal.goalAmount == null ? '' : String(goal.goalAmount));
+  return (
+    <form
+      className="mt-1 flex flex-wrap items-center gap-2 text-xs"
+      data-testid="goal-editor"
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          e.stopPropagation();
+          onClose();
+        }
+      }}
+      onSubmit={(e) => {
+        e.preventDefault();
+        const r = rungs.trim() ? Math.round(parseNumber(rungs) ?? 0) : null;
+        const a = amount.trim() ? parseNumber(amount) : null;
+        if ((r != null && r < 1) || (amount.trim() && a == null)) return;
+        onSave({ goalRungs: r, goalAmount: a });
+      }}
+    >
+      <span className="text-zinc-400">Goal:</span>
+      <input autoFocus className="field w-20 py-0.5 text-xs" inputMode="numeric" placeholder="rungs" value={rungs} onChange={(e) => setRungs(e.target.value)} aria-label="Goal rungs" />
+      <span className="text-zinc-500">or</span>
+      <input className="field w-28 py-0.5 text-xs" inputMode="decimal" placeholder={`${MONEY_SYMBOL[money]} amount`} value={amount} onChange={(e) => setAmount(e.target.value)} aria-label="Goal amount" />
+      <button type="submit" className="btn py-0.5 text-xs">
+        Save goal
+      </button>
+    </form>
   );
 }
 

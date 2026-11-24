@@ -7,7 +7,7 @@ import type { BetForm } from '@/lib/form';
 import { latestGate } from '@/lib/latest';
 import { REFRESH_MIN_MS, refreshGate } from '@/lib/refresh';
 import { tidyBet, type NameCasing } from '@/lib/tidy';
-import type { Bet, BetInput, Money } from '@/lib/types';
+import type { Bet, BetInput, Ladder, Money } from '@/lib/types';
 import { bankroll as computeBankroll, type Bankroll, type EntryInput, type MoneyEntry } from '@/lib/bankroll';
 import { todayISO } from '@/lib/dates';
 import { ticketMoney, type BatchInput, type PPBatch, type PPLeg } from '@/lib/pp';
@@ -24,6 +24,8 @@ export interface RolloverAdd {
   rolloverId: string;
   stake: number;
   money: Money;
+  /** BT-35: the next rung of a ladder carries the ladder's goal. */
+  ladder?: Ladder;
   onSaved?(bet: Bet): void;
 }
 

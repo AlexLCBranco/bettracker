@@ -4,7 +4,7 @@
 // final payout − first stake. It is open while its last bet is banked, and an open shot counts as pending.
 
 import { profit } from './money';
-import type { Bet } from './types';
+import type { Bet, Ladder } from './types';
 
 /** The odds every shot aims at. */
 export const SHOT_TARGET = 1.8;
@@ -85,6 +85,19 @@ export function chainSummary(raw: Bet[]): ChainSummary {
   const first = bets[0]!;
   const last = bets.at(-1)!;
   const stake = first.stake;
+  // BT-35: a ladder goes on until a rung loses or the money is taken; a void or cash-out rung keeps it alive with
+  // what it returned as the next stake
+  if (isLadder(bets)) {
+    const odds = bets.reduce((p, b) => p * factor(b), 1);
+    const base = { stake, odds, profit: 0, banked: 0, needs: null, bets };
+    if (bets.some((b) => b.result === 'lost')) return { ...base, outcome: 'lost', profit: round2(-stake) };
+    if (bets.some((b) => b.result === 'pending')) return { ...base, outcome: 'pending' };
+    const amount = round2(returned(last));
+    if (!bets.some((b) => b.ladder?.taken)) return { ...base, outcome: 'open', banked: amount };
+    const net = round2(amount - stake);
+    const c = Math.round(net * 100);
+    return { ...base, outcome: c > 0 ? 'won' : c < 0 ? 'lost' : 'even', profit: net };
+  }
   // a cash-out ends the chain: the bets after it (there should be none) do not multiply it further
   const upto = bets.findIndex((b) => b.result === 'cash-out');
   const counted = upto >= 0 ? bets.slice(0, upto + 1) : bets;
@@ -155,7 +168,8 @@ export function chainsOf(all: Bet[]): Map<string, Bet[]> {
 /** Can this bet be banked: a won plain bet (not in a dutch), or the won last bet of a closed chain. */
 export function canBank(b: Bet, chain: Bet[] = []): boolean {
   // BT-33: a bonus bet's payout is its winnings only, in real money: it cannot roll on as the same money
-  if (b.result !== 'won' || b.dutchId || b.banked || b.money === 'bonus') return false;
+  // BT-35: a ladder's rungs are never banked (a won rung rides on by itself)
+  if (b.result !== 'won' || b.dutchId || b.banked || b.money === 'bonus' || b.ladder) return false;
   if (!b.rolloverId) return true;
   const ordered = chainOrder(chain);
   return ordered.at(-1)?.id === b.id && chainSummary(ordered).outcome === 'won';
@@ -165,4 +179,101 @@ export function canBank(b: Bet, chain: Bet[] = []): boolean {
 export function needsText(s: Pick<ChainSummary, 'needs'>): string {
   const target = `${SHOT_TARGET.toFixed(2)}`;
   return s.needs == null ? `already ${target}+ (${TARGET_TIER})` : `needs ${s.needs.toFixed(2)}+ to reach ${target} (${TARGET_TIER})`;
+}
+
+// BT-35: ladders. A ladder is a rollover chain whose rungs carry `ladder` (its goal and whether it was taken): planned
+// from its first bet, no odds target, the whole payout of each rung on the next, until a rung loses or he takes the
+// money. Same money model as a shot (first stake in, final payout out, one bet in counts).
+
+/** Is this chain a ladder (not a shot)? */
+export const isLadder = (bets: Pick<Bet, 'ladder'>[]) => bets.some((b) => b.ladder != null);
+
+/** A ladder's goal, as its rungs carry it. */
+export const ladderOf = (bets: Bet[]): Ladder => {
+  const l = chainOrder(bets).find((b) => b.ladder)?.ladder;
+  return { goalRungs: l?.goalRungs ?? null, goalAmount: l?.goalAmount ?? null, taken: bets.some((b) => b.ladder?.taken) };
+};
+
+/** A won plain bet (not in a dutch or a chain, not bonus money) can become rung 1 of a new ladder. */
+export const canStartLadder = (b: Bet) => b.result === 'won' && !b.dutchId && !b.rolloverId && b.money !== 'bonus';
+
+export interface LadderProgress {
+  /** The rung being played (pending), the next one to place (open), or the last one (closed). */
+  rung: number;
+  /** Rungs that did not lose (won, void, cash-out). */
+  climbed: number;
+  /** What is secured now: the stake riding on the pending rung, the payout banked, or the final payout (0 once lost). */
+  amount: number;
+  goal: Ladder;
+  reached: boolean;
+}
+
+export function ladderProgress(raw: Bet[]): LadderProgress {
+  const s = chainSummary(raw);
+  const goal = ladderOf(raw);
+  const pending = s.bets.find((b) => b.result === 'pending');
+  const climbed = s.bets.filter((b) => b.result !== 'pending' && b.result !== 'lost').length;
+  const rung = s.outcome === 'open' ? s.bets.length + 1 : s.bets.length;
+  // what is secured so far: the stake riding on the pending rung, the payout banked, or the final payout
+  const amount = s.outcome === 'lost' ? 0 : pending ? round2(pending.stake) : s.outcome === 'open' ? s.banked : round2(s.stake + s.profit);
+  const reached = (goal.goalRungs != null && climbed >= goal.goalRungs) || (goal.goalAmount != null && amount >= goal.goalAmount);
+  return { rung, climbed, amount, goal, reached };
+}
+
+/** "rung 3 of 5", "R$ 400,00 of R$ 1.600,00", or "rung 3". */
+export function goalText(p: LadderProgress, money: (n: number) => string): string {
+  if (p.goal.goalRungs != null) return `rung ${p.rung} of ${p.goal.goalRungs}`;
+  if (p.goal.goalAmount != null) return `${money(p.amount)} of ${money(p.goal.goalAmount)}`;
+  return `rung ${p.rung}`;
+}
+
+/** The rung strip: "100 → 200 → 400 → next: 800 @ 2.00" (amounts as `money` writes them). */
+export function ladderStrip(raw: Bet[], money: (n: number) => string): string {
+  const s = chainSummary(raw);
+  const parts = [money(s.stake)];
+  for (const b of s.bets) {
+    if (b.result === 'pending') {
+      parts.push(`next: ${money(round2(b.stake * b.odds))} @ ${b.odds.toFixed(2)}`);
+      break;
+    }
+    parts.push(b.result === 'lost' ? '✕' : money(round2(returned(b))));
+  }
+  if (s.outcome === 'open') parts.push(`next rung: ${money(s.banked)}`);
+  return parts.join(' → ');
+}
+
+export interface LadderReport {
+  started: number;
+  /** Average rungs climbed (rungs that did not lose); null with no ladders. */
+  avgRungs: number | null;
+  /** The closed ladder with the best profit. */
+  best: { rolloverId: string; profit: number; rungs: number } | null;
+  /** Ladders with a goal, and how many reached it. */
+  withGoal: number;
+  reachedGoal: number;
+  /** Closed ladders' net profit. */
+  netProfit: number;
+}
+
+/** Analytics: the Ladder group (BT-35). */
+export function ladderReport(bets: Bet[]): LadderReport {
+  const ladders = [...chainsOf(bets).entries()].filter(([, b]) => isLadder(b));
+  let rungs = 0;
+  let net = 0;
+  let best: LadderReport['best'] = null;
+  let withGoal = 0;
+  let reached = 0;
+  for (const [id, b] of ladders) {
+    const s = chainSummary(b);
+    const p = ladderProgress(b);
+    rungs += p.climbed;
+    if (p.goal.goalRungs != null || p.goal.goalAmount != null) {
+      withGoal++;
+      if (p.reached) reached++;
+    }
+    if (chainPending(s.outcome)) continue;
+    net += s.profit;
+    if (!best || s.profit > best.profit) best = { rolloverId: id, profit: s.profit, rungs: p.climbed };
+  }
+  return { started: ladders.length, avgRungs: ladders.length ? rungs / ladders.length : null, best, withGoal, reachedGoal: reached, netProfit: round2(net) };
 }
