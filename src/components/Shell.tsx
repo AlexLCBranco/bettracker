@@ -34,6 +34,8 @@ const LINKS = [
   { href: '/', label: 'Bets' },
   { href: '/analytics', label: 'Analytics' },
   { href: '/betting-tool', label: 'Dutch tool' },
+  // BT-36
+  { href: '/ladder-sim', label: 'Ladder sim' },
   // BT-30
   { href: '/pp', label: 'PP' },
 ];

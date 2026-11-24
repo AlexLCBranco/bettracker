@@ -33,9 +33,11 @@ function FormBody() {
   // a bet in a rollover keeps the shot's money
   const moneyLocked = !!rollover || !!editing?.rolloverId;
   // BT-35: a new bet can be rung 1 of a new ladder, with an optional goal (rungs or an amount)
-  const [ladderOn, setLadderOn] = useState(false);
-  const [goalRungs, setGoalRungs] = useState('');
-  const [goalAmount, setGoalAmount] = useState('');
+  // BT-36: "Start this ladder" in the Ladder sim opens the form with the ladder ticked and the plan's goal
+  const ladderStart = req?.mode === 'new' ? req.ladder : undefined;
+  const [ladderOn, setLadderOn] = useState(!!ladderStart);
+  const [goalRungs, setGoalRungs] = useState(ladderStart?.goalRungs != null ? String(ladderStart.goalRungs) : '');
+  const [goalAmount, setGoalAmount] = useState(ladderStart?.goalAmount != null ? String(ladderStart.goalAmount) : '');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const stakeRef = useRef<HTMLInputElement>(null);

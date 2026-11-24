@@ -156,7 +156,7 @@ test('nav badge opens the To settle tab; old /history and /settle addresses land
   await page.getByTestId('due-count').click();
   await expect(page).toHaveURL(/\/\?tab=settle$/);
   await expect(page.getByRole('tab', { name: /To settle/ })).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByRole('navigation').getByRole('link')).toHaveText(['Bets', /^\d+$/, 'Analytics', 'Dutch tool', 'PP']);
+  await expect(page.getByRole('navigation').getByRole('link')).toHaveText(['Bets', /^\d+$/, 'Analytics', 'Dutch tool', 'Ladder sim', 'PP']);
   await page.goto('/history');
   await expect(page).toHaveURL(/\/$/);
   await page.goto('/settle');

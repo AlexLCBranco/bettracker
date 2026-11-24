@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { useRouter } from 'next/navigation';
 import { formatDate, formatDayHeader, formatDayMonth, parseDateInput } from '@/lib/dates';
 import { betLabel, duplicateDutchDraft, dutchSummary, editDutchDraft, rowKey, type GroupOutcome } from '@/lib/dutch';
 import { duplicateForm } from '@/lib/form';
@@ -426,6 +427,7 @@ function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, select, 
   const progress = ladder ? ladderProgress(bets) : null;
   const strip = ladder ? ladderStrip(bets, (n) => formatMoney(n, money)) : '';
   const [goalOpen, setGoalOpen] = useState(false);
+  const router = useRouter();
   return (
     <>
       <tr className={ROW} data-testid="rollover-row" data-rollover-id={rolloverId} data-key={key} data-selected={isSel || undefined} data-tone={tone} data-money={money} data-outcome={s.outcome} onClick={() => select(key)}>
@@ -573,6 +575,8 @@ function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, select, 
                   ...(rollover.canBank(last) ? [{ label: 'Bank for rollover', icon: '⤴', onClick: () => rollover.bank(last) }] : []),
                   ...(isOpen && !ladder ? [{ label: 'Close shot', icon: '■', onClick: () => rollover.close(bets) }] : []),
                   ...(ladder ? [{ label: 'Set goal', icon: '◎', onClick: () => setGoalOpen(true) }] : []),
+                  // BT-36: plan the remaining rungs in the Ladder sim
+                  ...(ladder && chainPending(s.outcome) ? [{ label: 'Open in sim', icon: '↗', onClick: () => router.push(`/ladder-sim?ladder=${encodeURIComponent(rolloverId)}`) }] : []),
                   {
                     label: ladder ? 'Delete ladder' : 'Delete rollover',
                     icon: '🗑',

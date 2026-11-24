@@ -29,7 +29,10 @@ export interface RolloverAdd {
   onSaved?(bet: Bet): void;
 }
 
-export type FormRequest = { mode: 'new'; prefill?: Partial<BetForm>; rollover?: RolloverAdd; key: number } | { mode: 'edit'; bet: Bet; key: number };
+/** BT-36: a new bet that starts a ladder (from the Ladder sim), with its goal. */
+export type LadderStart = { goalRungs: number | null; goalAmount: number | null };
+
+export type FormRequest = { mode: 'new'; prefill?: Partial<BetForm>; rollover?: RolloverAdd; ladder?: LadderStart; key: number } | { mode: 'edit'; bet: Bet; key: number };
 
 interface AppCtx {
   bets: Bet[];
@@ -57,7 +60,7 @@ interface AppCtx {
   defaults: ReturnType<typeof lastUsed>;
   presets: number[];
   form: FormRequest | null;
-  openNew(prefill?: Partial<BetForm>, rollover?: RolloverAdd): void;
+  openNew(prefill?: Partial<BetForm>, rollover?: RolloverAdd, ladder?: LadderStart): void;
   openEdit(bet: Bet): void;
   closeForm(): void;
   toast: { text: string; kind: 'ok' | 'error'; id: number } | null;
@@ -376,7 +379,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     defaults,
     presets,
     form,
-    openNew: (prefill, rollover) => setForm({ mode: 'new', prefill, rollover, key: ++formKey.current }),
+    openNew: (prefill, rollover, ladder) => setForm({ mode: 'new', prefill, rollover, ladder, key: ++formKey.current }),
     openEdit: (bet) => setForm({ mode: 'edit', bet, key: ++formKey.current }),
     closeForm: () => setForm(null),
     toast,

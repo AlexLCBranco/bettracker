@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-23
+- BT-36 — Ladder simulator: plan a ladder rung by rung before betting it (v0.28.0)
+  A new "Ladder sim" page: start, odds (any format) and rungs on top, one compact row per rung (odds typed over per rung with a reset x and its tier chip, stake in, pays, profit, total odds "×6.86", fair chance with "1 in 613", a one-line note, a log-scale bar), a target that marks its rung and dims the rest with the odds per rung it needs, a summary line, a random "Try it" with a running tally, the plan kept across reloads (Reset clears), "Start this ladder" opening the bet form as rung 1 with the goal, and "Open in sim" on an open ladder loading its placed rungs locked.
 - BT-35 — Ladder: let the whole payout ride from one bet to the next, shown as rungs (v0.27.0)
   "Ladder" in the bet form (or "ladder", "ladder:5", "ladder:R$1600" in quick-add), or "Start ladder" next to Bank on a won bet, makes rung 1 of a ladder with an optional goal; a won rung offers "+ Next rung" (the whole payout as its fixed stake) and "Take R$ 400,00", a lost rung ends it losing the first stake only, the row shows the rungs ("R$ 100,00 → R$ 200,00 → R$ 400,00 → next: R$ 800,00 @ 2.00", "rung 3 of 5") with the current rung highlighted, Z undoes each step, and Analytics (Type) has a Ladders group.
 - BT-32 — PP stats: per batch and across batches (v0.26.0)
