@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-24
+- BT-45 — Marquee select and bulk actions on the Bets table (v0.40.0)
+  Drag a box over rows (starting outside the text), Ctrl+click, Shift+click or Ctrl+A to select several; a bar at the bottom shows how many, their stake, settled profit and what the pending ones would pay, with Won / Lost / Void (pending plain bets), label, game date, book, no brainer on / off and Delete, each one Ctrl+Z step; also fixes the no brainer button pushing a pending dutch's actions past the table edge (now in its ⋯ menu).
 - BT-44 — "No brainer" mark on a bet (v0.39.0)
   A bet or a whole dutch can be marked a no brainer (the NB button on the row, X on the selected row, the checkbox in the bet and dutch forms, or "#nb" at the end of a quick-add line): its bet cell is tinted violet with a "NO BRAINER" chip, separate from its label.
 - BT-43 — The day ends at 05:00, not midnight (v0.38.0)

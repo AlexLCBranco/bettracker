@@ -1181,7 +1181,7 @@ test('BT-24: the ⋯ menu opens fully visible on dutch and bet rows, stays while
       }),
     );
   for (const [row, button, items, open] of [
-    [page.locator(`[data-dutch-id="${d}"]`), 'More dutch actions', ['Duplicate dutch', 'Delete dutch', 'Label / result'], 'Log dutch'],
+    [page.locator(`[data-dutch-id="${d}"]`), 'More dutch actions', ['Duplicate dutch', 'Delete dutch', 'Label / result', 'Mark no brainer'], 'Log dutch'],
     [page.locator(`[data-bet-id="${single.id}"]`), 'More actions', ['Duplicate', 'Delete'], 'New bet'],
   ] as const) {
     await row.hover();

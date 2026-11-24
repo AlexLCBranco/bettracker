@@ -22,7 +22,7 @@ import { comboHits, dutchHits, missesTitle } from '@/lib/hits';
 import { tidyText } from '@/lib/tidy';
 import { DutchSettleButtons } from './DutchSettle';
 import { GameTarget } from './GameEditor';
-import { isNoBrainer, NB_TINT, NoBrainerButton, NoBrainerChip } from './NoBrainer';
+import { isNoBrainer, NB_TINT, NoBrainerButton, NoBrainerChip, useToggleNoBrainer } from './NoBrainer';
 import { linksForBets, siteMark, siteName, type GameLink } from '@/lib/gameLinks';
 import { betTone, groupTone, resultTone } from '@/lib/tone';
 import { TONE_BADGE, TONE_EDGE, TONE_TEXT } from './tone';
@@ -63,7 +63,7 @@ function TierChip({ odds, banked }: { odds: number; banked?: boolean }) {
 }
 
 /** BT-26: rows as tall as they need; the selected row (keyboard settling) is tinted. */
-const ROW = 'group scroll-mt-28 border-b border-zinc-900 hover:bg-zinc-900/50 data-[selected]:bg-emerald-500/[0.07]';
+const ROW = 'group scroll-mt-28 border-b border-zinc-900 hover:bg-zinc-900/50 data-[selected]:bg-emerald-500/[0.07] data-[multi]:bg-sky-500/[0.12] data-[multi]:hover:bg-sky-500/[0.16]';
 const COLS = 7;
 /** The muted second line of the Bet cell: one line, cut with "…" (full text on hover). */
 const SUB = 'text-[11px] leading-5 text-zinc-500';
@@ -203,6 +203,8 @@ interface TableProps {
   annotate(key: string | null): void;
   /** BT-29: bank, add leg, close. */
   rollover: Rollover;
+  /** BT-45: the rows selected together (marquee, Ctrl / Shift+click), tinted apart from the keyboard-selected row. */
+  multi?: ReadonlySet<string>;
   empty?: string;
 }
 
@@ -212,7 +214,7 @@ interface TableProps {
  * two lines: the bet text (wraps, never cut) and a muted line with game, sport, market, book and tags. A dutch is a
  * summary row with one such block per split under it. A click selects a row (keyboard settling), a double click edits.
  */
-export function BetTable({ days, selected, select, settle, annotating, annotate, rollover, empty = 'No bets yet. Type one in the quick-add line above.' }: TableProps) {
+export function BetTable({ days, selected, select, settle, annotating, annotate, rollover, multi = NO_KEYS, empty = 'No bets yet. Type one in the quick-add line above.' }: TableProps) {
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [unitsView] = useUnitsView();
   const toggle = (id: string) =>
@@ -225,7 +227,7 @@ export function BetTable({ days, selected, select, settle, annotating, annotate,
 
   if (!days.length) return <p className="py-10 text-center text-sm text-zinc-500">{empty}</p>;
   const th = 'sticky top-14 z-[2] bg-zinc-950 px-2 py-2 text-[11px] font-medium text-zinc-500 shadow-[inset_0_-1px_0_rgb(39_39_42)]';
-  const row = { open, toggle, selected, select, settle, annotating, annotate, rollover };
+  const row = { open, toggle, selected, multi, select, settle, annotating, annotate, rollover };
 
   return (
     <div data-testid="bet-table-scroll">
@@ -292,6 +294,8 @@ export function BetTable({ days, selected, select, settle, annotating, annotate,
   );
 }
 
+const NO_KEYS: ReadonlySet<string> = new Set();
+
 const OUTCOME_LABEL: Record<GroupOutcome, string> = { pending: 'Pending', won: 'Won', lost: 'Lost', even: 'Even' };
 
 /** The dutch's bets' shared value for a field, "Mixed" when they differ, "" when none is set. */
@@ -300,7 +304,7 @@ function shared(bets: Bet[], pick: (b: Bet) => string) {
   return vals.length === 1 ? vals[0]! : vals.length > 1 ? 'Mixed' : '';
 }
 
-type RowProps = { open: Set<string>; toggle(id: string): void; selected: string | null; select(key: string): void; settle: Settler; annotating: string | null; annotate(key: string | null): void; rollover: Rollover };
+type RowProps = { open: Set<string>; toggle(id: string): void; selected: string | null; multi: ReadonlySet<string>; select(key: string): void; settle: Settler; annotating: string | null; annotate(key: string | null): void; rollover: Rollover };
 
 /** BT-27: "+ label / result", faint, on row hover (T on the selected row does the same). */
 function AnnotateButton({ onClick }: { onClick(): void }) {
@@ -320,7 +324,7 @@ function AnnotateButton({ onClick }: { onClick(): void }) {
   );
 }
 
-function DutchGroup({ bets, dutchId, open, toggle, selected, select, settle, annotating, annotate, rollover }: { bets: Bet[]; dutchId: string } & RowProps) {
+function DutchGroup({ bets, dutchId, open, toggle, selected, multi, select, settle, annotating, annotate, rollover }: { bets: Bet[]; dutchId: string } & RowProps) {
   const { removeDutch, openDutch, names: nameCasing, gameLinks } = useApp();
   const s = dutchSummary(bets);
   // BT-38: the units view, when every split has a unit size
@@ -344,13 +348,14 @@ function DutchGroup({ bets, dutchId, open, toggle, selected, select, settle, ann
   const label = sharedLabel(bets);
   // BT-44: the whole dutch is a no brainer
   const nb = isNoBrainer(bets);
+  const toggleNB = useToggleNoBrainer();
   const annotateHere = () => {
     select(key);
     annotate(key);
   };
   return (
     <>
-      <tr className={ROW} data-testid="dutch-row" data-dutch-id={dutchId} data-key={key} data-selected={isSel || undefined} data-tone={tone} data-money={money} onClick={() => select(key)}>
+      <tr className={ROW} data-testid="dutch-row" data-dutch-id={dutchId} data-key={key} data-selected={isSel || undefined} data-multi={multi.has(key) || undefined} data-tone={tone} data-money={money} onClick={() => select(key)}>
         <td className={`${TONE_EDGE[tone]}`} />
         <td className={`${CELL} ${nb ? NB_TINT : ''}`} data-no-brainer={nb || undefined}>
           <div className={`${TEXT} flex items-center gap-1.5`} data-testid="bet-text" title={names}>
@@ -395,7 +400,8 @@ function DutchGroup({ bets, dutchId, open, toggle, selected, select, settle, ann
               <DutchSettleButtons dutchId={dutchId} bets={bets} onSettle={(a) => settle.settleDutch(dutchId, bets, a)} />
             )}
             <span className={HOVER_ONLY} data-testid="row-actions">
-              <NoBrainerButton bets={bets} />
+              {/* a pending dutch shows its settle buttons: its no brainer toggle is in the ⋯ menu (and X) */}
+              {!pending.length && <NoBrainerButton bets={bets} />}
               {!pending.length && <AnnotateButton onClick={annotateHere} />}
               <IconButton label="Edit dutch" onClick={() => openDutch(editDutchDraft(bets), undefined, { dutchId, bets })}>
                 ✎
@@ -413,6 +419,7 @@ function DutchGroup({ bets, dutchId, open, toggle, selected, select, settle, ann
                     },
                   },
                   { label: 'Label / result', icon: '#', onClick: annotateHere },
+                  { label: nb ? 'Remove no brainer' : 'Mark no brainer', icon: '★', onClick: () => void toggleNB(bets) },
                 ]}
               />
             </span>
@@ -430,6 +437,7 @@ function DutchGroup({ bets, dutchId, open, toggle, selected, select, settle, ann
           settle={settle}
           annotating={annotating}
           annotate={annotate}
+          multi={multi}
           rollover={rollover}
           split={{
             group: bets,
@@ -454,7 +462,7 @@ const CHAIN_LABEL: Record<ChainOutcome, string> = { pending: 'Pending', open: 'O
  * first stake) with its bets under it, like a dutch's splits. An open shot shows what is banked and the odds the next
  * bet needs, with Add leg and Close.
  */
-function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, select, settle, annotating, annotate, rollover }: { bets: Bet[]; rolloverId: string } & RowProps) {
+function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, multi, select, settle, annotating, annotate, rollover }: { bets: Bet[]; rolloverId: string } & RowProps) {
   const { names: nameCasing, remove, undoGroup, bets: allBets } = useApp();
   // BT-39: a shot banked from a dutch split counts the whole dutch's stake in its odds
   const s = chainSummary(raw, allBets);
@@ -482,7 +490,7 @@ function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, select, 
   const router = useRouter();
   return (
     <>
-      <tr className={ROW} data-testid="rollover-row" data-rollover-id={rolloverId} data-key={key} data-selected={isSel || undefined} data-tone={tone} data-money={money} data-outcome={s.outcome} onClick={() => select(key)}>
+      <tr className={ROW} data-testid="rollover-row" data-rollover-id={rolloverId} data-key={key} data-selected={isSel || undefined} data-multi={multi.has(key) || undefined} data-tone={tone} data-money={money} data-outcome={s.outcome} onClick={() => select(key)}>
         <td className={TONE_EDGE[tone]} />
         <td className={CELL}>
           <div className={`${TEXT} flex items-center gap-1.5`} data-testid="bet-text" title={names}>
@@ -657,6 +665,7 @@ function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, select, 
           settle={settle}
           annotating={annotating}
           annotate={annotate}
+          multi={multi}
           rollover={rollover}
           link={{ index: i, last: i === bets.length - 1 && !open.has(b.id), chainKey: key, chain: bets, ladder, current: ladder && (b.result === 'pending' || (isOpen && i === bets.length - 1)) }}
         />
@@ -691,7 +700,7 @@ interface Split {
   pick: { n: number; on: boolean; toggle(): void } | null;
 }
 
-function BetRow({ b, open, toggle, selected, select, settle, split, link, annotating, annotate, rollover }: { b: Bet; split?: Split; link?: ChainLink } & RowProps) {
+function BetRow({ b, open, toggle, selected, multi, select, settle, split, link, annotating, annotate, rollover }: { b: Bet; split?: Split; link?: ChainLink } & RowProps) {
   const { update, remove, openEdit, openNew, names, bets: allBets, gameLinks } = useApp();
   // BT-38: amounts in units when the view is on and the bet has a unit size
   const [unitsView] = useUnitsView();
@@ -708,6 +717,7 @@ function BetRow({ b, open, toggle, selected, select, settle, split, link, annota
   const key = `bet:${b.id}`;
   const indent = nested || !!link;
   const isSel = selected === key || (nested && selected === split.dutchKey) || (!!link && selected === link.chainKey);
+  const inMulti = multi.has(key) || (nested && multi.has(split.dutchKey)) || (!!link && multi.has(link.chainKey));
   // BT-29: Bank on a won or positive cash-out bet or dutch split (in a shot only its last bet, once closed)
   const bankable = rollover.canBank(b);
   // BT-35: a won plain bet can become rung 1 of a ladder
@@ -738,7 +748,7 @@ function BetRow({ b, open, toggle, selected, select, settle, split, link, annota
   };
   return (
     <>
-      <tr className={ROW} data-testid="bet-row" data-bet-id={b.id} data-key={key} data-nested={nested || undefined} data-split-of={nested ? split.dutchKey.slice(6) : undefined} data-selected={isSel || undefined} data-tone={tone} data-money={b.money} onClick={() => select(key)}>
+      <tr className={ROW} data-testid="bet-row" data-bet-id={b.id} data-key={key} data-nested={nested || undefined} data-split-of={nested ? split.dutchKey.slice(6) : undefined} data-selected={isSel || undefined} data-multi={inMulti || undefined} data-tone={tone} data-money={b.money} onClick={() => select(key)}>
         <td className={`relative px-1 align-top ${TONE_EDGE[tone]}`}>
           {nested && <Connector last={split.last} />}
           {link && <Connector last={link.last} />}

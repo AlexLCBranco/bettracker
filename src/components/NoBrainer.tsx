@@ -34,7 +34,7 @@ export function NoBrainerButton({ bets }: { bets: Bet[] }) {
   const on = isNoBrainer(bets);
   return (
     <button
-      className={`whitespace-nowrap rounded px-1 py-0.5 text-[11px] hover:bg-zinc-800 ${on ? 'text-violet-300 hover:text-white' : 'text-zinc-500 hover:text-white'}`}
+      className={`whitespace-nowrap rounded px-0.5 py-0.5 text-[11px] hover:bg-zinc-800 ${on ? 'text-violet-300 hover:text-white' : 'text-zinc-500 hover:text-white'}`}
       title={on ? 'Remove the no brainer mark (X)' : 'Mark as a no brainer (X)'}
       aria-label={on ? 'Remove no brainer' : 'Mark no brainer'}
       aria-pressed={on}

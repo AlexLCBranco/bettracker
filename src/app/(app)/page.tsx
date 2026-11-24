@@ -4,6 +4,9 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Fragment, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useApp } from '@/components/AppProvider';
 import { useToggleNoBrainer } from '@/components/NoBrainer';
+import { BulkBar } from '@/components/BulkBar';
+import { useMarquee } from '@/components/useMarquee';
+import { rangeKeys, selectedRows, toggleKey, topKey } from '@/lib/selection';
 import { Autocomplete } from '@/components/Autocomplete';
 import { BetTable } from '@/components/BetTable';
 import { DateField } from '@/components/BetFormModal';
@@ -53,6 +56,9 @@ const HELP: [string, string][] = [
   ['Ctrl+Z or Z', 'Undo the last change: add, edit, delete, settle, ladder or rollover step'],
   ['N', 'New bet'],
   ['M', 'Insert money (bankroll)'],
+  ['Drag', 'Select several rows: drag a box over them (start outside the text)'],
+  ['Ctrl+click', 'Add or remove a row; Shift+click selects a range'],
+  ['Ctrl+A', 'Select every row shown; Esc clears'],
   ['?', 'Show these keys'],
 ];
 
@@ -126,6 +132,52 @@ function Bets() {
   const rollover = useRollover(settle);
   const toggleNoBrainer = useToggleNoBrainer();
 
+  // BT-45: several rows selected at once (drag, Ctrl / Shift+click, Ctrl+A); the single keyboard row stays as it was
+  const [multiRaw, setMulti] = useState<ReadonlySet<string>>(new Set());
+  const multi = useMemo(() => new Set([...multiRaw].filter((k) => keys.includes(k))), [multiRaw, keys]);
+  const multiActive = multi.size >= 2;
+  const allRows = useMemo(() => days.flatMap((d) => d.rows), [days]);
+  const multiRows = useMemo(() => selectedRows(allRows, multi), [allRows, multi]);
+  const anchor = useRef<string | null>(null);
+  const dragBase = useRef<ReadonlySet<string>>(new Set());
+  const tableBox = useRef<HTMLElement>(null);
+  const lineToRow = (lineKey: string) => topKey(keys, lineKey, (id) => byId.get(id));
+  const marquee = useMarquee(tableBox, (lines, additive, first) => {
+    if (first) dragBase.current = additive ? multi : new Set();
+    const picked = lines.map(lineToRow).filter((k): k is string => !!k);
+    setMulti(new Set([...dragBase.current, ...picked]));
+  });
+  const onTableClick = (e: React.MouseEvent) => {
+    const t = e.target as HTMLElement;
+    const tr = t.closest<HTMLElement>('tr[data-key]');
+    if (!tr) return;
+    const k = lineToRow(tr.dataset.key!);
+    if (!k) return;
+    const add = e.ctrlKey || e.metaKey;
+    if ((add || e.shiftKey) && !t.closest('input, textarea, select, button, a, [role=button]')) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.shiftKey) setMulti(new Set([...(add ? multi : []), ...rangeKeys(keys, anchor.current ?? navKey(selected), k)]));
+      else setMulti(toggleKey(multi.size ? multi : new Set(selected ? [navKey(selected)!] : []), k));
+      anchor.current = k;
+      return;
+    }
+    // a plain click selects one row again
+    anchor.current = k;
+    if (multi.size) setMulti(new Set());
+  };
+  // a click on empty space (outside the table rows and the bar) clears the selection
+  useEffect(() => {
+    if (!multi.size) return;
+    const away = (e: MouseEvent) => {
+      const t = e.target as HTMLElement;
+      if (t.closest('tr[data-key], [data-testid=bulk-bar], [role=dialog], [role=menu]')) return;
+      setMulti(new Set());
+    };
+    document.addEventListener('mousedown', away);
+    return () => document.removeEventListener('mousedown', away);
+  }, [multi.size]);
+
   const [help, setHelp] = useState(false);
   // BT-27: the row whose label / actual editor is open; it never opens on its own (settling stays W / L / V)
   const [annotating, setAnnotating] = useState<string | null>(null);
@@ -137,6 +189,11 @@ function Bets() {
       if (isUndoKey(e)) {
         e.preventDefault();
         return settle.undo();
+      }
+      // BT-45: Ctrl+A selects every row in the current tab and filters
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        return setMulti(new Set(keys));
       }
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
@@ -150,9 +207,12 @@ function Bets() {
       }
       if (k === 'Escape') {
         if (help) setHelp(false);
+        else if (multi.size) setMulti(new Set());
         else setPicked(null);
         return;
       }
+      // BT-45: while several rows are selected the single-row keys do nothing, so a stray key cannot settle many bets
+      if (multiActive && k !== 'z') return;
       if (k === 'z') {
         e.preventDefault();
         return settle.undo();
@@ -374,9 +434,10 @@ function Bets() {
         )}
       </div>
 
-      <section className="card px-2 pb-2">
+      <section ref={tableBox} className="card px-2 pb-2" onClickCapture={onTableClick}>
         {loaded ? (
           <BetTable
+            multi={multi}
             days={days}
             selected={selected}
             select={setPicked}
@@ -390,6 +451,9 @@ function Bets() {
           <p className="py-10 text-center text-sm text-zinc-500">Loading…</p>
         )}
       </section>
+      {marquee && <div aria-hidden className="pointer-events-none fixed z-40 rounded-sm border border-sky-400/70 bg-sky-400/10" style={marquee} data-testid="marquee" />}
+      {multiActive && <BulkBar rows={multiRows} clear={() => setMulti(new Set())} fmt={(n, signed) => formatMoney(n, scope, signed)} />}
+      {multiActive && <div aria-hidden className="h-16" />}
     </div>
   );
 }
