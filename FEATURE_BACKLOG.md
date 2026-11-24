@@ -24,27 +24,6 @@ Words the owner uses (keep them in the UI):
   works in volume. Before, it was done in Excalidraw with AIs inventing the scheme per batch, the history lived only
   in the bookmaker's app and vanished, and both building and following 100 PPs was the part that broke.
 
-### BT-48 — Day header opens that day's NBA Slate and football day
-**In short:** Next to each day in the Bets table, two small marks open calendarkit's NBA Slate and footykit's games for that same day in a new tab.
-
-From the owner, 2026-11-24: "the option of seeing the calendarkit slate and the footykit of a specific day".
-Both apps already open on a given day from the address (checked in their repos on 2026-11-24), so nothing is
-needed from them:
-- calendarkit: `<calendarkit address>?view=league&layout=slate&on=YYYY-MM-DD` (`dayLinkUrl` in its `src/App.tsx`;
-  the day is the NBA / US Eastern date).
-- footykit: `<footykit address>?date=YYYY-MM-DD` (its default day view, `pageSearch` in `src/components/page.ts`).
-- Addresses: calendarkit is served at `https://gauntlet-home.vercel.app/calendar` and footykit under `/football`
-  (their `vercel.json` rewrites). Before shipping, open both built links once and confirm they land on the right
-  day; keep the two base addresses in one place in the code.
-
-- Where: each day header of the Bets table (`formatDayHeader`, `src/lib/dates.ts`) gets two small marks, "NBA" and
-  "Football", each a normal link opening in a new tab (`rel="noopener noreferrer"`), with a tooltip saying what it
-  opens ("NBA Slate, 24/11"). The day sent is the header's own date.
-- Shown on every day: bettracker does not know which days have games. No change to row height or alignment.
-- When BT-46 (gauntlet whiteboard page) is built, its mark sits in the same group, same style.
-- Tests: unit tests for both addresses built from a date; e2e that a day header has both marks with the right
-  href. No test opens the other sites.
-
 ## Held (needs the owner's "go"; never built from "build the backlog")
 
 ### BT-46 — Day header opens that day's gauntlet whiteboard page

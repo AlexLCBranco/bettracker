@@ -7,6 +7,7 @@ import { formatDate, formatDayHeader, formatDayMonth, parseDateInput } from '@/l
 import { betLabel, duplicateDutchDraft, dutchSummary, editDutchDraft, rowBets, rowKey, type GroupOutcome } from '@/lib/dutch';
 import { DescriptionMark, DescriptionRow, type DescriptionControl } from './Description';
 import { hasDescription } from '@/lib/descriptions';
+import { footballDayUrl, nbaSlateUrl } from '@/lib/dayLinks';
 import { duplicateForm } from '@/lib/form';
 import { formatMoney, formatOdds, MONEY_SYMBOL, oddsFromText, parseNumber, profit, profitMoney, winReturn, type MoneyScope } from '@/lib/money';
 import { MONEY_TEXT, MONEY_TITLE } from './moneyStyle';
@@ -264,8 +265,11 @@ export function BetTable({ days, selected, select, settle, annotating, annotate,
               <tr className="border-b border-zinc-800 bg-zinc-900/70" data-testid="day-header" data-date={d.date}>
                 <td colSpan={COLS} className="px-2 py-1.5">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="font-semibold text-zinc-200" data-testid="day-label">
-                      {formatDayHeader(d.date)}
+                    <span className="flex items-center gap-2">
+                      <span className="font-semibold text-zinc-200" data-testid="day-label">
+                        {formatDayHeader(d.date)}
+                      </span>
+                      <DayLinks date={d.date} />
                     </span>
                     <span className="tabular-nums text-zinc-400" data-testid="day-totals">
                       {betsText(d.count)}
@@ -299,6 +303,22 @@ export function BetTable({ days, selected, select, settle, annotating, annotate,
         </tbody>
       </table>
     </div>
+  );
+}
+
+/** BT-48: this day in calendarkit (NBA Slate) and footykit, each in a new tab. Shown on every day. */
+function DayLinks({ date }: { date: string }) {
+  const dm = formatDate(date).slice(0, 5);
+  const cls = 'rounded px-1 text-[10px] font-semibold leading-4 text-zinc-500 hover:bg-zinc-800 hover:text-white';
+  return (
+    <span className="inline-flex items-center gap-0.5" data-testid="day-links">
+      <a className={cls} href={nbaSlateUrl(date)} target="_blank" rel="noopener noreferrer" title={`NBA Slate, ${dm}`} data-testid="day-link-nba" onClick={(e) => e.stopPropagation()}>
+        NBA
+      </a>
+      <a className={cls} href={footballDayUrl(date)} target="_blank" rel="noopener noreferrer" title={`Football, ${dm}`} data-testid="day-link-football" onClick={(e) => e.stopPropagation()}>
+        Football
+      </a>
+    </span>
   );
 }
 

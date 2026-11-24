@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-24
+- BT-48 — Day header opens that day's NBA Slate and football day (v0.42.0)
+  Each day header in the Bets table has small "NBA" and "Football" marks that open calendarkit's NBA Slate and footykit's games for that day in a new tab.
 - BT-47 — See a bet's description without opening the form (v0.41.0)
   A bet (or dutch, rollover, ladder) with a description shows a small ¶ mark: hovering it peeks at the Before / After text, a click or D opens both texts under the row to read and edit (a click elsewhere saves, Esc discards), and the "Descriptions" switch above the table opens every row that has one.
 - BT-45 — Marquee select and bulk actions on the Bets table (v0.40.0)
