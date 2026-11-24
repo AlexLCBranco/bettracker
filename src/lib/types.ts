@@ -62,12 +62,20 @@ export interface Bet {
    * goal, and whether the money was taken (closed). Null on everything else, shots included.
    */
   ladder: Ladder | null;
+  /**
+   * BT-37: on a cashed-out bet, what would have happened without the cash-out: 'won' / 'lost', null = not set. Only
+   * kept while the result is cash-out.
+   */
+  wouldHave: WouldHave | null;
   /** BT-27: one short free-text label ("lost by one"), shown uppercase as a chip; empty = none. */
   label: string;
   /** ISO timestamps, used for "most recent" ordering. */
   createdAt: string;
   updatedAt: string;
 }
+
+export const WOULD_HAVE = ['won', 'lost'] as const;
+export type WouldHave = (typeof WOULD_HAVE)[number];
 
 /** BT-35: a ladder's goal (either can be empty) and whether the money was taken. */
 export interface Ladder {

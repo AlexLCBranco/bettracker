@@ -25,34 +25,6 @@ Words the owner uses (keep them in the UI):
   in the bookmaker's app and vanished, and both building and following 100 PPs was the part that broke.
 
 
-### BT-37 — "Woulda won / woulda lost" on a cashed-out bet
-**In short:** On a bet already cashed out, W or L records what would have happened, and the pill and Analytics show what the cash-out left on the table or saved.
-
-Agreed with the owner on 2026-11-24.
-
-- **Data:** a new field of its own on the bet (not the free-text label, so it can be counted): would-have `won` /
-  `lost` / empty. Only meaningful when the result is cash-out; cleared if the result is changed to anything else.
-- **Input, no new button:** on a selected row whose result is cash-out, **W** sets "woulda won" and **L** sets
-  "woulda lost" (today those keys do nothing there); the same key again clears it. Mouse: hovering the Cash-out pill
-  shows two small dim "W" / "L" letters that do the same. Z undoes it. Works the same on a cashed-out dutch split
-  and rollover bet.
-- **Display, alignment first (owner, 2026-11-24: keeping the table aligned is very important):** the Cash-out pill
-  keeps exactly today's height and width, and no row gets taller or wider because of this item. The would-have shows
-  as a chip in the existing label / result area of the row (same style as the BT-27 label chip, next to a label if
-  there is one). Example: stake 100 @ 1.88 cashed out for 145:
-  - woulda won: chip `WOULDA WON · LEFT H$ 43,00` in amber. left = profit if won − profit of the cash-out (88 − 45).
-  - woulda lost: chip `WOULDA LOST · SAVED H$ 145,00` in green. saved = profit of the cash-out − profit if lost (45 − (−100)).
-  - Use the existing profit functions in `src/lib/money.ts` for both sides so bonus-money bets come out right.
-  - No "…" cut text. If label + chip do not fit the area, the figure moves to the chip's tooltip (`WOULDA WON`)
-    rather than breaking the columns.
-- **Not forgotten:** a cash-out with no would-have set shows a faint "?" inside its pill, without changing the pill's size (tooltip: "W / L: what would
-  have happened").
-- **Analytics:** one "Cash-out verdict" figure: sum of saved − sum of left over the cash-outs in the current filter,
-  with the count "n woulda won · n woulda lost · n not set". No cash-outs with a would-have → "-".
-- **Not automatic:** never derive it from the free-text actual result ("111-112", "24 pts").
-- **Tests:** unit tests for left / saved (real, hypothetical, bonus money); e2e: cash out a bet, W, check the pill
-  line, W again clears, L, check Analytics verdict.
-
 ### BT-38 — Units: type a stake as money or as units ("1u"), and view everything in units
 **In short:** A stake can be typed as `100` or `1u`, each money type has a unit size, and a money / units toggle shows stakes, profit and Analytics in units.
 

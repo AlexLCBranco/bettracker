@@ -27,6 +27,7 @@ export function bet(over: Partial<Bet> = {}): Bet {
     rolloverId: null,
     banked: false,
     ladder: null,
+    wouldHave: null,
     money: 'real',
     label: '',
     createdAt: '2026-11-20T12:00:00.000Z',

@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import { betLabel } from '@/lib/dutch';
 import { beforeOf, betResultChanges, legResultChanges, settleDutchRow, type DutchRowAction, type SettleChange, type SettleStep } from '@/lib/settle';
-import { RESULT_LABEL, type Bet, type Result } from '@/lib/types';
+import { RESULT_LABEL, type Bet, type Result, type WouldHave } from '@/lib/types';
+import { nextWouldHave } from '@/lib/woulda';
 import { useApp } from './AppProvider';
 
 export interface Settler {
@@ -18,6 +19,8 @@ export interface Settler {
   canUndo: boolean;
   /** The dutch whose "Undo" button shows (8 s after it was settled). */
   undoShown: string | null;
+  /** BT-37: W / L on a cash-out: sets what would have happened, or clears it when pressed again (one undo step). */
+  wouldHave(b: Bet, pressed: WouldHave): void;
   /** The bet whose cash-out amount box is open. */
   cashoutFor: string | null;
   startCashout(betId: string): void;
@@ -48,7 +51,7 @@ export function useSettle({ settled, restored }: { settled(key: string): void; r
   }, [undoShown, lastUndo]);
 
   const apply = (changes: SettleChange[]) => {
-    for (const c of changes) void update(c.id, { result: c.result, cashout: c.cashout, ...(c.legs ? { legs: c.legs } : {}) }).catch(() => undefined);
+    for (const c of changes) void update(c.id, { result: c.result, cashout: c.cashout, ...(c.legs ? { legs: c.legs } : {}), ...(c.wouldHave !== undefined ? { wouldHave: c.wouldHave } : {}) }).catch(() => undefined);
   };
   const push = (step: SettleStep, key: string, label: string) => {
     apply(step.changes);
@@ -96,6 +99,13 @@ export function useSettle({ settled, restored }: { settled(key: string): void; r
       recordUndo({ label, key, revert });
       notify(label);
       restored(key);
+    },
+    wouldHave(b, pressed) {
+      if (b.result !== 'cash-out') return;
+      const next = nextWouldHave(b.wouldHave, pressed);
+      const name = b.betText || betLabel(b) || 'bet';
+      void update(b.id, { wouldHave: next }, { label: next ? `Woulda ${next}: ${name}` : `Would-have cleared: ${name}`, key: `bet:${b.id}` }).catch(() => undefined);
+      notify(next ? `Woulda ${next}: ${name}` : `Would-have cleared: ${name}`);
     },
     canUndo: !!lastUndo,
     undoShown,

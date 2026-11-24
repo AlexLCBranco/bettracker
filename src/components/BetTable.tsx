@@ -10,7 +10,8 @@ import { formatMoney, formatOdds, MONEY_SYMBOL, oddsFromText, parseNumber, profi
 import { MONEY_TEXT, MONEY_TITLE } from './moneyStyle';
 import { cashoutLabel, cashoutLine, readCashout, type CashoutMode } from '@/lib/cashout';
 import { useCashoutMode } from './useCashoutMode';
-import { RESULT_LABEL, RESULTS, type Bet, type BetInput, type Leg, type Result } from '@/lib/types';
+import { RESULT_LABEL, RESULTS, type Bet, type BetInput, type Leg, type Result, type WouldHave } from '@/lib/types';
+import { WouldaChip } from './Woulda';
 import type { Field } from '@/lib/autocomplete';
 import { useApp } from './AppProvider';
 import { Autocomplete } from './Autocomplete';
@@ -673,7 +674,7 @@ function BetRow({ b, open, toggle, selected, select, settle, split, link, annota
   const soloActual = solo ? (leg0?.actual ?? '') : '';
   const group = split?.group ?? [b];
   const losses = losingLegs(b, split?.group ?? []);
-  const flow = !!(chip || soloActual || link || b.banked);
+  const flow = !!(chip || soloActual || link || b.banked || b.wouldHave);
   const annotateHere = () => {
     select(key);
     annotate(key);
@@ -735,6 +736,7 @@ function BetRow({ b, open, toggle, selected, select, settle, split, link, annota
                 </span>
               )}
               {chip && <LabelChip label={chip} />}
+              <WouldaChip bet={b} />
               {(link || b.banked) && !b.ladder && <TierChip odds={b.dutchId && (!link || link.index === 0) ? firstFactor(b, allBets) : b.odds} banked={b.banked && (link ? link.index === link.chain.length - 1 : rollover.chainOf(b).length === 1)} />}
             </div>
           </div>
@@ -779,7 +781,10 @@ function BetRow({ b, open, toggle, selected, select, settle, split, link, annota
           <ProfitText value={profit(b)} pending={pending} money={profitMoney(b.money)} />
         </td>
         <td className={CELL} data-col="result">
-          <ResultCell bet={b} title={hits ? missesTitle(hits) : undefined} onPick={(r) => settle.settleBet(b, r, null, group)} />
+          <ResultCell bet={b} title={hits ? missesTitle(hits) : undefined} onPick={(r) => settle.settleBet(b, r, null, group)} onWouldHave={(w) => {
+            select(key);
+            settle.wouldHave(b, w);
+          }} />
         </td>
         <td className={ACTIONS}>
           {settle.cashoutFor === b.id ? (
@@ -1101,7 +1106,7 @@ function LegResult({ leg, bet, n, onPick }: { leg: Leg; bet: Bet; n: number; onP
   );
 }
 
-function ResultCell({ bet, onPick, title }: { bet: Bet; onPick(r: Result): void; title?: string }) {
+function ResultCell({ bet, onPick, title, onWouldHave }: { bet: Bet; onPick(r: Result): void; title?: string; onWouldHave?(w: WouldHave): void }) {
   const [editing, setEditing] = useState(false);
   if (editing)
     return (
@@ -1128,18 +1133,44 @@ function ResultCell({ bet, onPick, title }: { bet: Bet; onPick(r: Result): void;
   const cashout = bet.result === 'cash-out' && bet.cashout != null ? cashoutLabel(bet.cashout, bet.stake, bet.odds, bet.money) : '';
   if (cashout) {
     const amount = cashout.slice('Cash-out · '.length);
+    // BT-37: the pill keeps its size: the "?" (no would-have yet) sits in its padding, W / L show beside it on hover
     return (
-      <button
-        className={`rounded-xl px-2 py-0.5 text-left text-xs font-medium leading-4 ${TONE_BADGE[betTone(bet)]}`}
-        onClick={() => setEditing(true)}
-        title={[cashout, title, 'click to change'].filter(Boolean).join(' · ')}
-        data-testid="result"
-      >
-        <span className="block whitespace-nowrap">{RESULT_LABEL[bet.result]}</span>
-        <span className="block text-[10px] font-normal tabular-nums" data-testid="cashout-amount">
-          {amount}
-        </span>
-      </button>
+      <span className="group/co relative inline-block">
+        <button
+          className={`relative rounded-xl px-2 py-0.5 text-left text-xs font-medium leading-4 ${TONE_BADGE[betTone(bet)]}`}
+          onClick={() => setEditing(true)}
+          title={[cashout, title, 'click to change'].filter(Boolean).join(' · ')}
+          data-testid="result"
+        >
+          <span className="block whitespace-nowrap">{RESULT_LABEL[bet.result]}</span>
+          <span className="block text-[10px] font-normal tabular-nums" data-testid="cashout-amount">
+            {amount}
+          </span>
+          {!bet.wouldHave && (
+            <span className="absolute right-[3px] top-[1px] text-[9px] font-semibold leading-3 opacity-50" title="W / L: what would have happened" data-testid="woulda-unset">
+              ?
+            </span>
+          )}
+        </button>
+        {onWouldHave && (
+          <span className="pointer-events-none absolute left-full top-1/2 z-10 flex -translate-y-1/2 gap-px pl-0.5 opacity-0 group-hover/co:pointer-events-auto group-hover/co:opacity-100" data-testid="woulda-keys">
+            {(['won', 'lost'] as const).map((w) => (
+              <button
+                key={w}
+                className={`rounded px-0.5 text-[10px] font-bold leading-4 hover:bg-zinc-800 ${bet.wouldHave === w ? 'text-zinc-200' : 'text-zinc-500'}`}
+                title={bet.wouldHave === w ? `Clear "woulda ${w}" (${w === 'won' ? 'W' : 'L'})` : `Woulda ${w} (${w === 'won' ? 'W' : 'L'})`}
+                aria-label={`Woulda ${w}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onWouldHave(w);
+                }}
+              >
+                {w === 'won' ? 'W' : 'L'}
+              </button>
+            ))}
+          </span>
+        )}
+      </span>
     );
   }
   return (

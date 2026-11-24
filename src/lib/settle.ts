@@ -4,7 +4,7 @@
 
 import { isLost, legKey, withKnownLegs } from './actuals';
 import { groupRows, isLeg, sharedLegNames } from './dutch';
-import type { Bet, Leg, Result } from './types';
+import type { Bet, Leg, Result, WouldHave } from './types';
 
 export type QueueItem =
   | { kind: 'bet'; key: string; bet: Bet }
@@ -74,6 +74,8 @@ export interface SettleChange {
   cashout: number | null;
   /** The bet's legs with new results, when the settle changes them (and, in an undo entry, what they were). */
   legs?: Omit<Leg, 'id'>[];
+  /** BT-37: in an undo entry, the would-have a cash-out had (a new result clears it; the undo puts it back). */
+  wouldHave?: WouldHave | null;
 }
 
 const plainLegs = (b: Bet): Omit<Leg, 'id'>[] => b.legs.map((l) => ({ sport: l.sport, game: l.game, market: l.market, selection: l.selection, odds: l.odds, result: l.result, actual: l.actual }));
@@ -270,7 +272,7 @@ export function legsForResult(b: Bet, result: Result): Omit<Leg, 'id'>[] | undef
 export function beforeOf(bets: Bet[], changes: SettleChange[]): SettleChange[] {
   return changes.flatMap((c) => {
     const b = bets.find((x) => x.id === c.id);
-    return b ? [{ id: b.id, result: b.result, cashout: b.cashout, ...(c.legs ? { legs: plainLegs(b) } : {}) }] : [];
+    return b ? [{ id: b.id, result: b.result, cashout: b.cashout, ...(c.legs ? { legs: plainLegs(b) } : {}), ...(b.wouldHave ? { wouldHave: b.wouldHave } : {}) }] : [];
   });
 }
 

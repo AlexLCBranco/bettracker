@@ -43,6 +43,7 @@ const SCHEMA = [
     rollover_id TEXT,
     banked INTEGER NOT NULL DEFAULT 0,
     ladder TEXT,
+    would_have TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   )`,
@@ -139,6 +140,8 @@ async function migrate(c: Client): Promise<void> {
   if (!cols.has('banked')) await c.execute('ALTER TABLE bets ADD COLUMN banked INTEGER NOT NULL DEFAULT 0');
   // BT-35: existing bets are no ladder (existing chains are shots)
   if (!cols.has('ladder')) await c.execute('ALTER TABLE bets ADD COLUMN ladder TEXT');
+  // BT-37: existing cash-outs have no would-have set
+  if (!cols.has('would_have')) await c.execute('ALTER TABLE bets ADD COLUMN would_have TEXT');
   const legCols = new Set((await c.execute('PRAGMA table_info(legs)')).rows.map((r) => String(r.name)));
   if (!legCols.has('actual')) await c.execute("ALTER TABLE legs ADD COLUMN actual TEXT NOT NULL DEFAULT ''");
   await repairLegsOnce(c);
@@ -184,6 +187,7 @@ function rowToBet(r: Row, legs: Leg[]): Bet {
     rolloverId: r.rollover_id == null || r.rollover_id === '' ? null : s(r.rollover_id),
     banked: Number(r.banked ?? 0) === 1,
     ladder: readLadder(r.ladder),
+    wouldHave: r.would_have === 'won' || r.would_have === 'lost' ? r.would_have : null,
     createdAt: s(r.created_at),
     updatedAt: s(r.updated_at),
   });
@@ -244,9 +248,9 @@ function writeStatements(bet: Bet): InStatement[] {
   return [
     {
       sql: `INSERT OR REPLACE INTO bets (id, book, placed_date, game_date, type, situation, stake, odds, result, cashout,
-            pre_analysis, post_analysis, bet_text, dutch_id, money, label, rollover_id, banked, ladder, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+            pre_analysis, post_analysis, bet_text, dutch_id, money, label, rollover_id, banked, ladder, would_have, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       args: [bet.id, bet.book, bet.placedDate, bet.gameDate, bet.type, bet.situation, bet.stake, bet.odds, bet.result, bet.cashout,
-        bet.preAnalysis, bet.postAnalysis, bet.betText, bet.dutchId, bet.money, bet.label, bet.rolloverId, bet.banked ? 1 : 0, bet.ladder ? JSON.stringify(bet.ladder) : null, bet.createdAt, bet.updatedAt],
+        bet.preAnalysis, bet.postAnalysis, bet.betText, bet.dutchId, bet.money, bet.label, bet.rolloverId, bet.banked ? 1 : 0, bet.ladder ? JSON.stringify(bet.ladder) : null, bet.wouldHave, bet.createdAt, bet.updatedAt],
     },
     { sql: 'DELETE FROM legs WHERE bet_id = ?', args: [bet.id] },
     ...bet.legs.map((l, i) => ({
@@ -276,7 +280,7 @@ export async function createBets(inputs: BetInput[]): Promise<Bet[]> {
 
 const COLUMNS = {
   book: 'book', placedDate: 'placed_date', gameDate: 'game_date', type: 'type', situation: 'situation', stake: 'stake',
-  odds: 'odds', result: 'result', cashout: 'cashout', preAnalysis: 'pre_analysis', postAnalysis: 'post_analysis', betText: 'bet_text', dutchId: 'dutch_id', money: 'money', label: 'label', rolloverId: 'rollover_id', banked: 'banked', ladder: 'ladder',
+  odds: 'odds', result: 'result', cashout: 'cashout', preAnalysis: 'pre_analysis', postAnalysis: 'post_analysis', betText: 'bet_text', dutchId: 'dutch_id', money: 'money', label: 'label', rolloverId: 'rollover_id', banked: 'banked', ladder: 'ladder', wouldHave: 'would_have',
 } as const satisfies Partial<Record<keyof Bet, string>>;
 
 const sameLegs = (a: BetInput['legs'], b: Leg[]) =>

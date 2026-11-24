@@ -12,6 +12,7 @@ import { byMoney } from '@/lib/scope';
 import { useMoneyScope } from '@/components/Money';
 import { ProfitChart } from '@/components/ProfitChart';
 import { formatPercent } from '@/lib/stats';
+import { cashoutVerdict } from '@/lib/woulda';
 
 type SortKey = 'natural' | 'bets' | 'wagered' | 'profit' | 'roi' | 'winRate';
 
@@ -43,6 +44,8 @@ export default function AnalyticsPage() {
   const combos = useMemo(() => comboReport(bets), [bets]);
   const hits = useMemo(() => dutchHitReport(bets), [bets]);
   const ladders = useMemo(() => ladderReport(bets), [bets]);
+  const verdict = useMemo(() => cashoutVerdict(bets), [bets]);
+  const profitScope: MoneyScope = scope === 'bonus' ? 'real' : scope;
 
   if (!loaded) return <p className="py-10 text-center text-sm text-zinc-500">Loading…</p>;
 
@@ -59,6 +62,22 @@ export default function AnalyticsPage() {
       <section className="card p-5">
         <h2 className="mb-3 font-semibold">Performance Over Time</h2>
         <ProfitChart bets={bets} money={scope} />
+      </section>
+
+      {/* BT-37: what cashing out did, by the would-haves set on cash-outs (W / L on a cashed-out bet) */}
+      <section className="card p-5" data-testid="cashout-verdict">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <Tile
+            label="Cash-out verdict"
+            value={verdict.net == null ? '-' : <span className={tone(verdict.net)}>{formatMoney(verdict.net, profitScope, true)}</span>}
+            sub={`${verdict.wouldaWon} woulda won · ${verdict.wouldaLost} woulda lost · ${verdict.notSet} not set`}
+            testId="cashout-verdict-net"
+          />
+          <p className="self-center text-xs text-zinc-500 sm:col-span-1 xl:col-span-3">
+            Saved by cashing out (it would have lost) minus left on the table (it would have won). Above 0: cashing out paid.
+            {verdict.net != null && ` Saved ${formatMoney(verdict.saved, profitScope)}, left ${formatMoney(verdict.left, profitScope)}.`}
+          </p>
+        </div>
       </section>
 
       <section className="card p-5">
@@ -248,7 +267,7 @@ function SortButton({ active, arrow = true, onClick, children }: { active: boole
   );
 }
 
-function Tile({ label, value, sub, testId }: { label: string; value: string; sub: string; testId: string }) {
+function Tile({ label, value, sub, testId }: { label: string; value: ReactNode; sub: string; testId: string }) {
   return (
     <div className="rounded-lg border border-zinc-800 p-4" data-testid={testId}>
       <div className="text-xs text-zinc-400">{label}</div>

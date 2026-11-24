@@ -24,6 +24,7 @@ const bet = (over: Partial<Bet> = {}): Bet => ({
   dutchId: null,
   rolloverId: null,
   banked: false,
+  wouldHave: null,
   ladder: null,
   createdAt: `2026-11-20T00:00:${String(n).padStart(2, '0')}Z`,
   updatedAt: '',

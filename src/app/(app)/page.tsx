@@ -37,6 +37,7 @@ const HELP: [string, string][] = [
   ['↑ ↓', 'Move the selection'],
   ['W L V', 'Won, lost, void'],
   ['C', 'Cash-out (the amount returned, or a % of the full payout)'],
+  ['W L', 'On a cash-out: woulda won / lost (again: clear)'],
   ['H J', 'Half-won, half-lost'],
   ['1-9', 'Dutch: toggle a split that won'],
   ['Enter', 'Dutch: confirm (toggled won, rest lost)'],
@@ -208,6 +209,8 @@ function Bets() {
       const b: Bet | undefined = byId.get(selected.slice(4));
       if (!b || !(k in SETTLE_KEYS)) return;
       e.preventDefault();
+      // BT-37: on a cash-out, W / L record what would have happened (again: cleared)
+      if (b.result === 'cash-out' && (k === 'w' || k === 'l')) return settle.wouldHave(b, k === 'w' ? 'won' : 'lost');
       if (b.result !== 'pending') return notify(`Already settled (${RESULT_LABEL[b.result]}): change it on its result pill`, 'error');
       if (k === 'c') settle.startCashout(b.id);
       else settle.settleBet(b, SETTLE_KEYS[k]!, null, b.dutchId ? shown.filter((x) => x.dutchId === b.dutchId) : [b]);

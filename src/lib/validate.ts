@@ -3,7 +3,7 @@
 import { isValidISODate } from './dates';
 import { isReallySolo } from './quickadd';
 import { tidyBet } from './tidy';
-import { BET_TYPES, MONEY, RESULTS, SITUATIONS, type BetInput, type Leg, type Money, type Result } from './types';
+import { BET_TYPES, MONEY, RESULTS, SITUATIONS, WOULD_HAVE, type BetInput, type Leg, type Money, type Result, type WouldHave } from './types';
 
 export type Validated = { ok: true; value: BetInput } | { ok: false; error: string };
 
@@ -54,6 +54,9 @@ export function validateBet(raw: unknown): Validated {
     if (l.goalAmount != null && l.goalAmount !== '' && (goalAmount == null || goalAmount <= 0)) return { ok: false, error: 'A ladder goal amount must be above 0' };
     ladder = { goalRungs, goalAmount, taken: l.taken === true };
   }
+  // BT-37: what a cash-out would have done; dropped once the result is anything else
+  if (r.wouldHave != null && r.wouldHave !== '' && !WOULD_HAVE.includes(r.wouldHave as WouldHave)) return { ok: false, error: 'Would-have must be won or lost' };
+  const wouldHave = result === 'cash-out' && r.wouldHave ? (r.wouldHave as WouldHave) : null;
   let cashout: number | null = null;
   if (result === 'cash-out') {
     cashout = num(r.cashout);
@@ -105,6 +108,7 @@ export function validateBet(raw: unknown): Validated {
       rolloverId,
       banked,
       ladder,
+      wouldHave,
       money,
       // BT-27: one label per bet, kept as typed (shown uppercase)
       label: str(r.label).replace(/\s+/g, ' ').slice(0, 60),

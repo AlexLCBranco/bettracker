@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-24
+- BT-37 — "Woulda won / woulda lost" on a cashed-out bet (v0.33.0)
+  On a cash-out, W or L (or the dim W / L beside the pill on hover) records what would have happened: the row shows `WOULDA WON · LEFT R$ 43,00` or `WOULDA LOST · SAVED R$ 145,00`, a cash-out without it has a faint "?" in its pill, and Analytics shows the Cash-out verdict (saved − left).
 - BT-39 — A shot banked from a dutch split shows the dutch's real odds (v0.32.2)
   A shot started from a won dutch split now counts the whole dutch's stake: H$ 139,86 back on a H$ 100 dutch reads @ 1.40 Semi and "needs 1.29+", not @ 3.00 "already 1.80+ (Shot)".
 - A banked dutch split shows its name under its shot (v0.32.1)
