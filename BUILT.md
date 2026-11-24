@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-24
+- Editing a ladder rung in the full form keeps it in its ladder (v0.34.1)
+  Saving an edit of a rung (text, stake, odds…) used to drop it out of its ladder and lose the goal; it now stays a rung.
 - BT-38 — Units: type a stake as "1u" and view everything in units (v0.34.0)
   Each money type gets a unit size on the Bankroll page; a stake can be typed as `1,5u` (quick-add, bet form, Dutch tool, cash-out box) with a preview `1,5u = H$ 150,00`, and the `$ | u` switch (or U) shows stakes, profit, cash-outs, day totals and Analytics in units without moving any column.
 - BT-37 — "Woulda won / woulda lost" on a cashed-out bet (v0.33.0)

@@ -2,7 +2,7 @@
 
 import { formatDate, parseDateInput, todayISO } from './dates';
 import { formatOdds, oddsFromText, parseNumber } from './money';
-import type { Bet, BetType, Money, Result, Situation } from './types';
+import type { Bet, BetInput, BetType, Money, Result, Situation } from './types';
 import { validateBet, type Validated } from './validate';
 import { NO_UNITS, readStake, type UnitSizes } from './units';
 
@@ -183,4 +183,23 @@ export function formToBet(f: BetForm, today = todayISO(), sizes: UnitSizes = NO_
     money: st.money,
     label: f.label,
   });
+}
+
+/**
+ * What saving the edit form sends. The form has no dutch, rollover, banked, ladder or would-have field: the edited bet
+ * keeps them (a ladder rung stays a rung). A bet in a rollover keeps its money; the unit size stays the bet's own
+ * unless the money type changed (then the current one of the new type, BT-38).
+ */
+export function editPatch(editing: Bet, value: BetInput, sizes: UnitSizes = NO_UNITS): BetInput {
+  const money = editing.rolloverId ? editing.money : value.money;
+  return {
+    ...value,
+    dutchId: editing.dutchId,
+    rolloverId: editing.rolloverId,
+    banked: editing.banked,
+    ladder: editing.ladder,
+    wouldHave: editing.wouldHave,
+    unitSize: money === editing.money ? editing.unitSize : sizes[money],
+    money,
+  };
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { formatDate, parseDateInput } from '@/lib/dates';
-import { emptyLeg, formFromBet, formToBet, newForm, nextForm, type BetForm, type LegForm } from '@/lib/form';
+import { editPatch, emptyLeg, formFromBet, formToBet, newForm, nextForm, type BetForm, type LegForm } from '@/lib/form';
 import { formatMoney, MONEY_SYMBOL, oddsFromText, parseNumber, profitMoney, winReturn } from '@/lib/money';
 import { MONEY_OPTION_LABEL, MONEY_TEXT } from './moneyStyle';
 import { BalanceHint } from './Bankroll';
@@ -61,8 +61,8 @@ function FormBody() {
     setSaving(true);
     setError('');
     try {
-      // the form has no dutch or rollover field: an edited bet stays in its dutch / rollover (and banked)
-      if (editing) await update(editing.id, { ...v.value, dutchId: editing.dutchId, rolloverId: editing.rolloverId, banked: editing.banked, wouldHave: editing.wouldHave, unitSize: v.value.money === editing.money ? editing.unitSize : units.unitSizes[v.value.money], ...(editing.rolloverId ? { money: editing.money } : {}) }, {});
+      // the form has no dutch, rollover or ladder field: the edited bet keeps them (editPatch)
+      if (editing) await update(editing.id, editPatch(editing, v.value, units.unitSizes), {});
       else if (rollover) {
         const input = { ...v.value, stake: rollover.stake, money: rollover.money, rolloverId: rollover.rolloverId, banked: false, ladder: rollover.ladder ?? null };
         // the rollover records its own undo step ("Rung added")

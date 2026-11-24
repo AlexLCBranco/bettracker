@@ -101,3 +101,27 @@ describe('history filters', () => {
     expect(filterBets(bets, NO_FILTERS)).toHaveLength(3);
   });
 });
+
+describe('editPatch: what the edit form saves', () => {
+  it('keeps the ladder, rollover, banked, dutch and would-have the form has no field for', async () => {
+    const { editPatch, formFromBet, formToBet } = await import('@/lib/form');
+    const { bet } = await import('./helpers');
+    const ladder = { goalRungs: 3, goalAmount: null, taken: false };
+    const rung = bet({ rolloverId: 'ro-1', ladder, stake: 50, odds: 2, unitSize: 50 });
+    const v = formToBet({ ...formFromBet(rung), betText: 'edited' });
+    if (!v.ok) throw new Error(v.error);
+    expect(v.value.ladder).toBeNull();
+    expect(editPatch(rung, v.value)).toMatchObject({ betText: 'edited', rolloverId: 'ro-1', ladder, unitSize: 50 });
+  });
+
+  it('a changed money type takes that type\'s current unit size; a bet in a rollover keeps its money', async () => {
+    const { editPatch, formFromBet, formToBet } = await import('@/lib/form');
+    const { bet } = await import('./helpers');
+    const sizes = { real: 100, bonus: null, hypothetical: 20 };
+    const plain = bet({ unitSize: 100 });
+    const v = formToBet({ ...formFromBet(plain), money: 'hypothetical' });
+    if (!v.ok) throw new Error(v.error);
+    expect(editPatch(plain, v.value, sizes)).toMatchObject({ money: 'hypothetical', unitSize: 20 });
+    expect(editPatch(bet({ rolloverId: 'r', unitSize: 100 }), v.value, sizes)).toMatchObject({ money: 'real', unitSize: 100 });
+  });
+});
