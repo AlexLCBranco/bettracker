@@ -11,7 +11,8 @@
     "test": "vitest run",
     "e2e": "playwright test",
     "e2e:live": "playwright test",
-    "check-version": "tsx scripts/check-version.ts"
+    "check-version": "tsx scripts/check-version.ts",
+    "e2e:smoke": "playwright test e2e/smoke.spec.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.18.0",

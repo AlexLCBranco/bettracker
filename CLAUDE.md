@@ -37,19 +37,27 @@ the whole website, but a redesign wider than a backlog item asks for is talked t
 ## Testing policy
 
 Automate every check that can be automated: unit, integration, and end-to-end
-with Playwright against the live site, using throwaway data the test creates
-and deletes itself. Never hand the owner a manual checklist for something a
+with Playwright, using throwaway data the test creates and deletes itself. Never hand the owner a manual checklist for something a
 script can do. Manual steps only for what truly can't be automated (browser
 permission prompts like folder pickers, and judging feel/usability). Keep
 those to the minimum, say why each one can't be automated, and give one short
 step at a time.
 
+**Vercel requests are a budget** (owner, 2026-11-24: the free plan's 1M CDN requests a month are shared by all his
+projects, and going over pauses them all; a full live run costs roughly 10–20k requests). Local runs cost nothing.
+- The full suite runs locally (`npm run e2e`), never against the live site unless the owner asks for it.
+- After a push the live site gets only the smoke check (`npm run e2e:smoke`, tens of requests).
+- Check the live `/version.json` at most every 30 s and stop once it shows the new version; don't browse the live
+  site when a local run shows the same thing.
+
 ## Commands
 
 - `npm test` — unit + db integration tests (vitest; date tests run in 3 time zones)
 - `npm run e2e` — Playwright against a local production build on a fresh `data/e2e.db`
-- `E2E_BASE_URL=https://… E2E_PASSWORD=… npm run e2e:live` — the same suite against the live site; every test
-  tags its bets "e2e-…" (dated 2000-01-0x) and deletes them
+- `E2E_BASE_URL=https://… E2E_PASSWORD=… npm run e2e:smoke` — the live smoke check (`e2e/smoke.spec.ts`): the site
+  loads, the version matches, one tagged bet is added and deleted
+- `… npm run e2e:live` — the whole suite against the live site: costly in Vercel requests, only when the owner asks;
+  every test tags its bets "e2e-…" (dated 2000-01-0x) and deletes them
 - `npm run lint`, `npm run typecheck`, `npm run build`, `npm run check-version`
 
 ## Version
