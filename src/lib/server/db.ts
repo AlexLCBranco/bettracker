@@ -9,6 +9,7 @@ import type { EntryInput, MoneyEntry } from '../bankroll';
 import type { BatchInput, PPBatch, PPLeg, PPTicket } from '../pp';
 import { asSolo } from '../games';
 import { repairLegs } from '../settle';
+import type { GameLink } from '../gameLinks';
 
 // Turso (libSQL) in production: TURSO_DATABASE_URL + TURSO_AUTH_TOKEN. Locally and in tests: a SQLite file,
 // data/local.db unless TURSO_DATABASE_URL says otherwise (e.g. file:data/e2e.db).
@@ -106,6 +107,15 @@ const SCHEMA = [
     actual TEXT NOT NULL DEFAULT '',
     note TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (batch_id, id)
+  )`,
+  // BT-42: a game's page links (one per site), by the game's normalized text and its game date
+  `CREATE TABLE IF NOT EXISTS game_links (
+    game TEXT NOT NULL,
+    game_date TEXT NOT NULL,
+    site TEXT NOT NULL,
+    url TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (game, game_date, site)
   )`,
   `CREATE TABLE IF NOT EXISTS pp_tickets (
     id TEXT NOT NULL,
@@ -603,4 +613,24 @@ export async function saveUnitSettings(s: UnitSettings): Promise<UnitSettings> {
 export async function applyUnitSize(money: Money, unitSize: number): Promise<number> {
   const r = await (await db()).execute({ sql: 'UPDATE bets SET unit_size = ?, updated_at = ? WHERE money = ? AND unit_size IS NULL', args: [unitSize, new Date().toISOString(), money] });
   return r.rowsAffected;
+}
+
+// ---- BT-42: game page links ----
+
+export async function listGameLinks(): Promise<GameLink[]> {
+  const r = await (await db()).execute('SELECT game, game_date, site, url FROM game_links ORDER BY created_at');
+  return r.rows.map((x) => ({ game: s(x.game), date: s(x.game_date), site: s(x.site), url: s(x.url) }));
+}
+
+export async function saveGameLink(l: GameLink): Promise<GameLink> {
+  await (await db()).execute({
+    sql: 'INSERT OR REPLACE INTO game_links (game, game_date, site, url, created_at) VALUES (?, ?, ?, ?, ?)',
+    args: [l.game, l.date, l.site, l.url, new Date().toISOString()],
+  });
+  return l;
+}
+
+export async function deleteGameLink(l: Pick<GameLink, 'game' | 'date' | 'site'>): Promise<boolean> {
+  const r = await (await db()).execute({ sql: 'DELETE FROM game_links WHERE game = ? AND game_date = ? AND site = ?', args: [l.game, l.date, l.site] });
+  return r.rowsAffected > 0;
 }

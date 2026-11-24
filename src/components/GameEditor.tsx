@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { applyGames, gameFields } from '@/lib/games';
+import { linksFor, siteName, type GameLink } from '@/lib/gameLinks';
 import type { Bet } from '@/lib/types';
 import { useApp } from './AppProvider';
 import { Autocomplete } from './Autocomplete';
@@ -65,7 +66,7 @@ type Place = { top?: number; bottom?: number; left: number };
 function place(anchor: RefObject<HTMLSpanElement | null>, fields: number): Place {
   const r = anchor.current?.getBoundingClientRect() ?? { left: 8, top: 8, bottom: 8 };
   const left = Math.max(8, Math.min(r.left, window.innerWidth - 328));
-  return r.bottom + 4 + fields * 56 + 52 > window.innerHeight ? { bottom: window.innerHeight - r.top + 4, left } : { top: r.bottom + 4, left };
+  return r.bottom + 4 + fields * 88 + 52 > window.innerHeight ? { bottom: window.innerHeight - r.top + 4, left } : { top: r.bottom + 4, left };
 }
 
 function GameEditor({ bets, anchor, at: first, close }: { bets: Bet[]; anchor: RefObject<HTMLSpanElement | null>; at: Place; close(): void }) {
@@ -130,7 +131,8 @@ function GameEditor({ bets, anchor, at: first, close }: { bets: Bet[]; anchor: R
       data-testid="game-editor"
     >
       {fields.map((f, i) => (
-        <label key={i} className="mb-2 block">
+        <div key={i} className="mb-2">
+          <label className="block">
           <span className="mb-0.5 block text-[11px] text-zinc-400">
             {f.label}
             {fields.length > 1 || bets.length > 1 ? <span className="text-zinc-600"> · {f.legs === 1 ? '1 leg' : `${f.legs} legs`}</span> : null}
@@ -144,7 +146,11 @@ function GameEditor({ bets, anchor, at: first, close }: { bets: Bet[]; anchor: R
             placeholder="Away @ Home"
             aria-label={f.label}
           />
-        </label>
+          </label>
+          {f.covers[0] && (
+            <LinkBox game={f.covers[0]} date={bets.find((b) => b.legs.some((l) => l.game.trim() === f.covers[0]))?.gameDate ?? bets[0]!.gameDate} label={fields.length > 1 ? `${f.label} link` : 'Game link'} />
+          )}
+        </div>
       ))}
       <div className="flex items-center justify-end gap-2">
         <span className="mr-auto text-[11px] text-zinc-500">Enter saves · Esc cancels</span>
@@ -157,5 +163,60 @@ function GameEditor({ bets, anchor, at: first, close }: { bets: Bet[]; anchor: R
       </div>
     </div>,
     document.body,
+  );
+}
+
+/**
+ * BT-42: "Game link": paste the game's page address (Hoops Junkie, Sofascore or any site) and Enter saves it for every
+ * bet on that game and date, without closing the editor. Saved links are listed with × to remove one.
+ */
+function LinkBox({ game, date, label }: { game: string; date: string; label: string }) {
+  const { gameLinks, addGameLink, removeGameLink } = useApp();
+  const [text, setText] = useState('');
+  const [error, setError] = useState('');
+  const mine = linksFor(gameLinks, game, date);
+  const save = async () => {
+    if (!text.trim()) return;
+    const err = await addGameLink(game, date, text);
+    setError(err ?? '');
+    if (!err) setText('');
+  };
+  return (
+    <span className="mt-1 block">
+      {mine.length > 0 && (
+        <span className="mb-1 flex flex-wrap gap-1" data-testid="game-links-saved">
+          {mine.map((l: GameLink) => (
+            <span key={l.site} className="inline-flex items-center gap-1 rounded bg-zinc-800 px-1.5 text-[11px] text-zinc-300">
+              {siteName(l.site)}
+              <button type="button" className="text-zinc-500 hover:text-red-300" aria-label={`Remove ${siteName(l.site)} link`} title="Remove this link" onClick={() => void removeGameLink(l)}>
+                ×
+              </button>
+            </span>
+          ))}
+        </span>
+      )}
+      <input
+        className="field py-0.5 text-xs"
+        value={text}
+        placeholder="Paste the game's page link, Enter"
+        title="A Hoops Junkie or Sofascore page (any site works). Every bet on this game shows it."
+        aria-label={label}
+        onChange={(e) => {
+          setText(e.target.value);
+          setError('');
+        }}
+        onKeyDown={(e) => {
+          if (e.key !== 'Enter') return;
+          e.preventDefault();
+          e.stopPropagation();
+          void save();
+        }}
+      />
+      {error && (
+        <span role="alert" className="mt-0.5 block text-[11px] text-amber-300" data-testid="game-link-error">
+          {error}
+        </span>
+      )}
+    </span>
   );
 }

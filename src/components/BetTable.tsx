@@ -22,6 +22,7 @@ import { comboHits, dutchHits, missesTitle } from '@/lib/hits';
 import { tidyText } from '@/lib/tidy';
 import { DutchSettleButtons } from './DutchSettle';
 import { GameTarget } from './GameEditor';
+import { linksForBets, siteMark, siteName, type GameLink } from '@/lib/gameLinks';
 import { betTone, groupTone, resultTone } from '@/lib/tone';
 import { TONE_BADGE, TONE_EDGE, TONE_TEXT } from './tone';
 import { betResultLine, betsText, displayGame, dutchResultLine, legGames, legMarkets, type DayGroup } from '@/lib/table';
@@ -128,11 +129,12 @@ function SubLine({ parts, children }: { parts: Part[]; children?: (onEdit: (on: 
 }
 
 /** The game part: the first game, "+1" for the others; "+ add game" when there is none (BT-25). */
-function gamePart(bets: Bet[], names: Map<string, string>): Part {
+function gamePart(bets: Bet[], names: Map<string, string>, links: GameLink[] = []): Part {
   const games = legGames(bets.flatMap((b) => b.legs), names);
   return {
     text: games.join(', '),
     node: (
+      <>
       <GameTarget bets={bets} hasGame={games.length > 0} inline className="text-zinc-300">
         <span data-testid={bets.length > 1 || bets[0]!.type === 'combination' ? 'combo-games' : undefined}>
           {games[0]}
@@ -143,8 +145,35 @@ function gamePart(bets: Bet[], names: Map<string, string>): Part {
           )}
         </span>
       </GameTarget>
+      {links.length > 0 && <GameLinkMarks links={links} />}
+      </>
     ),
   };
+}
+
+/** BT-42: one small mark per saved game page link, opening it in a new tab. Nothing at all when there is none. */
+function GameLinkMarks({ links }: { links: GameLink[] }) {
+  return (
+    <span className="ml-1 inline-flex gap-0.5 align-baseline" data-testid="game-links">
+      {links.map((l) => (
+        <a
+          key={l.site}
+          href={l.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="rounded bg-sky-950 px-1 text-[10px] font-semibold leading-4 text-sky-300 hover:bg-sky-800 hover:text-white"
+          title={`Open this game on ${siteName(l.site)}`}
+          aria-label={`Open on ${siteName(l.site)}`}
+          data-testid="game-link"
+          data-site={l.site}
+          onClick={(e) => e.stopPropagation()}
+          onDoubleClick={(e) => e.stopPropagation()}
+        >
+          {siteMark(l.site)}
+        </a>
+      ))}
+    </span>
+  );
 }
 
 function marketsPart(markets: string[]): Part {
@@ -291,7 +320,7 @@ function AnnotateButton({ onClick }: { onClick(): void }) {
 }
 
 function DutchGroup({ bets, dutchId, open, toggle, selected, select, settle, annotating, annotate, rollover }: { bets: Bet[]; dutchId: string } & RowProps) {
-  const { removeDutch, openDutch, names: nameCasing } = useApp();
+  const { removeDutch, openDutch, names: nameCasing, gameLinks } = useApp();
   const s = dutchSummary(bets);
   // BT-38: the units view, when every split has a unit size
   const [unitsView] = useUnitsView();
@@ -328,7 +357,7 @@ function DutchGroup({ bets, dutchId, open, toggle, selected, select, settle, ann
           </div>
           <SubLine
             parts={[
-              gamePart(bets, nameCasing),
+              gamePart(bets, nameCasing, linksForBets(gameLinks, bets)),
               sport && { text: sport, node: sport },
               marketsPart(legMarkets(legs)),
               books.length > 0 && { text: books.join(', '), node: books.join(', ') },
@@ -658,7 +687,7 @@ interface Split {
 }
 
 function BetRow({ b, open, toggle, selected, select, settle, split, link, annotating, annotate, rollover }: { b: Bet; split?: Split; link?: ChainLink } & RowProps) {
-  const { update, remove, openEdit, openNew, names, bets: allBets } = useApp();
+  const { update, remove, openEdit, openNew, names, bets: allBets, gameLinks } = useApp();
   // BT-38: amounts in units when the view is on and the bet has a unit size
   const [unitsView] = useUnitsView();
   const inUnits = unitsView && b.unitSize ? (n: number, signed = false) => formatUnits(n / b.unitSize!, signed) : undefined;
@@ -760,7 +789,7 @@ function BetRow({ b, open, toggle, selected, select, settle, split, link, annota
             </div>
           </div>
           <SubLine
-            parts={[gamePart([b], names)]}
+            parts={[gamePart([b], names, split ? [] : linksForBets(gameLinks, [b]))]}
           >
             {(onEdit) => [
               solo

@@ -13,6 +13,7 @@ import { todayISO } from '@/lib/dates';
 import { ticketMoney, type BatchInput, type PPBatch, type PPLeg } from '@/lib/pp';
 import { revertPatch, UndoHistory, type UndoStep } from '@/lib/undo';
 import { NO_UNITS, type UnitSettings } from '@/lib/units';
+import { addLink, type GameLink } from '@/lib/gameLinks';
 
 /** How a write goes into the undo history: false keeps it out (a step recorded elsewhere covers it). */
 export type UndoAs = false | { label?: string; key?: string };
@@ -103,6 +104,11 @@ interface AppCtx {
   saveUnits(s: UnitSettings): Promise<void>;
   /** Gives the older bets of a money type (no unit size) its current unit size; returns how many changed. */
   applyUnits(money: Money): Promise<number>;
+  /** BT-42: game page links (Hoops Junkie / Sofascore), by game and game date. */
+  gameLinks: GameLink[];
+  /** Saves a pasted address for a game; returns an error text when it cannot be saved. */
+  addGameLink(game: string, date: string, url: string): Promise<string | null>;
+  removeGameLink(link: GameLink): Promise<void>;
   /** BT-30: PP batches, newest first. */
   batches: PPBatch[];
   /** Creates (no id) or replaces a whole batch; shown at once, put back if the server refuses. */
@@ -150,6 +156,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [entries, setEntries] = useState<MoneyEntry[]>([]);
   const [batches, setBatches] = useState<PPBatch[]>([]);
   const [units, setUnits] = useState<UnitSettings>({ unitSizes: NO_UNITS, offered: [] });
+  const [gameLinks, setGameLinks] = useState<GameLink[]>([]);
   const [moneyForm, setMoneyForm] = useState<MoneyFormRequest | null>(null);
   const betsRef = useRef(bets);
   const names = useMemo(() => betNames(bets), [bets]);
@@ -165,8 +172,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [writes] = useState(refreshGate);
   useEffect(() => {
     // the quick-add box works before the bets have loaded: a bet saved meanwhile must not be wiped out by the first load
-    loadWhenQuiet(writes, () => Promise.all([api<Bet[]>('/api/bets'), api<MoneyEntry[]>('/api/money'), api<PPBatch[]>('/api/pp'), api<UnitSettings>('/api/units')]))
-      .then(([b, e, p, u]) => {
+    loadWhenQuiet(writes, () => Promise.all([api<Bet[]>('/api/bets'), api<MoneyEntry[]>('/api/money'), api<PPBatch[]>('/api/pp'), api<UnitSettings>('/api/units'), api<GameLink[]>('/api/game-links')]))
+      .then(([b, e, p, u, g]) => {
+        setGameLinks(g);
         setBets(b);
         setEntries(e);
         setBatches(p);
@@ -518,7 +526,39 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [write],
   );
 
+  const addGameLink = useCallback(
+    async (game: string, date: string, url: string) => {
+      const r = addLink(gameLinks, game, date, url);
+      if (!r.ok) return r.error;
+      const before = gameLinks;
+      setGameLinks(r.links);
+      try {
+        await write<GameLink>('/api/game-links', { method: 'PUT', body: JSON.stringify({ game, date, url }) });
+        return null;
+      } catch (e) {
+        setGameLinks(before);
+        return (e as Error).message;
+      }
+    },
+    [gameLinks, write],
+  );
+  const removeGameLink = useCallback(
+    async (link: GameLink) => {
+      setGameLinks((ls) => ls.filter((l) => l !== link));
+      try {
+        await write('/api/game-links', { method: 'DELETE', body: JSON.stringify(link) });
+      } catch (e) {
+        setGameLinks((ls) => [...ls, link]);
+        notify((e as Error).message, 'error');
+      }
+    },
+    [write, notify],
+  );
+
   const value: AppCtx = {
+    gameLinks,
+    addGameLink,
+    removeGameLink,
     units,
     saveUnits,
     applyUnits,
