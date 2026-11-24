@@ -98,15 +98,16 @@ export function chainSummary(raw: Bet[]): ChainSummary {
     const c = Math.round(net * 100);
     return { ...base, outcome: c > 0 ? 'won' : c < 0 ? 'lost' : 'even', profit: net };
   }
-  // a cash-out ends the chain: the bets after it (there should be none) do not multiply it further
-  const upto = bets.findIndex((b) => b.result === 'cash-out');
+  // a cash-out ends the chain (the bets after it, there should be none, do not multiply it further), unless it was
+  // banked: a positive cash-out banked rolls its amount on like a win
+  const upto = bets.findIndex((b) => b.result === 'cash-out' && !b.banked);
   const counted = upto >= 0 ? bets.slice(0, upto + 1) : bets;
   const odds = counted.reduce((p, b) => p * factor(b), 1);
   const base = { stake, odds, profit: 0, banked: 0, needs: null as number | null, bets };
   if (bets.some((b) => b.result === 'lost')) return { ...base, outcome: 'lost', profit: round2(-stake) };
   if (bets.some((b) => b.result === 'pending')) return { ...base, outcome: 'pending' };
   const end = counted.at(-1)!;
-  if (last.banked && last.result === 'won' && upto < 0) {
+  if (last.banked && bankableResult(last) && upto < 0) {
     return { ...base, outcome: 'open', banked: round2(returned(last)), needs: neededOdds(odds) };
   }
   const net = round2(returned(end) - stake);
@@ -165,12 +166,19 @@ export function chainsOf(all: Bet[]): Map<string, Bet[]> {
   return m;
 }
 
-/** Can this bet be banked: a won bet (a dutch split too), or the won last bet of a closed chain. */
+/** A result whose payout can roll on: a win, or a cash-out that returned more than the stake. */
+export const bankableResult = (b: Pick<Bet, 'result' | 'stake' | 'cashout'>) =>
+  b.result === 'won' || (b.result === 'cash-out' && Math.round(((b.cashout ?? 0) - b.stake) * 100) > 0);
+
+/** What a bet pays back in total (stake + profit). */
+export const payoutOf = (b: Bet) => round2(returned(b));
+
+/** Can this bet be banked: a won or positive cash-out bet (a dutch split too), or such a last bet of a closed chain. */
 export function canBank(b: Bet, chain: Bet[] = []): boolean {
   // BT-33: a bonus bet's payout is its winnings only, in real money: it cannot roll on as the same money
   // BT-35: a ladder's rungs are never banked (a won rung rides on by itself)
   // a won dutch split starts a shot with its payout; the dutch and its shot are then one bet (see countBets)
-  if (b.result !== 'won' || b.banked || b.money === 'bonus' || b.ladder) return false;
+  if (!bankableResult(b) || b.banked || b.money === 'bonus' || b.ladder) return false;
   if (!b.rolloverId) return true;
   const ordered = chainOrder(chain);
   return ordered.at(-1)?.id === b.id && chainSummary(ordered).outcome === 'won';

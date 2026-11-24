@@ -189,6 +189,27 @@ describe('bank rules, validation, export', () => {
     expect(canBank(c[1]!, c)).toBe(true);
   });
 
+  it('a positive cash-out can be banked; a break-even or losing one cannot', () => {
+    expect(canBank(bet({ stake: 100, odds: 2, result: 'cash-out', cashout: 140 }))).toBe(true);
+    expect(canBank(bet({ stake: 100, odds: 2, result: 'cash-out', cashout: 140, dutchId: 'd' }))).toBe(true);
+    expect(canBank(bet({ stake: 100, odds: 2, result: 'cash-out', cashout: 100 }))).toBe(false);
+    expect(canBank(bet({ stake: 100, odds: 2, result: 'cash-out', cashout: 60 }))).toBe(false);
+    expect(canBank(bet({ stake: 100, odds: 2, result: 'cash-out', cashout: 140, money: 'bonus' }))).toBe(false);
+  });
+
+  it('a banked cash-out opens a shot with its amount; the next leg rolls it on', () => {
+    const open = chainSummary(chain('r', [{ odds: 2, result: 'cash-out', cashout: 140, banked: true }]));
+    expect(open.outcome).toBe('open');
+    expect(open.banked).toBe(140);
+    expect(open.odds).toBeCloseTo(1.4, 10);
+    expect(open.needs).toBe(1.29);
+    const won = chainSummary(chain('r', [{ odds: 2, result: 'cash-out', cashout: 140, banked: true }, { stake: 140, odds: 1.5 }]));
+    expect(won.outcome).toBe('won');
+    expect(won.profit).toBe(110);
+    expect(won.odds).toBeCloseTo(2.1, 10);
+    expect(bankedItems(chain('r', [{ odds: 2, result: 'cash-out', cashout: 140, banked: true }]))[0]).toMatchObject({ amount: 140 });
+  });
+
   it('validation keeps rollover id and banked; banked needs a chain; a dutch split can start one, not a ladder', () => {
     const base = { stake: 10, odds: 2, result: 'won', placedDate: '2026-11-20', legs: [] };
     expect(validateBet({ ...base, rolloverId: 'ro-1', banked: true })).toMatchObject({ ok: true, value: { rolloverId: 'ro-1', banked: true } });

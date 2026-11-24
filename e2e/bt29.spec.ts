@@ -155,3 +155,26 @@ test('several banked bets: the top bar shows how many and how much, each opens o
   await expect(page.getByTestId('rollover-row')).toHaveCount(2);
   expect(b.banked).toBe(true);
 });
+
+test('BT-29: a positive cash-out banks its amount; the next leg is staked with it', async ({ page, request, tag }) => {
+  const first = await createBet(request, { betText: `${tag} cashed`, stake: 100, odds: 2, result: 'cash-out', cashout: 140, money: 'real' });
+  await search(page, tag);
+  await page.locator(`[data-bet-id="${first.id}"]`).getByTestId('bank').click();
+  const shot = page.getByTestId('rollover-row');
+  await expect(shot.getByTestId('result')).toHaveText('Open');
+  await expect(shot.getByTestId('shot-line')).toHaveText(/^Banked R\$\s140,00 @ 1\.40 · needs 1\.29\+ to reach 1\.80 \(Shot\)$/);
+  await shot.getByTestId('add-leg').click();
+  const form = page.getByRole('dialog', { name: 'Add rollover leg' });
+  await expect(form.getByLabel('Stake')).toHaveValue('140');
+  await form.getByRole('button', { name: 'Cancel' }).click();
+  await saved(page);
+  await expect.poll(async () => (await betsTagged(request, tag))[0]).toMatchObject({ banked: true, result: 'cash-out', cashout: 140 });
+});
+
+test('BT-29: a losing cash-out shows no Bank button', async ({ page, request, tag }) => {
+  const b = await createBet(request, { betText: `${tag} cashed low`, stake: 100, odds: 2, result: 'cash-out', cashout: 60, money: 'real' });
+  await search(page, tag);
+  const row = page.locator(`[data-bet-id="${b.id}"]`).first();
+  await row.hover();
+  await expect(row.getByTestId('bank')).toHaveCount(0);
+});

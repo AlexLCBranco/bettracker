@@ -4,7 +4,7 @@
 // BT-35: ladders: start one from a won bet, add the next rung, take the money, set the goal.
 import { betLabel } from '@/lib/dutch';
 import { formatMoney, formatOdds } from '@/lib/money';
-import { canBank, canStartLadder, chainOrder, chainSummary, detachPlan, isLadder, ladderOf, newRolloverId } from '@/lib/rollover';
+import { canBank, payoutOf, canStartLadder, chainOrder, chainSummary, detachPlan, isLadder, ladderOf, newRolloverId } from '@/lib/rollover';
 import type { Bet, Ladder } from '@/lib/types';
 import { useApp } from './AppProvider';
 import type { Settler } from './useSettle';
@@ -34,11 +34,11 @@ export function useRollover(settle: Settler): Rollover {
     chainOf,
     canBank: (b) => canBank(b, chainOf(b)),
     bank(b) {
-      if (!canBank(b, chainOf(b))) return notify('Only a won bet (not bonus money, not a ladder rung) can be banked', 'error');
+      if (!canBank(b, chainOf(b))) return notify('Only a won or positive cash-out bet (not bonus money, not a ladder rung) can be banked', 'error');
       const before = { rolloverId: b.rolloverId, banked: b.banked };
       const id = b.rolloverId ?? newRolloverId();
       save(b.id, { rolloverId: id, banked: true });
-      settle.record(`rollover:${id}`, `Banked for rollover: ${formatMoney(b.stake * b.odds, b.money)}`, () => save(b.id, before));
+      settle.record(`rollover:${id}`, `Banked for rollover: ${formatMoney(payoutOf(b), b.money)}`, () => save(b.id, before));
     },
     addLeg(chain) {
       const s = chainSummary(chain);
@@ -68,7 +68,7 @@ export function useRollover(settle: Settler): Rollover {
       // a shot of one bet goes back to being a plain won bet
       const alone = ordered.length === 1;
       save(last.id, alone ? { rolloverId: null, banked: false } : { banked: false });
-      settle.record(alone ? `bet:${last.id}` : `rollover:${last.rolloverId}`, alone ? 'Closed: a plain won bet again' : 'Shot closed', () => save(last.id, before));
+      settle.record(alone ? `bet:${last.id}` : `rollover:${last.rolloverId}`, alone ? `Closed: a plain ${last.result === 'won' ? 'won' : 'cashed-out'} bet again` : 'Shot closed', () => save(last.id, before));
     },
     canStartLadder,
     startLadder(b) {

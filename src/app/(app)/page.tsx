@@ -162,7 +162,7 @@ function Bets() {
         if (chain.length && chainSummary(chain).outcome === 'open') return rollover.close(chain);
         const target = sel ?? (chain.length ? chainSummary(chain).bets.at(-1) : undefined);
         if (target) return rollover.bank(target);
-        return notify('B banks a won bet', 'error');
+        return notify('B banks a won or positive cash-out bet', 'error');
       }
       if (k === 'a' && chain.length) {
         e.preventDefault();
@@ -363,7 +363,7 @@ function Bets() {
             annotating={annotating}
             annotate={setAnnotating}
             rollover={rollover}
-            empty={tab === 'settle' ? 'Nothing to settle.' : tab === 'pending' ? 'No pending bets.' : tab === 'banked' ? 'Nothing banked: Bank a won bet to roll its payout on.' : all.length ? 'No bets match these filters.' : undefined}
+            empty={tab === 'settle' ? 'Nothing to settle.' : tab === 'pending' ? 'No pending bets.' : tab === 'banked' ? 'Nothing banked: Bank a won or cashed-out bet to roll its payout on.' : all.length ? 'No bets match these filters.' : undefined}
           />
         ) : (
           <p className="py-10 text-center text-sm text-zinc-500">Loading…</p>

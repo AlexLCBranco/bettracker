@@ -653,7 +653,7 @@ function BetRow({ b, open, toggle, selected, select, settle, split, link, annota
   const key = `bet:${b.id}`;
   const indent = nested || !!link;
   const isSel = selected === key || (nested && selected === split.dutchKey) || (!!link && selected === link.chainKey);
-  // BT-29: Bank on a won bet or dutch split (in a shot only its last bet, once closed)
+  // BT-29: Bank on a won or positive cash-out bet or dutch split (in a shot only its last bet, once closed)
   const bankable = rollover.canBank(b);
   // BT-35: a won plain bet can become rung 1 of a ladder
   const startable = !nested && !link && rollover.canStartLadder(b);

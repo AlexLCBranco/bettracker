@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-24
+- Bank a positive cash-out for a rollover (v0.32.0)
+  A bet cashed out for more than its stake now has the Bank button (and B) like a won bet: its cash-out amount starts a shot and is the next leg's stake.
 - Z right after a delete or edit always undoes it (v0.31.2)
   Deleting a bet, a dutch or a bankroll entry (or editing a bet) and pressing Z within half a second did nothing on the live site, because the undo step only appeared once the server answered; it now exists at once.
 - Changes save in order on the live site, and the page warns before leaving while saving (v0.31.1)
