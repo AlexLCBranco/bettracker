@@ -15,6 +15,7 @@ import { MONEY_TEXT } from '@/components/moneyStyle';
 import { OddsInput } from '@/components/OddsInput';
 import { isTyping } from '@/components/Shell';
 import { Builder } from './Builder';
+import { BatchStats } from './PPStats';
 import { formatDate, parseDateInput } from '@/lib/dates';
 import { formatMoney, formatOdds, oddsFromText, parseNumber, profitMoney } from '@/lib/money';
 import {
@@ -172,7 +173,7 @@ export function BatchView({ id, extraTabs = [] }: { id: string; extraTabs?: Extr
       </p>
     );
 
-  const tabs: { id: string; label: string }[] = [{ id: 'legs', label: `Legs · ${batch.legs.length}` }, { id: 'tickets', label: `Tickets · ${batch.tickets.length}` }, { id: 'build', label: 'Build' }, ...extraTabs.map((t) => ({ id: t.id, label: t.label }))];
+  const tabs: { id: string; label: string }[] = [{ id: 'legs', label: `Legs · ${batch.legs.length}` }, { id: 'tickets', label: `Tickets · ${batch.tickets.length}` }, { id: 'build', label: 'Build' }, { id: 'stats', label: 'Stats' }, ...extraTabs.map((t) => ({ id: t.id, label: t.label }))];
   const del = async () => {
     if (!window.confirm(`Delete ${batch.name} with its ${batch.legs.length} legs and ${batch.tickets.length} PPs? This cannot be undone.`)) return;
     await removeBatch(batch).catch(() => undefined);
@@ -220,6 +221,7 @@ export function BatchView({ id, extraTabs = [] }: { id: string; extraTabs?: Extr
           }}
         />
       )}
+      {tab === 'stats' && <BatchStats batch={batch} />}
       {extraTabs.map((t) => tab === t.id && <Fragment key={t.id}>{t.render(batch, editing)}</Fragment>)}
     </div>
   );

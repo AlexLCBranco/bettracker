@@ -24,22 +24,6 @@ Words the owner uses (keep them in the UI):
   works in volume. Before, it was done in Excalidraw with AIs inventing the scheme per batch, the history lived only
   in the bookmaker's app and vanished, and both building and following 100 PPs was the part that broke.
 
-### BT-32 — PP stats: per batch and across batches
-**In short:** See what the PP research actually says: how each tier and each leg did, which PPs died by one leg and which leg killed them, per batch and over time.
-
-Needs BT-30.
-
-- Per batch (a "Stats" tab in the batch): tickets won / dead / alive, staked, returned, profit; per tier: legs
-  won-lost, hit rate, and next to it the average hit rate the odds implied (1 / odds), so he sees whether his
-  confidence tiers beat the price; "Lost by one": PPs whose only lost leg was X, grouped by that leg ("Jokic 12+
-  ast killed 9 PPs that were otherwise complete"), with the leg's note and actual shown.
-- Across batches (top of the PP page, with a date range): the same per-tier table over all batches, hit rate per
-  tier over time (one point per batch), and breakdowns of leg hit rate by sport and by market.
-- No settled legs → "-", never NaN (same rule as the rest of the app).
-- The owner has not said which other stats he wants: build these, and expect more to be added after he uses it.
-
-Tests: unit tests for every figure, including empty and all-void batches.
-
 ### BT-35 — Ladder: let the whole payout ride from one bet to the next, shown as rungs
 **In short:** A ladder starts from one stake, puts the whole payout of each win on the next bet (100 → 200 → 400 → ...), and shows as one row with its rungs until it loses or you take the money.
 

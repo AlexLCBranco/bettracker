@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-23
+- BT-32 — PP stats: per batch and across batches (v0.26.0)
+  A batch has a Stats tab (won / dead / alive, staked, returned, profit; per tier won–lost and hit rate next to what the odds implied, with the edge; "Lost by one": the leg that killed PPs that were otherwise complete, with its actual and note), and the top of the PP page shows the same per-tier table over all batches in a date range, hit rate per tier over time (one point per batch) and leg hit rate by sport and by market.
 - BT-31 — PP builder: scheme helper and ticket generator (v0.25.0)
   A batch's Build tab shows the pool by tier, a scheme (number of PPs, target and band, % of PPs per Major level, PPs per PP shot, two toggles) starting from the last batch's with a plain-words proposal ("Use proposal") and a live preview (legs and odds per PP, outside the band, appearances per leg, total stake and potential), generates the PPs semi-randomly from a seed (Shuffle draws again; legs that fell short are listed), and gives a placing checklist with copy-friendly lines, Space to tick and move down, and a box for the book's odds.
 - BT-30 — PP batches: leg pool, tickets, leg-first settling, archive (v0.24.0)

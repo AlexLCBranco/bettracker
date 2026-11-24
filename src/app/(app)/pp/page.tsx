@@ -10,6 +10,7 @@ import { Autocomplete } from '@/components/Autocomplete';
 import { DateField } from '@/components/BetFormModal';
 import { MoneySelect } from '@/components/Money';
 import { MONEY_TEXT } from '@/components/moneyStyle';
+import { AcrossBatches } from '@/components/pp/PPStats';
 import { formatDate, parseDateInput, todayISO } from '@/lib/dates';
 import { formatMoney, formatOdds, parseNumber, profitMoney } from '@/lib/money';
 import { batchSummary, DEFAULT_TARGET, DEFAULT_TIERS, defaultBatchName } from '@/lib/pp';
@@ -34,6 +35,8 @@ export default function PPPage() {
         </button>
       </div>
       {creating && <NewBatch onClose={() => setCreating(false)} />}
+      {/* BT-32: what the research says, over all batches */}
+      <AcrossBatches batches={batches} />
       <section className="card overflow-x-auto">
         {rows.length === 0 ? (
           <p className="py-10 text-center text-sm text-zinc-500">No batches yet. Start one with “New batch”.</p>
