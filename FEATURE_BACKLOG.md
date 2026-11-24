@@ -141,3 +141,31 @@ The details below are the session's proposal; he has not confirmed them.
   Analytics).
 - Tests: unit tests for the quick-add `#nb` parsing and the import default; one e2e that adds a throwaway bet,
   toggles the mark from the row, sees the tinted cell and chip, reloads and still sees them.
+
+### BT-45 — Marquee select and bulk actions on the Bets table
+**In short:** Drag a box over the Bets table to select several bets at once, then settle, label or delete them together and see their totals.
+
+From the owner, 2026-11-24: "marquee select feature, you can guess what the thing should be able to do". The list
+below is the session's guess; he has not confirmed it. Today the table has only one selected row (keyboard
+settling, `src/app/(app)/page.tsx`); that stays as it is.
+
+- Selecting: press on a row outside any text, input, button or link and drag: a box is drawn and every row it
+  touches is selected, the page scrolling when the pointer nears the top or bottom edge. Also Ctrl+click to add or
+  remove one row, Shift+click for a range from the last clicked row, Ctrl+A for all rows in the current tab and
+  filters. Esc or a click on empty space clears. A drag that starts on text still selects text, as today.
+- A dutch, a rollover chain and a ladder are selected as a whole (their one row); never half of one.
+- Look: selected rows get their own tint, different from the single keyboard-selected row, with no change in row
+  height or alignment.
+- Bar: while 2 or more rows are selected, a bar fixed at the bottom shows "n selected", their total stake, the
+  profit of the settled ones and what the pending ones would pay, plus the actions below. It follows the Real /
+  Hypothetical / Both switch like the stats strip.
+- Actions on all selected: Won / Lost / Void (pending plain bets only; dutches, combinations with leg results,
+  rollovers and ladders are skipped and the bar says how many were skipped, since they settle part by part); set or
+  clear the label; set the game date; set the book; no brainer on / off (only if BT-44 is built); Delete, behind
+  one confirm that names the count.
+- Every bulk action is ONE undo step (Ctrl+Z, and an "Undo" in the note shown after it) that puts all rows back.
+- The single-row keyboard keys (W / L / V / C, T, arrows) do nothing while a multi-selection is active, so a stray
+  key cannot settle many bets.
+- Tests: unit tests for the selection maths (range, toggle, a dutch as one row, skipped kinds); e2e with throwaway
+  bets: drag over three rows and read the totals, bulk Won then Undo, Ctrl+click and Shift+click, bulk delete with
+  the confirm.
