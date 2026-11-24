@@ -8,6 +8,8 @@ if (!sha || !base) {
   console.error('usage: E2E_BASE_URL=https://… tsx scripts/wait-live.ts <sha>');
   process.exit(2);
 }
+/** At most one /version.json request every 30 s: Vercel requests are a budget (CLAUDE.md). */
+const POLL_MS = 30_000;
 async function main() {
   const deadline = Date.now() + 15 * 60_000;
   let last = '';
@@ -23,7 +25,7 @@ async function main() {
     } catch (e) {
       last = (e as Error).message;
     }
-    await new Promise((r) => setTimeout(r, 15_000));
+    await new Promise((r) => setTimeout(r, POLL_MS));
   }
   console.error(`live site never served ${sha}; last seen ${last}`);
   process.exit(1);
