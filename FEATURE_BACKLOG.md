@@ -76,3 +76,25 @@ them inside this block rather than building them again.
   never NaN. Table alignment and no "…" cut text, as elsewhere.
 - Tests: unit tests for the combined odds, the position rule (ties, two-split dutch has no middle row) and the empty
   case; one e2e that logs two throwaway dutches, settles them and reads the tiles.
+
+### BT-42 — Game page links (Hoops Junkie / Sofascore)
+**In short:** From a bet, one click opens that game's page on Hoops Junkie or Sofascore, after the link was pasted once for that game.
+
+From the owner, 2026-11-24: "the option of going to that game's page on either hoops junkie or sofascore". Personal
+app, so plain outbound links to those sites are fine. The paste-once design below is the session's proposal; he has
+not confirmed it.
+
+- Why pasted and not automatic: a bet's game is free text plus `gameDate` (`src/lib/types.ts`), and the app has no
+  fixture data (I-2 is parked for the lack of a free source), so it cannot know a game's page address by itself.
+  Do not guess or build URLs from team names. Automatic links belong with I-2.
+- Storing: links belong to the GAME, not to one bet: every bet with the same game text (normalized as the
+  autocomplete does) and the same game date shows them. Up to two links per game, one per site.
+- Adding: in the game editor (`src/components/GameEditor.tsx`), a "Game link" box; paste a URL, Enter saves. The
+  site is recognized from the domain (sofascore.com → "Sofascore", hoopsjunkie → "Hoops Junkie"; anything else is
+  kept and shown by its domain). Not a valid http(s) URL → plain inline message, nothing saved.
+- Showing: a small site mark next to the game name in the bets table, one per saved link, opening in a new tab
+  (`rel="noopener noreferrer"`). No link → nothing shown and no reserved space that breaks the table alignment; the
+  marks must not cause "…" cut text.
+- Dutches and combinations: the marks follow each game shown, so a dutch on one game shows them once.
+- Tests: unit tests for the domain recognition and the same-game matching; one e2e that adds two throwaway bets on
+  the same game, pastes a link on one and sees the mark (with the right href) on both.
