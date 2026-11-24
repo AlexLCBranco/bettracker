@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { breakdown } from '@/lib/analytics';
 import { bet } from './helpers';
 import { countBets, groupRows, withWholeGroups } from '@/lib/dutch';
-import { canBank, chainSummary, collapseRollovers, neededOdds, needsText, SHOT_TARGET, TIERS, tierOf } from '@/lib/rollover';
+import { bankedItems, bankedTotals, canBank, chainSummary, collapseRollovers, neededOdds, needsText, SHOT_TARGET, TIERS, tierOf } from '@/lib/rollover';
 import { cumulativeProfit, summarize } from '@/lib/stats';
 import { dayGroups } from '@/lib/table';
 import { tabBets, tabDays } from '@/lib/view';
@@ -242,5 +242,36 @@ describe("a dutch split's win banked for a rollover", () => {
   it('the stats strip counts the split once though it shows in two rows', () => {
     const days = tabDays([leg2('won'), B, A], 'all', '2026-11-20');
     expect(summarize(tabBets(days))).toMatchObject({ betCount: 1, netProfit: 50, totalWagered: 100 });
+  });
+});
+
+describe('several banked bets at once', () => {
+  const s1 = chain('s1', [{ odds: 1.6, banked: true, gameDate: '2026-11-21' }]);
+  const s2 = chain('s2', [{ odds: 1.2 }, { odds: 1.5, banked: true, gameDate: '2026-11-19' }], 50);
+  const h = chain('h1', [{ odds: 2, banked: true, money: 'hypothetical', gameDate: '2026-11-22' }], 10);
+  const closed = chain('c1', [{ odds: 2 }]);
+  const all = [...s1, ...s2, ...h, ...closed, bet({ result: 'won' })];
+
+  it('lists every open shot, oldest first, with its amount, odds, needs and gauge', () => {
+    const items = bankedItems(all);
+    expect(items.map((i) => i.rolloverId)).toEqual(['s2', 's1', 'h1']);
+    expect(items[0]).toMatchObject({ amount: 90, needs: null, progress: 1, legs: 2, ladder: false, since: '2026-11-19' });
+    expect(items[0]!.odds).toBeCloseTo(1.8, 10);
+    expect(items[1]).toMatchObject({ amount: 160, needs: 1.13, legs: 1 });
+    expect(items[1]!.progress).toBeCloseTo(Math.log(1.6) / Math.log(1.8), 10);
+  });
+
+  it('totals per money type', () => {
+    expect(bankedTotals(bankedItems(all))).toEqual([
+      { money: 'real', amount: 250 },
+      { money: 'hypothetical', amount: 20 },
+    ]);
+    expect(bankedTotals([])).toEqual([]);
+  });
+
+  it('the Banked tab shows only the open shots, and each is pending in counts', () => {
+    const rows = tabDays(all, 'banked', '2026-11-23').flatMap((d) => d.rows);
+    expect(rows.map((r) => r.kind === 'rollover' && r.rolloverId).sort()).toEqual(['h1', 's1', 's2']);
+    expect(countBets(all).pending).toBe(3);
   });
 });

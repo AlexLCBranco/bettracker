@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-23
+- Banked bets at a glance: a Banked figure in the top bar and a Banked tab (v0.31.0)
+  With any bet banked, the top bar shows "⤴ 3 banked" with the total waiting (per money type) and one small gauge per shot filling toward 1.80 (green once there, indigo for a ladder); a click lists them oldest first with amount, odds and tier, what the next bet needs and since when, and opens the one picked on the new Banked tab of the Bets page.
 - Bank a won dutch split for a rollover (v0.30.0)
   A won split in a dutch has Bank (or B when selected), which starts a rollover shot with that split's payout shown in its own row next to the dutch; the dutch and its shot count as one bet, pending while the shot is open, and its net is the shot's result plus the other splits.
 - Ctrl+Z undoes the last change to your bets, and a bet can be taken out of a ladder (v0.29.0)

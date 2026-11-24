@@ -10,6 +10,7 @@ import { BUILD_INFO } from '@/lib/build-info';
 import { AppProvider, useApp } from './AppProvider';
 import { BetFormModal } from './BetFormModal';
 import { BankrollBar, MoneyFormModal } from './Bankroll';
+import { BankedBar } from './Banked';
 import { DutchFormModal } from './DutchFormModal';
 import { MoneyScopeSwitch, useMoneyScope } from './Money';
 import { QuickAdd } from './QuickAdd';
@@ -90,6 +91,8 @@ function Frame({ children }: { children: ReactNode }) {
           <MoneyScopeSwitch scope={scope} onChange={setScope} />
           {/* BT-33: what you have now, per money type */}
           <BankrollBar />
+          {/* money won and banked, waiting for its next bet */}
+          <BankedBar />
           <nav className="flex items-center gap-4 text-sm">
             {LINKS.map((l) => (
               <span key={l.href} className="inline-flex items-center">

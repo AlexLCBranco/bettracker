@@ -6,9 +6,9 @@ import { settleQueue } from './settle';
 import { dayGroups, type DayGroup } from './table';
 import type { Bet } from './types';
 
-export const TABS = ['all', 'pending', 'settle'] as const;
+export const TABS = ['all', 'pending', 'banked', 'settle'] as const;
 export type Tab = (typeof TABS)[number];
-export const TAB_LABEL: Record<Tab, string> = { all: 'All', pending: 'Pending', settle: 'To settle' };
+export const TAB_LABEL: Record<Tab, string> = { all: 'All', pending: 'Pending', banked: 'Banked', settle: 'To settle' };
 export const isTab = (v: unknown): v is Tab => TABS.includes(v as Tab);
 
 /** A row's selection key (see dutch.ts). A dutch's split lines and a rollover's bets are selected as "bet:<id>". */
@@ -16,6 +16,9 @@ export { rowKey };
 
 /** Shown on the Pending tab: a bet still pending, or a rollover shot that is still open (BT-29). */
 const isPendingRow = (r: BetRow) => (r.kind === 'rollover' ? chainPending(chainSummary(r.bets).outcome) : (r.kind === 'bet' ? [r.bet] : r.bets).some((b) => b.result === 'pending'));
+
+/** Shown on the Banked tab: an open shot or ladder (money won and banked, waiting for its next bet). */
+export const isBankedRow = (r: BetRow) => r.kind === 'rollover' && chainSummary(r.bets).outcome === 'open';
 
 const due = (b: Bet) => b.gameDate || b.placedDate;
 
@@ -27,6 +30,7 @@ const due = (b: Bet) => b.gameDate || b.placedDate;
 export function tabDays(bets: Bet[], tab: Tab, today: string): DayGroup[] {
   if (tab === 'all') return dayGroups(groupRows(bets));
   if (tab === 'pending') return dayGroups(groupRows(bets).filter(isPendingRow));
+  if (tab === 'banked') return dayGroups(groupRows(bets).filter(isBankedRow));
   // a rollover's pending bet is queued on its own; the tab shows its whole shot
   const chain = (id: string) => bets.filter((b) => b.rolloverId === id);
   const rows: BetRow[] = settleQueue(bets, today).map((it) =>

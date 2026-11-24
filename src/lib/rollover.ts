@@ -291,3 +291,53 @@ export function detachPlan(chain: Bet[], b: Bet): { id: string; patch: Partial<B
   if (b.ladder?.taken && last && !rest.some((x) => x.ladder?.taken)) out.push({ id: last.id, patch: { ladder: { ...(last.ladder ?? ladderOf(chain)), taken: true } } });
   return out;
 }
+
+/** An open shot or ladder: money won and banked, waiting for its next bet. */
+export interface BankedItem {
+  rolloverId: string;
+  /** The payout banked: the next bet's stake. */
+  amount: number;
+  money: Bet['money'];
+  /** The odds so far (product of its bets). */
+  odds: number;
+  /** Shot: the odds the next bet needs to reach the target (null when there); ladder: null. */
+  needs: number | null;
+  /** Shot: how far its odds are toward the target, 0–1 (1 once there); ladder: null. */
+  progress: number | null;
+  ladder: boolean;
+  /** Its bets so far. */
+  legs: number;
+  /** The date of its last bet (game date, else bet date): banked since. */
+  since: string;
+}
+
+/** Every open shot and ladder, oldest first (the money banked longest comes first). */
+export function bankedItems(bets: Bet[]): BankedItem[] {
+  const out: BankedItem[] = [];
+  for (const [id, chain] of chainsOf(bets)) {
+    const s = chainSummary(chain);
+    if (s.outcome !== 'open') continue;
+    const last = s.bets.at(-1)!;
+    const ladder = isLadder(s.bets);
+    out.push({
+      rolloverId: id,
+      amount: s.banked,
+      money: s.bets[0]!.money,
+      odds: s.odds,
+      needs: ladder ? null : s.needs,
+      // on a log scale (odds multiply), judged at 2 decimals like neededOdds
+      progress: ladder ? null : s.needs == null ? 1 : Math.min(1, Math.log(Math.max(1, s.odds)) / Math.log(SHOT_TARGET)),
+      ladder,
+      legs: s.bets.length,
+      since: last.gameDate || last.placedDate,
+    });
+  }
+  return out.sort((a, b) => (a.since < b.since ? -1 : a.since > b.since ? 1 : a.rolloverId < b.rolloverId ? -1 : 1));
+}
+
+/** The banked amounts added up per money type, only the types that have any. */
+export function bankedTotals(items: BankedItem[]): { money: Bet['money']; amount: number }[] {
+  const m = new Map<Bet['money'], number>();
+  for (const it of items) m.set(it.money, round2((m.get(it.money) ?? 0) + it.amount));
+  return (['real', 'bonus', 'hypothetical'] as const).filter((k) => m.has(k)).map((k) => ({ money: k, amount: m.get(k)! }));
+}

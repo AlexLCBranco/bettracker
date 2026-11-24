@@ -131,3 +131,26 @@ test('a won dutch split banks: its shot starts from the split payout, dutch + sh
   await expect(page.getByTestId('stat-wagered-value')).toHaveText(/R\$\s90,00/);
   await expect(page.getByTestId('stat-net-value')).toHaveText(/\+R\$\s60,00/);
 });
+
+test('several banked bets: the top bar shows how many and how much, each opens on the Banked tab', async ({ page, request, tag }) => {
+  const a = await createBet(request, { betText: `${tag} a`, stake: 100, odds: 1.6, result: 'won', money: 'real', rolloverId: `${tag}-ra`.replace(/[^A-Za-z0-9_-]/g, ''), banked: true });
+  const b = await createBet(request, { betText: `${tag} b`, stake: 50, odds: 1.9, result: 'won', money: 'real', rolloverId: `${tag}-rb`.replace(/[^A-Za-z0-9_-]/g, ''), banked: true });
+  await page.goto('/');
+  const bar = page.getByTestId('banked');
+  await expect(bar).toBeVisible();
+  // other tests may have shots open too: at least these two, and their amounts are in the list
+  await expect.poll(async () => Number(await page.getByTestId('banked-count').textContent())).toBeGreaterThanOrEqual(2);
+  await bar.click();
+  const panel = page.getByTestId('banked-panel');
+  const itemA = panel.getByTestId('banked-item').filter({ hasText: /R\$\s160,00/ }).filter({ hasText: '@ 1.60 Pepsi' }).first();
+  await expect(itemA).toContainText('needs 1.13+ to reach 1.80');
+  await expect(panel.getByTestId('banked-item').filter({ hasText: /R\$\s95,00/ }).first()).toContainText('already 1.80+');
+
+  await itemA.click();
+  await expect(page).toHaveURL(/tab=banked/);
+  await expect(page.getByRole('tab', { name: /Banked/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator(`[data-key="rollover:${a.rolloverId}"]`)).toHaveAttribute('data-selected', 'true');
+  await page.getByLabel('Search bets').fill(tag);
+  await expect(page.getByTestId('rollover-row')).toHaveCount(2);
+  expect(b.banked).toBe(true);
+});

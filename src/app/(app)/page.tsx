@@ -79,12 +79,19 @@ function Bets() {
   const days = useMemo(() => tabDays(filtered, tab, today), [filtered, tab, today]);
   const shown = useMemo(() => tabBets(days), [days]);
   const keys = useMemo(() => rowKeys(days), [days]);
-  const counts = useMemo(() => ({ pending: rowKeys(tabDays(filtered, 'pending', today)).length, settle: settleQueue(filtered, today).length }), [filtered, today]);
+  const counts = useMemo(() => ({ pending: rowKeys(tabDays(filtered, 'pending', today)).length, banked: rowKeys(tabDays(filtered, 'banked', today)).length, settle: settleQueue(filtered, today).length }), [filtered, today]);
   const s = summarize(shown);
   const totalCount = countBets(scoped).count;
 
   // selection: a row key, or a dutch split's "bet:<id>"; the To settle tab starts on its first row, like the old queue
-  const [picked, setPicked] = useState<string | null>(null);
+  // the top bar's Banked list opens a shot here: ?tab=banked&sel=rollover:<id>
+  const selParam = params.get('sel');
+  const [picked, setPicked] = useState<string | null>(selParam);
+  const [seenSel, setSeenSel] = useState(selParam);
+  if (selParam !== seenSel) {
+    setSeenSel(selParam);
+    if (selParam) setPicked(selParam);
+  }
   const byId = useMemo(() => new Map(shown.map((b) => [b.id, b])), [shown]);
   const valid = (k: string | null) => !!k && (keys.includes(k) || (k.startsWith('bet:') && byId.has(k.slice(4))));
   const selected = valid(picked) ? picked : tab === 'settle' ? (keys[0] ?? null) : null;
@@ -327,6 +334,11 @@ function Bets() {
           >
             {TAB_LABEL[t]}
             {t === 'pending' && counts.pending > 0 && <span className="ml-1.5 text-xs text-zinc-500">{counts.pending}</span>}
+            {t === 'banked' && counts.banked > 0 && (
+              <span className="ml-1.5 rounded-full bg-sky-500/20 px-1.5 py-0.5 text-xs font-semibold text-sky-200" data-testid="banked-tab-count">
+                {counts.banked}
+              </span>
+            )}
             {t === 'settle' && counts.settle > 0 && (
               <span className="ml-1.5 rounded-full bg-amber-500 px-1.5 py-0.5 text-xs font-bold text-black" data-testid="settle-count">
                 {counts.settle}
@@ -351,7 +363,7 @@ function Bets() {
             annotating={annotating}
             annotate={setAnnotating}
             rollover={rollover}
-            empty={tab === 'settle' ? 'Nothing to settle.' : tab === 'pending' ? 'No pending bets.' : all.length ? 'No bets match these filters.' : undefined}
+            empty={tab === 'settle' ? 'Nothing to settle.' : tab === 'pending' ? 'No pending bets.' : tab === 'banked' ? 'Nothing banked: Bank a won bet to roll its payout on.' : all.length ? 'No bets match these filters.' : undefined}
           />
         ) : (
           <p className="py-10 text-center text-sm text-zinc-500">Loading…</p>
