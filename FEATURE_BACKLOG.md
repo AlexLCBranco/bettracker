@@ -169,3 +169,25 @@ settling, `src/app/(app)/page.tsx`); that stays as it is.
 - Tests: unit tests for the selection maths (range, toggle, a dutch as one row, skipped kinds); e2e with throwaway
   bets: drag over three rows and read the totals, bulk Won then Undo, Ctrl+click and Shift+click, bulk delete with
   the confirm.
+
+## Held (needs the owner's "go"; never built from "build the backlog")
+
+### BT-46 — Day header opens that day's gauntlet whiteboard page
+**In short:** Click a day in the Bets table and the gauntlet whiteboard opens on that day's page, when there is one.
+
+From the owner, 2026-11-24. Held because it needs a gauntlet feature that does not exist yet (checked in the
+gauntlet repo on 2026-11-24):
+- The whiteboard lives in the browser's IndexedDB under gauntlet's own address (`gauntlet-home.vercel.app`), so
+  bettracker, on another address, cannot read it: it cannot know whether a day has a page.
+- A gauntlet page has no date: the "Today" stamp (GT-3) drops a plain text like "24/11", no year, nothing a program
+  can rely on. And no address opens a given page.
+
+So gauntlet must first get: a real date on a page, and an address like `/?date=YYYY-MM-DD` that jumps to that
+day's page or says "No board for dd/mm" when there is none. That item is not written in gauntlet's backlog yet.
+
+When gauntlet has it, this item is small:
+- Each day header in the Bets table (`formatDayHeader`, `src/lib/dates.ts`) gets a small whiteboard mark that opens
+  `https://gauntlet-home.vercel.app/?date=<that day>` in a new tab. The day is the header's own date (game date).
+- The mark shows on every day: bettracker cannot tell which days have a page, gauntlet answers that after the
+  click. No change to row height or alignment.
+- Tests: unit test for the address built from a date; e2e that the header's mark has the right href.
