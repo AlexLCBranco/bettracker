@@ -170,6 +170,31 @@ settling, `src/app/(app)/page.tsx`); that stays as it is.
   bets: drag over three rows and read the totals, bulk Won then Undo, Ctrl+click and Shift+click, bulk delete with
   the confirm.
 
+### BT-47 — See a bet's description without opening the form
+**In short:** In the Bets table a bet's written description shows on hover and opens under its row with one click or key, instead of only inside the edit form.
+
+From the owner, 2026-11-24: "a clever way of seeing the description for each bet". Today the two texts a bet has
+(`preAnalysis` and `postAnalysis`, the "before" and "after" boxes of `BetFormModal`) are visible only by opening the
+edit form. The design below is the session's proposal; he has not confirmed it.
+
+- Mark: a row whose bet has any description shows a small note mark in the bet cell. No description → no mark and
+  no reserved space. For a dutch, rollover or ladder row, the mark shows when any of its bets has one.
+- Peek: hovering the mark (or the keyboard-selected row after a short pause) shows a popover with the text, "Before"
+  and "After" as two short headed parts, only the parts that have text. Long text scrolls inside the popover. It
+  never covers the row it belongs to.
+- Open: a click on the mark, or one key on the selected row (shown in the mark's tooltip; must not clash with T,
+  W / L / V / C), opens the description UNDER the row as one full-width line area: both texts, editable right there.
+  Click-away or Esc closes; a click-away saves what was typed, Esc does not. The same key or click closes it again.
+  On a row with no description the key opens the empty boxes, so writing one never needs the form.
+- For a dutch / rollover / ladder row, the opened area lists each bet's text under that bet's name.
+- "Descriptions" switch above the table: on = every row that has a description is open at once, for reading back a
+  day or a week. Off by default, remembered in this browser.
+- The opened area sits between rows: it must not change column widths or the table alignment, and text wraps, never
+  "…".
+- Tests: unit tests for "has a description" on plain and grouped rows; e2e with throwaway bets: hover shows the
+  text, the key opens it, typing then clicking away saves it (still there after a reload), Esc discards, the
+  switch opens all and only the rows with text.
+
 ## Held (needs the owner's "go"; never built from "build the backlog")
 
 ### BT-46 — Day header opens that day's gauntlet whiteboard page
