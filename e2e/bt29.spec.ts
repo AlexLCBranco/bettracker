@@ -111,7 +111,7 @@ test('a won dutch split banks: its shot starts from the split payout, dutch + sh
   await page.locator(`[data-split-of="${d}"][data-bet-id="${won.id}"]`).getByTestId('bank').click();
   const shot = page.getByTestId('rollover-row');
   await expect(shot.getByTestId('result')).toHaveText('Open');
-  await expect(shot.getByTestId('shot-line')).toHaveText(/^Banked R\$\s100,00 @ 2\.00/);
+  await expect(shot.getByTestId('shot-line')).toHaveText(/^Banked R\$\s100,00 @ 1\.11 /); // BT-39: 100 returned on the dutch's 90
   await expect(page.getByTestId('dutch-row')).toHaveCount(1);
   // one bet, pending while the shot is open
   await expect(page.getByTestId('stat-pending-value')).toHaveText('1');
@@ -146,6 +146,22 @@ test('a banked dutch split is named by its selection under its shot, not "(no te
   const under = page.locator(`[data-bet-id="${won.id}"]:not([data-split-of])`);
   await expect(under.getByTestId('bet-text')).toContainText('Scottie 2 4Q ass');
   await expect(under.getByTestId('bet-text')).not.toContainText('(no text)');
+});
+
+test('BT-39: a shot banked from a dutch split reads the dutch odds in the Banked list (1.40 Semi, not 3.00 Shot)', async ({ page, request, tag }) => {
+  const d = `${tag}-d39`.replace(/[^A-Za-z0-9_-]/g, '');
+  const won = await createBet(request, { dutchId: d, betText: `${tag} home`, stake: 46.62, odds: 3, result: 'won', money: 'real' });
+  await createBet(request, { dutchId: d, betText: `${tag} away`, stake: 53.38, odds: 1.8, result: 'lost', money: 'real' });
+  await search(page, tag);
+  await page.locator(`[data-split-of="${d}"][data-bet-id="${won.id}"]`).getByTestId('bank').click();
+  const shot = page.getByTestId('rollover-row');
+  await expect(shot.getByTestId('shot-line')).toHaveText(/^Banked R\$\s139,86 @ 1\.40 · needs 1\.29\+ to reach 1\.80 \(Shot\)$/);
+  await expect(shot.getByTestId('tier-chip')).toHaveText(/Banked Semi/i);
+  await saved(page);
+  await page.getByTestId('banked').click();
+  const item = page.getByTestId('banked-panel').getByTestId('banked-item').filter({ hasText: /R\$\s139,86/ }).filter({ hasText: '@ 1.40 Semi' });
+  await expect(item.first()).toContainText('needs 1.29+ to reach 1.80');
+  await expect(item.first()).not.toContainText('already');
 });
 
 test('several banked bets: the top bar shows how many and how much, each opens on the Banked tab', async ({ page, request, tag }) => {

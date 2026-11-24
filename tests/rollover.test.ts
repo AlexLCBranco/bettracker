@@ -296,3 +296,43 @@ describe('several banked bets at once', () => {
     expect(countBets(all).pending).toBe(3);
   });
 });
+
+describe('BT-39: a shot banked from a dutch split counts the whole dutch stake', () => {
+  // owner's case: dutch of 2 splits totalling 100; the winning split 46,62 @ 3.00 returned 139,86
+  const A = bet({ id: 'A', dutchId: 'd9', rolloverId: 'ro-9', banked: true, stake: 46.62, odds: 3, result: 'won', createdAt: at(0) });
+  const B = bet({ id: 'B', dutchId: 'd9', stake: 53.38, odds: 1.8, result: 'lost', createdAt: at(1) });
+  const next = (result: Bet['result']) => bet({ id: 'N', rolloverId: 'ro-9', stake: 139.86, odds: 1.3, result, createdAt: at(2) });
+
+  it('open: odds 1.40 (139,86 / 100), Semi, needs 1.29, not already there', () => {
+    const s = chainSummary([A], [A, B]);
+    expect(s.baseStake).toBe(100);
+    expect(s.odds).toBeCloseTo(1.3986, 10);
+    expect(tierOf(s.odds)).toBe('Semi');
+    expect(s.needs).toBe(neededOdds(1.3986));
+    expect(s.needs).toBe(1.29);
+    expect(needsText(s)).not.toContain('already');
+    const [item] = bankedItems([A, B]);
+    expect(item!.odds).toBeCloseTo(1.3986, 10);
+    expect(item).toMatchObject({ amount: 139.86, needs: 1.29 });
+    expect(item!.progress).toBeLessThan(1);
+  });
+
+  it('a next bet @ 1.30 closes it as a Shot; still one bet and money counted once', () => {
+    const bets = [A, B, next('won')];
+    const s = chainSummary([A, bets[2]!], bets);
+    expect(s.odds).toBeCloseTo(1.3986 * 1.3, 10);
+    expect(tierOf(s.odds)).toBe('Shot');
+    expect(s.outcome).toBe('won');
+    // money bet by bet: shot 181,82 − 46,62 and split B −53,38 = 181,82 − 100
+    expect(summarize(bets)).toMatchObject({ betCount: 1, wins: 1, totalWagered: 100, netProfit: 81.82 });
+    const one = collapseRollovers(bets).find((b) => b.rolloverId === 'ro-9')!;
+    expect(one.odds).toBeCloseTo(1.818, 3);
+    expect(one).toMatchObject({ stake: 46.62, result: 'cash-out', cashout: 181.82 });
+  });
+
+  it('a plain banked bet is unchanged', () => {
+    const p = bet({ id: 'P', rolloverId: 'ro-p', banked: true, stake: 50, odds: 3, result: 'won' });
+    const s = chainSummary([p], [p, B]);
+    expect(s).toMatchObject({ baseStake: 50, odds: 3, needs: null });
+  });
+});

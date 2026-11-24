@@ -57,6 +57,30 @@ function factor(b: Bet): number {
   }
 }
 
+/**
+ * BT-39: the stake a chain really started from. A shot banked from a dutch split started from the whole dutch: every
+ * split's stake (the losing ones too), found in `all`. Any other chain: its first bet's stake.
+ */
+export function baseStakeOf(first: Bet, all: Bet[]): number {
+  if (!first.dutchId) return first.stake;
+  let total = 0;
+  let seen = false;
+  for (const b of all) {
+    if (b.dutchId !== first.dutchId) continue;
+    total += b.stake;
+    if (b.id === first.id) seen = true;
+  }
+  if (!seen) total += first.stake;
+  return round2(total);
+}
+
+/** BT-39: what a chain's first bet multiplies it by: its own factor, or for a dutch split what it returned ÷ the dutch's whole stake. */
+export function firstFactor(first: Bet, all: Bet[]): number {
+  if (!first.dutchId) return factor(first);
+  const base = baseStakeOf(first, all);
+  return base > 0 ? returned(first) / base : factor(first);
+}
+
 const byCreated = (a: Bet, b: Bet) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
 /** A chain's bets in the order they were placed. */
@@ -67,7 +91,12 @@ export type ChainOutcome = 'pending' | 'open' | 'won' | 'lost' | 'even';
 export interface ChainSummary {
   /** The first bet's stake: the only money put in. */
   stake: number;
-  /** Product of the bets' odds (a void counts 1.00, a cash-out what it returned). Exact arithmetic on separate bets. */
+  /** BT-39: the stake the chain really started from: the whole dutch's for a shot banked from a dutch split, else `stake`. */
+  baseStake: number;
+  /**
+   * Product of the bets' odds (a void counts 1.00, a cash-out what it returned). Exact arithmetic on separate bets. A
+   * shot banked from a dutch split counts that split as what it returned ÷ the whole dutch's stake (BT-39).
+   */
   odds: number;
   outcome: ChainOutcome;
   /** Net profit once closed (final payout − first stake, or −first stake when a bet lost); 0 while pending or open. */
@@ -80,16 +109,19 @@ export interface ChainSummary {
   bets: Bet[];
 }
 
-export function chainSummary(raw: Bet[]): ChainSummary {
+/** `all`: the bets to find a dutch split's sibling splits in (BT-39); defaults to the chain itself. */
+export function chainSummary(raw: Bet[], all: Bet[] = raw): ChainSummary {
   const bets = chainOrder(raw);
   const first = bets[0]!;
   const last = bets.at(-1)!;
   const stake = first.stake;
+  const baseStake = baseStakeOf(first, all);
+  const f = (b: Bet, i: number) => (i === 0 ? firstFactor(b, all) : factor(b));
   // BT-35: a ladder goes on until a rung loses or the money is taken; a void or cash-out rung keeps it alive with
   // what it returned as the next stake
   if (isLadder(bets)) {
-    const odds = bets.reduce((p, b) => p * factor(b), 1);
-    const base = { stake, odds, profit: 0, banked: 0, needs: null, bets };
+    const odds = bets.reduce((p, b, i) => p * f(b, i), 1);
+    const base = { stake, baseStake, odds, profit: 0, banked: 0, needs: null, bets };
     if (bets.some((b) => b.result === 'lost')) return { ...base, outcome: 'lost', profit: round2(-stake) };
     if (bets.some((b) => b.result === 'pending')) return { ...base, outcome: 'pending' };
     const amount = round2(returned(last));
@@ -102,8 +134,8 @@ export function chainSummary(raw: Bet[]): ChainSummary {
   // banked: a positive cash-out banked rolls its amount on like a win
   const upto = bets.findIndex((b) => b.result === 'cash-out' && !b.banked);
   const counted = upto >= 0 ? bets.slice(0, upto + 1) : bets;
-  const odds = counted.reduce((p, b) => p * factor(b), 1);
-  const base = { stake, odds, profit: 0, banked: 0, needs: null as number | null, bets };
+  const odds = counted.reduce((p, b, i) => p * f(b, i), 1);
+  const base = { stake, baseStake, odds, profit: 0, banked: 0, needs: null as number | null, bets };
   if (bets.some((b) => b.result === 'lost')) return { ...base, outcome: 'lost', profit: round2(-stake) };
   if (bets.some((b) => b.result === 'pending')) return { ...base, outcome: 'pending' };
   const end = counted.at(-1)!;
@@ -136,14 +168,18 @@ export function collapseRollovers(bets: Bet[]): Bet[] {
     }
     if (done.has(b.rolloverId)) continue;
     done.add(b.rolloverId);
-    out.push(chainAsBet(chains.get(b.rolloverId)!));
+    out.push(chainAsBet(chains.get(b.rolloverId)!, bets));
   }
   return out;
 }
 
-/** One chain as one bet (see collapseRollovers). */
-export function chainAsBet(raw: Bet[]): Bet {
-  const s = chainSummary(raw);
+/**
+ * One chain as one bet (see collapseRollovers). Money stays bet by bet: its stake is the first bet's (a dutch's other
+ * splits count on their own), so a shot from a dutch split, shown at the dutch's real odds (BT-39), closes as the
+ * amount it returned.
+ */
+export function chainAsBet(raw: Bet[], all: Bet[] = raw): Bet {
+  const s = chainSummary(raw, all);
   if (raw.length === 1 && !chainPending(s.outcome)) return { ...raw[0]!, banked: false };
   const first = s.bets[0]!;
   const last = s.bets.at(-1)!;
@@ -152,7 +188,7 @@ export function chainAsBet(raw: Bet[]): Bet {
   if (s.outcome === 'lost' && s.bets.some((b) => b.result === 'lost')) return { ...shown, result: 'lost' };
   // won at exactly its odds: a plain win; anything else (void, cash-out, half results inside) as the amount returned
   const payout = round2(s.stake + s.profit);
-  if (s.outcome === 'won' && round2(s.stake * s.odds) === payout) return { ...shown, result: 'won' };
+  if (s.outcome === 'won' && s.baseStake === s.stake && round2(s.stake * s.odds) === payout) return { ...shown, result: 'won' };
   return { ...shown, result: 'cash-out', cashout: payout };
 }
 
@@ -323,7 +359,7 @@ export interface BankedItem {
 export function bankedItems(bets: Bet[]): BankedItem[] {
   const out: BankedItem[] = [];
   for (const [id, chain] of chainsOf(bets)) {
-    const s = chainSummary(chain);
+    const s = chainSummary(chain, bets);
     if (s.outcome !== 'open') continue;
     const last = s.bets.at(-1)!;
     const ladder = isLadder(s.bets);

@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-24
+- BT-39 — A shot banked from a dutch split shows the dutch's real odds (v0.32.2)
+  A shot started from a won dutch split now counts the whole dutch's stake: H$ 139,86 back on a H$ 100 dutch reads @ 1.40 Semi and "needs 1.29+", not @ 3.00 "already 1.80+ (Shot)".
 - A banked dutch split shows its name under its shot (v0.32.1)
   Under a shot started from a dutch split, the bet row now shows the split's selection (e.g. "Scottie 2 4Q ass") instead of "(no text)".
 - Bank a positive cash-out for a rollover (v0.32.0)

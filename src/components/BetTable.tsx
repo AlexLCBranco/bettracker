@@ -26,7 +26,7 @@ import type { Settler } from './useSettle';
 import { losingLegs, sharedLabel } from '@/lib/actuals';
 import { normalize } from '@/lib/autocomplete';
 import { Annotator, LabelChip, LossLine } from './Annotator';
-import { chainPending, chainSummary, goalText, isLadder, ladderOf, ladderProgress, ladderStrip, needsText, tierOf, type ChainOutcome } from '@/lib/rollover';
+import { chainPending, chainSummary, firstFactor, goalText, isLadder, ladderOf, ladderProgress, ladderStrip, needsText, tierOf, type ChainOutcome } from '@/lib/rollover';
 import type { Rollover } from './useRollover';
 
 const QUICK_RESULTS: { r: Result; key: string; cls: string }[] = [
@@ -408,8 +408,9 @@ const CHAIN_LABEL: Record<ChainOutcome, string> = { pending: 'Pending', open: 'O
  * bet needs, with Add leg and Close.
  */
 function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, select, settle, annotating, annotate, rollover }: { bets: Bet[]; rolloverId: string } & RowProps) {
-  const { names: nameCasing, remove, undoGroup } = useApp();
-  const s = chainSummary(raw);
+  const { names: nameCasing, remove, undoGroup, bets: allBets } = useApp();
+  // BT-39: a shot banked from a dutch split counts the whole dutch's stake in its odds
+  const s = chainSummary(raw, allBets);
   const bets = s.bets;
   const tone = groupTone(chainPending(s.outcome) ? 'pending' : (s.outcome as GroupOutcome));
   const money = bets[0]!.money;
@@ -485,7 +486,7 @@ function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, select, 
         <td className={NUM} data-testid="rollover-stake" data-col="stake" title="The first bet's stake: the rolled stakes are the same money">
           <span className={MONEY_TEXT[money] || 'text-zinc-200'}>{formatMoney(s.stake, money)}</span>
         </td>
-        <td className={`${NUM} text-zinc-200`} data-testid="rollover-odds" data-col="odds" title="The bets' odds multiplied (a void counts 1.00)">
+        <td className={`${NUM} text-zinc-200`} data-testid="rollover-odds" data-col="odds" title={s.baseStake !== s.stake ? `The bets' odds multiplied, the dutch split counted on the whole dutch's stake (${formatMoney(s.baseStake, money)})` : "The bets' odds multiplied (a void counts 1.00)"}>
           {formatOdds(s.odds, 2)}
         </td>
         <td className={NUM} data-testid="profit" data-col="profit">
@@ -640,7 +641,7 @@ interface Split {
 }
 
 function BetRow({ b, open, toggle, selected, select, settle, split, link, annotating, annotate, rollover }: { b: Bet; split?: Split; link?: ChainLink } & RowProps) {
-  const { update, remove, openEdit, openNew, names } = useApp();
+  const { update, remove, openEdit, openNew, names, bets: allBets } = useApp();
   // an edit in a cell is one undo step (Ctrl+Z)
   const save = (patch: Partial<BetInput>) => update(b.id, patch, {}).catch(() => undefined);
   const saveLeg = (i: number, patch: Partial<Leg>) => save({ legs: b.legs.map((l, j) => (j === i ? { ...l, ...patch } : l)) });
@@ -734,7 +735,7 @@ function BetRow({ b, open, toggle, selected, select, settle, split, link, annota
                 </span>
               )}
               {chip && <LabelChip label={chip} />}
-              {(link || b.banked) && !b.ladder && <TierChip odds={b.odds} banked={b.banked && (link ? link.index === link.chain.length - 1 : rollover.chainOf(b).length === 1)} />}
+              {(link || b.banked) && !b.ladder && <TierChip odds={b.dutchId && (!link || link.index === 0) ? firstFactor(b, allBets) : b.odds} banked={b.banked && (link ? link.index === link.chain.length - 1 : rollover.chainOf(b).length === 1)} />}
             </div>
           </div>
           <SubLine
