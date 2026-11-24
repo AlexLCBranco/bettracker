@@ -91,7 +91,8 @@ interface AppCtx {
   bankroll: Bankroll;
   saveEntry(input: EntryInput, id?: string): Promise<MoneyEntry>;
   /** Deletes an entry; the returned function puts it back (undo). */
-  removeEntry(e: MoneyEntry): Promise<() => Promise<void>>;
+  /** Deletes an entry; returns its restore at once (Z right after works: writes go in order). */
+  removeEntry(e: MoneyEntry): () => Promise<void>;
   /** The insert / take out money form. */
   moneyForm: MoneyFormRequest | null;
   openMoney(req?: Omit<MoneyFormRequest, 'key'>): void;
@@ -300,14 +301,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const before = betsRef.current;
       const gone = before.filter((b) => b.dutchId === dutchId);
       setBets((bs) => bs.filter((b) => b.dutchId !== dutchId));
+      // the undo step is there at once (Z right after works); writes go in order, so its restore follows the delete
+      let failed = false;
+      if (undo && gone.length) history.record({ label: undo.label ?? `Deleted a dutch (${gone.length} bets)`, key: undo.key ?? `dutch:${dutchId}`, revert: () => (failed ? undefined : restore(gone)) });
       try {
         await write(`/api/dutch/${dutchId}`, { method: 'DELETE' });
       } catch (e) {
+        failed = true;
         setBets(before);
         notify((e as Error).message, 'error');
         return;
       }
-      if (undo && gone.length) history.record({ label: undo.label ?? `Deleted a dutch (${gone.length} bets)`, key: undo.key ?? `dutch:${dutchId}`, revert: () => restore(gone) });
     },
     [notify, write, history, restore],
   );
@@ -322,16 +326,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // (legs patched from the settle queue get the bet's existing leg ids until the server answers)
       if (before) setBets((bs) => bs.map((b) => (b.id === id ? ({ ...b, ...patch, legs: patch.legs ? patch.legs.map((l, i) => ({ ...l, id: b.legs[i]?.id ?? `new-${i}` })) : b.legs } as Bet) : b)));
       const token = updates.begin(id);
+      // the undo step is there at once (Z right after works); writes go in order, so its revert follows this edit
+      let failed = false;
+      if (undo && before) {
+        const back = revertPatch(before, patch);
+        history.record({ label: undo.label ?? `Edited: ${describe(before)}`, key: undo.key ?? keyOf(before), revert: () => (failed ? undefined : updateRef.current?.(id, back).catch(() => undefined)) });
+      }
       try {
         const bet = await write<Bet>(`/api/bets/${id}`, { method: 'PATCH', body: JSON.stringify(patch) });
         // a newer edit of this bet is in flight or done: its response (read after both writes) is the one to show
         if (updates.isLatest(id, token)) setBets((bs) => bs.map((b) => (b.id === id ? bet : b)));
-        if (undo && before) {
-          const back = revertPatch(before, patch);
-          history.record({ label: undo.label ?? `Edited: ${describe(before)}`, key: undo.key ?? keyOf(before), revert: () => updateRef.current?.(id, back).catch(() => undefined) });
-        }
         return bet;
       } catch (e) {
+        failed = true;
         if (before && updates.isLatest(id, token)) setBets((bs) => bs.map((b) => (b.id === id ? before : b)));
         notify((e as Error).message, 'error');
         throw e;
@@ -348,14 +355,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const before = betsRef.current;
       const gone = before.find((b) => b.id === id);
       setBets((bs) => bs.filter((b) => b.id !== id));
+      // the undo step is there at once (Z right after works); writes go in order, so its restore follows the delete
+      let failed = false;
+      if (undo && gone) history.record({ label: undo.label ?? `Deleted: ${describe(gone)}`, key: undo.key ?? keyOf(gone), revert: () => (failed ? undefined : restore([gone])) });
       try {
         await write(`/api/bets/${id}`, { method: 'DELETE' });
       } catch (e) {
+        failed = true;
         setBets(before);
         notify((e as Error).message, 'error');
         return;
       }
-      if (undo && gone) history.record({ label: undo.label ?? `Deleted: ${describe(gone)}`, key: undo.key ?? keyOf(gone), revert: () => restore([gone]) });
     },
     [notify, write, history, restore],
   );
@@ -381,16 +391,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [write],
   );
   const removeEntry = useCallback(
-    async (e: MoneyEntry) => {
+    (e: MoneyEntry) => {
       setEntries((es) => es.filter((x) => x.id !== e.id));
-      try {
-        await write(`/api/money/${e.id}`, { method: 'DELETE' });
-      } catch (err) {
-        setEntries((es) => [...es, e].sort(byNewest));
-        notify((err as Error).message, 'error');
-        throw err;
-      }
+      let failed = false;
+      write(`/api/money/${e.id}`, { method: 'DELETE' }).catch((err: Error) => {
+        failed = true;
+        setEntries((es) => [...es.filter((x) => x.id !== e.id), e].sort(byNewest));
+        notify(err.message, 'error');
+      });
       return async () => {
+        if (failed) return;
         const { id, createdAt, updatedAt: _u, ...input } = e;
         void _u;
         const back = await write<MoneyEntry>('/api/money', { method: 'POST', body: JSON.stringify({ ...input, restore: { id, createdAt } }) });

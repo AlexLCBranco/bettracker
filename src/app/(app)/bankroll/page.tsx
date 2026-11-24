@@ -20,9 +20,8 @@ export default function BankrollPage() {
   const [undo, setUndo] = useState<{ restore: () => Promise<void>; label: string } | null>(null);
   const shown = useMemo(() => entries.filter((e) => (!type || e.money === type) && (!book.trim() || normalize(e.book) === normalize(book))), [entries, type, book]);
 
-  const del = async (e: MoneyEntry) => {
-    const restore = await removeEntry(e).catch(() => null);
-    if (!restore) return;
+  const del = (e: MoneyEntry) => {
+    const restore = removeEntry(e);
     const label = `${e.direction === 'in' ? 'Inserted' : 'Taken out'} ${formatMoney(e.amount, e.money)}`;
     setUndo({ restore, label });
     notify(`Deleted: ${label} (Z undoes)`);
@@ -111,7 +110,7 @@ export default function BankrollPage() {
                     <button className="rounded px-1.5 py-0.5 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-white" aria-label="Edit entry" title="Edit" onClick={() => openMoney({ edit: e })}>
                       ✎
                     </button>
-                    <button className="rounded px-1.5 py-0.5 text-xs text-red-300 hover:bg-zinc-800" aria-label="Delete entry" title="Delete (Z undoes)" onClick={() => void del(e)}>
+                    <button className="rounded px-1.5 py-0.5 text-xs text-red-300 hover:bg-zinc-800" aria-label="Delete entry" title="Delete (Z undoes)" onClick={() => del(e)}>
                       🗑
                     </button>
                   </td>

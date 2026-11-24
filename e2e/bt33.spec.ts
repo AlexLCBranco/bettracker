@@ -1,6 +1,6 @@
 // BT-33: insert real, bonus and hypothetical money; bets of each type move the balances; a bonus win pays winnings only.
 import type { Page } from '@playwright/test';
-import { createBet, expect, test } from './helpers';
+import { createBet, expect, saved, test } from './helpers';
 
 /** The bankroll panel's line for this test's book, for one money type. */
 async function bookLine(page: Page, money: 'real' | 'bonus' | 'hypothetical', tag: string) {
@@ -122,4 +122,27 @@ test('BT-33: take out, the entries list, delete and Z undo; a book with bets and
   await edit.getByLabel('Amount').fill('320');
   await edit.getByRole('button', { name: 'Save changes' }).click();
   await expect(await bookLine(page, 'real', tag)).toContainText('R$ 199,50');
+});
+
+test('a slow server: delete an entry and press Z at once, it comes back (the undo step exists before the server answers)', async ({ page, tag }) => {
+  await page.goto('/bankroll');
+  await page.getByRole('button', { name: 'Insert money' }).click();
+  await insert(page, 'Real', '300', tag);
+  await page.getByLabel('Filter book').fill(tag);
+  const rows = page.getByTestId('entry-row');
+  await expect(rows).toHaveCount(1);
+  await saved(page);
+  await page.route('**/api/money/*', async (route) => {
+    if (route.request().method() === 'DELETE') await new Promise((r) => setTimeout(r, 1500));
+    await route.continue();
+  });
+  await rows.first().getByRole('button', { name: 'Delete entry' }).click();
+  await expect(rows).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('z');
+  await expect(rows).toHaveCount(1);
+  await saved(page);
+  await page.reload();
+  await page.getByLabel('Filter book').fill(tag);
+  await expect(rows).toHaveCount(1);
 });

@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-24
+- Z right after a delete or edit always undoes it (v0.31.2)
+  Deleting a bet, a dutch or a bankroll entry (or editing a bet) and pressing Z within half a second did nothing on the live site, because the undo step only appeared once the server answered; it now exists at once.
 - Changes save in order on the live site, and the page warns before leaving while saving (v0.31.1)
   A settle followed at once by Z (or a delete and its undo) could end up saved the wrong way round, coming back after a reload; saves now go one at a time, a muted "saving…" shows next to the version while any are pending, and leaving or reloading the page then asks first.
 

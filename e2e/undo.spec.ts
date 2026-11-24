@@ -119,3 +119,23 @@ test('a slow server: settle then Z at once saves in order, "saving…" shows, an
   await page.getByLabel('Search bets').fill(tag);
   await expect(page.locator(`[data-bet-id="${b.id}"]`).first().getByTestId('result')).toHaveText('Pending');
 });
+
+test('a slow server: delete a bet and press Ctrl+Z at once, it comes back and stays', async ({ page, request, tag }) => {
+  const b = await createBet(request, { betText: `${tag} slowdel`, stake: 10, odds: 2, result: 'pending', money: 'real' });
+  await page.goto('/');
+  await page.getByLabel('Search bets').fill(tag);
+  await page.route(`**/api/bets/${b.id}`, async (route) => {
+    if (route.request().method() === 'DELETE') await new Promise((r) => setTimeout(r, 1500));
+    await route.continue();
+  });
+  const row = page.locator(`[data-bet-id="${b.id}"]`).first();
+  page.once('dialog', (d) => void d.accept());
+  await row.getByRole('button', { name: 'More actions' }).click();
+  await page.getByRole('menuitem', { name: 'Delete' }).click();
+  await expect(row).toBeHidden();
+  await page.locator('body').click({ position: { x: 5, y: 300 } });
+  await page.keyboard.press('Control+z');
+  await expect(row).toBeVisible();
+  await saved(page);
+  expect((await betsTagged(request, tag)).map((x) => x.id)).toEqual([b.id]);
+});
