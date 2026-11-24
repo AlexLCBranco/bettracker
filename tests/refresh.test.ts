@@ -63,3 +63,27 @@ describe('writes go one after another (the live server may apply overlapping req
     expect(order).toEqual(['a sent', 'a answered', 'b sent']);
   });
 });
+
+describe('loadWhenQuiet: the first load', () => {
+  it('a write that begins while it runs makes it load again, after the write answers', async () => {
+    const { loadWhenQuiet } = await import('@/lib/refresh');
+    const g = refreshGate();
+    const db: string[] = [];
+    let calls = 0;
+    const fetchAll = async () => {
+      calls++;
+      const snapshot = [...db];
+      // the first read answers late; a bet is saved meanwhile
+      if (calls === 1) await g.write(async () => void db.push('quick-added'));
+      return snapshot;
+    };
+    expect(await loadWhenQuiet(g, fetchAll)).toEqual(['quick-added']);
+    expect(calls).toBe(2);
+  });
+
+  it('with no write meanwhile, one load is enough', async () => {
+    const { loadWhenQuiet } = await import('@/lib/refresh');
+    let calls = 0;
+    expect(await loadWhenQuiet(refreshGate(), async () => ++calls)).toBe(1);
+  });
+});

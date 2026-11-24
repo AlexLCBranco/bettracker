@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-24
+- A bet quick-added while the page is still loading stays on the page (v0.34.2)
+  On the live site the first load could answer after a quick-added bet was saved and wipe it from view (it was saved, and came back on reload); the first load now waits for such saves and loads again.
 - Editing a ladder rung in the full form keeps it in its ladder (v0.34.1)
   Saving an edit of a rung (text, stake, odds…) used to drop it out of its ladder and lose the goal; it now stays a rung.
 - BT-38 — Units: type a stake as "1u" and view everything in units (v0.34.0)

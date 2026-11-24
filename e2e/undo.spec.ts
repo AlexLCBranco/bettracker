@@ -139,3 +139,25 @@ test('a slow server: delete a bet and press Ctrl+Z at once, it comes back and st
   await saved(page);
   expect((await betsTagged(request, tag)).map((x) => x.id)).toEqual([b.id]);
 });
+
+test('a slow first load: a bet quick-added before the page finished loading stays on the page', async ({ page, request, tag }) => {
+  // the first GET /api/bets reads the bets at once but answers late, after the quick-add below has been saved
+  let first = true;
+  await page.route('**/api/bets', async (route) => {
+    if (route.request().method() !== 'GET' || !first) return route.continue();
+    first = false;
+    const res = await route.fetch();
+    await new Promise((r) => setTimeout(r, 2500));
+    await route.fulfill({ response: res });
+  });
+  await page.goto('/');
+  await page.getByTestId('quick-add').fill(`25 @2 ${tag} early`);
+  await page.getByTestId('quick-add').press('Enter');
+  await expect(page.getByRole('status')).toContainText('Saved: R$ 25,00');
+  await expect.poll(async () => (await betsTagged(request, tag)).length).toBe(1);
+  await page.getByLabel('Search bets').fill(tag);
+  // the late first load must not wipe it out
+  await expect(page.locator('[data-testid="bet-row"]').filter({ hasText: `${tag} early` })).toHaveCount(1);
+  await page.waitForTimeout(3000);
+  await expect(page.locator('[data-testid="bet-row"]').filter({ hasText: `${tag} early` })).toHaveCount(1);
+});

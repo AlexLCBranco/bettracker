@@ -13,6 +13,10 @@ export function refreshGate() {
     begin(): number | null {
       return inFlight > 0 ? null : writes;
     },
+    /** Resolves once every write sent so far has answered. */
+    idle(): Promise<void> {
+      return queue.catch(() => undefined).then(() => new Promise<void>((r) => setTimeout(r, 0)));
+    },
     canApply(token: number | null): boolean {
       return token != null && inFlight === 0 && writes === token;
     },
@@ -31,6 +35,23 @@ export function refreshGate() {
       });
     },
   };
+}
+
+/**
+ * The page's first load: its result is used only when no write began while it ran (a bet quick-added before the page
+ * finished loading would otherwise vanish from view, the slow first answer replacing it); else it loads again once
+ * the writes have answered.
+ */
+export async function loadWhenQuiet<T>(gate: ReturnType<typeof refreshGate>, fetchAll: () => Promise<T>): Promise<T> {
+  for (;;) {
+    const token = gate.begin();
+    if (token == null) {
+      await gate.idle();
+      continue;
+    }
+    const data = await fetchAll();
+    if (gate.canApply(token)) return data;
+  }
 }
 
 /** Reloads at most this often (focus and visibilitychange often fire together). */

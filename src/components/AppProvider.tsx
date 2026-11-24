@@ -5,7 +5,7 @@ import { betNames, buildIndex, lastUsed, stakePresets, suggest, type Field, type
 import { betLabel, type DutchDraft } from '@/lib/dutch';
 import type { BetForm } from '@/lib/form';
 import { latestGate } from '@/lib/latest';
-import { REFRESH_MIN_MS, refreshGate } from '@/lib/refresh';
+import { loadWhenQuiet, REFRESH_MIN_MS, refreshGate } from '@/lib/refresh';
 import { tidyBet, type NameCasing } from '@/lib/tidy';
 import type { Bet, BetInput, Ladder, Money } from '@/lib/types';
 import { bankroll as computeBankroll, type Bankroll, type EntryInput, type MoneyEntry } from '@/lib/bankroll';
@@ -161,8 +161,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [bets, names]);
   const formKey = useRef(0);
 
+  // Every write goes through the gate, so a reload never puts back (or wipes out) what this page just changed.
+  const [writes] = useState(refreshGate);
   useEffect(() => {
-    Promise.all([api<Bet[]>('/api/bets'), api<MoneyEntry[]>('/api/money'), api<PPBatch[]>('/api/pp'), api<UnitSettings>('/api/units')])
+    // the quick-add box works before the bets have loaded: a bet saved meanwhile must not be wiped out by the first load
+    loadWhenQuiet(writes, () => Promise.all([api<Bet[]>('/api/bets'), api<MoneyEntry[]>('/api/money'), api<PPBatch[]>('/api/pp'), api<UnitSettings>('/api/units')]))
       .then(([b, e, p, u]) => {
         setBets(b);
         setEntries(e);
@@ -171,10 +174,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setLoaded(true);
       })
       .catch((e: Error) => setLoadError(e.message));
-  }, []);
+  }, [writes]);
 
-  // Every write goes through the gate, so a reload on focus never puts back what this page just changed.
-  const [writes] = useState(refreshGate);
   // Writes not yet answered: the live server takes ~0.5 s each and they go one at a time, so a fast run of edits can
   // be seconds ahead of the server. Leaving or reloading the page then would drop the rest: the browser asks first.
   const [saving, setSaving] = useState(0);
