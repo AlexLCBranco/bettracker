@@ -2,6 +2,10 @@
 
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
+## 2026-11-24
+- Changes save in order on the live site, and the page warns before leaving while saving (v0.31.1)
+  A settle followed at once by Z (or a delete and its undo) could end up saved the wrong way round, coming back after a reload; saves now go one at a time, a muted "saving…" shows next to the version while any are pending, and leaving or reloading the page then asks first.
+
 ## 2026-11-23
 - Banked bets at a glance: a Banked figure in the top bar and a Banked tab (v0.31.0)
   With any bet banked, the top bar shows "⤴ 3 banked" with the total waiting (per money type) and one small gauge per shot filling toward 1.80 (green once there, indigo for a ladder); a click lists them oldest first with amount, odds and tier, what the next bet needs and since when, and opens the one picked on the new Banked tab of the Bets page.

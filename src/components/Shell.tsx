@@ -132,10 +132,16 @@ function Frame({ children }: { children: ReactNode }) {
 
 /** "v1.3.0" in the bottom-right corner; commit and build time in the tooltip. */
 export function SiteVersion() {
+  const { saving } = useApp();
   const t = Date.parse(BUILD_INFO.builtAt);
   const when = Number.isNaN(t) ? '' : `, built ${new Date(t).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}`;
   return (
     <div className="pointer-events-auto fixed bottom-1 right-2 z-20 select-none text-[11px] text-zinc-600" data-testid="site-version" title={`Version ${BUILD_INFO.version} · commit ${BUILD_INFO.commit}${when}`}>
+      {saving > 0 && (
+        <span className="mr-2 text-zinc-500" data-testid="saving" title={`${saving} change${saving === 1 ? '' : 's'} still saving: keep this page open`}>
+          saving…
+        </span>
+      )}
       v{BUILD_INFO.version}
     </div>
   );

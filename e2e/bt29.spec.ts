@@ -1,5 +1,5 @@
 // BT-29: rollover shots. Bank a won bet, add the next bet with its whole payout, settle; close; undo.
-import { betsTagged, createBet, expect, test } from './helpers';
+import { betsTagged, createBet, expect, saved, test } from './helpers';
 import type { APIRequestContext, Page } from '@playwright/test';
 
 async function search(page: Page, tag: string) {
@@ -48,6 +48,7 @@ test('BT-29: bank → add leg → win is ONE 1.92 shot paying +R$ 92 on R$ 100',
   await expect(page.getByTestId('stat-wagered-value')).toHaveText(/R\$\s100,00/);
   await expect(page.getByTestId('stat-net-value')).toHaveText(/\+R\$\s92,00/);
 
+  await saved(page);
   const bets = await betsTagged(request, tag);
   expect(new Set(bets.map((b) => b.rolloverId)).size).toBe(1);
   expect(bets.find((b) => b.betText.endsWith('second'))).toMatchObject({ stake: 160, odds: 1.2, result: 'won', money: 'real' });

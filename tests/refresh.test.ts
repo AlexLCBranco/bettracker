@@ -37,3 +37,29 @@ describe('refreshGate', () => {
     expect(g.canApply(g.begin())).toBe(true);
   });
 });
+
+describe('writes go one after another (the live server may apply overlapping requests in any order)', () => {
+  it('a second write is not sent until the first has answered, even when the first fails', async () => {
+    const g = refreshGate();
+    const d = deferred();
+    const order: string[] = [];
+    const a = g.write(async () => {
+      order.push('a sent');
+      await d.p;
+      order.push('a answered');
+      throw new Error('refused');
+    });
+    const b = g.write(async () => {
+      order.push('b sent');
+      return 'b';
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(order).toEqual(['a sent']);
+    expect(g.begin()).toBeNull();
+    d.resolve();
+    await expect(a).rejects.toThrow('refused');
+    await expect(b).resolves.toBe('b');
+    expect(order).toEqual(['a sent', 'a answered', 'b sent']);
+  });
+});

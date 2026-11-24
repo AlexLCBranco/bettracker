@@ -1,4 +1,4 @@
-import { test as base, expect, type APIRequestContext, type Response } from '@playwright/test';
+import { test as base, expect, type APIRequestContext, type Page, type Response } from '@playwright/test';
 import type { Bet } from '../src/lib/types';
 import { deleteBatchIds, deleteEntryIds, deleteIds, listBatches, listEntries } from './cleanup';
 
@@ -29,7 +29,29 @@ export async function betsTagged(request: APIRequestContext, tag: string): Promi
  * through createBet and the ones the app saved, read from its POST /api/bets responses) and every bet carrying its
  * tag; a delete that fails fails the test (BT-11).
  */
+/**
+ * Waits until the page has no change still saving (<html data-saving> gone). On the live site each write takes ~0.5 s
+ * and they go one at a time, so the page can be seconds ahead of the server.
+ */
+export async function saved(page: Page) {
+  await expect(page.locator('html[data-saving]')).toHaveCount(0, { timeout: 30_000 });
+}
+
 export const test = base.extend<{ tag: string }>({
+  // a new page load drops the writes still queued (and the page asks first): goto and reload wait for them
+  page: async ({ page }, use) => {
+    const goto = page.goto.bind(page);
+    const reload = page.reload.bind(page);
+    page.goto = async (...args: Parameters<Page['goto']>) => {
+      if (page.url().startsWith('http')) await saved(page);
+      return goto(...args);
+    };
+    page.reload = async (...args: Parameters<Page['reload']>) => {
+      await saved(page);
+      return reload(...args);
+    };
+    await use(page);
+  },
   tag: async ({ request, context }, use) => {
     const tag = makeTag();
     const ids = new Set<string>();

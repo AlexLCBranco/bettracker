@@ -45,6 +45,8 @@ export type FormRequest = { mode: 'new'; prefill?: Partial<BetForm>; rollover?: 
 interface AppCtx {
   bets: Bet[];
   loaded: boolean;
+  /** Writes not yet answered by the server (sent or waiting their turn). */
+  saving: number;
   loadError: string;
   /** Adding and deleting go into the undo history (Ctrl+Z) unless `undo` is false. */
   create(input: BetInput, undo?: UndoAs): Promise<Bet>;
@@ -164,7 +166,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // Every write goes through the gate, so a reload on focus never puts back what this page just changed.
   const [writes] = useState(refreshGate);
-  const write = useCallback(<T,>(url: string, init: RequestInit) => writes.write(() => api<T>(url, init)), [writes]);
+  // Writes not yet answered: the live server takes ~0.5 s each and they go one at a time, so a fast run of edits can
+  // be seconds ahead of the server. Leaving or reloading the page then would drop the rest: the browser asks first.
+  const [saving, setSaving] = useState(0);
+  const track = useCallback(<T,>(p: () => Promise<T>): Promise<T> => {
+    setSaving((n) => n + 1);
+    return p().finally(() => setSaving((n) => n - 1));
+  }, []);
+  const write = useCallback(<T,>(url: string, init: RequestInit) => track(() => writes.write(() => api<T>(url, init))), [writes, track]);
+  useEffect(() => {
+    const root = document.documentElement;
+    if (!saving) {
+      delete root.dataset.saving;
+      return;
+    }
+    root.dataset.saving = 'true';
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [saving]);
 
   // Reload all bets when the tab comes back into view (another tab, the phone or an e2e run may have changed them),
   // at most every few seconds, and only when nothing was written meanwhile.
@@ -390,10 +413,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const ppQueue = useRef(new Map<string, Promise<unknown>>());
   const [ppGate] = useState(latestGate);
   const queued = useCallback(<T,>(batchId: string, run: () => Promise<T>): Promise<T> => {
-    const p = (ppQueue.current.get(batchId) ?? Promise.resolve()).catch(() => undefined).then(run);
+    const p = track(() => (ppQueue.current.get(batchId) ?? Promise.resolve()).catch(() => undefined).then(run));
     ppQueue.current.set(batchId, p);
     return p;
-  }, []);
+  }, [track]);
   const saveBatch = useCallback(
     async (input: BatchInput, id?: string) => {
       const before = id ? batchesRef.current.find((b) => b.id === id) : undefined;
@@ -456,6 +479,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value: AppCtx = {
     bets,
     loaded,
+    saving,
     loadError,
     create,
     createMany,

@@ -1,5 +1,5 @@
 // Ctrl+Z undoes the last change to the bets (add, edit, delete); "Remove from ladder" keeps the bet as a plain bet.
-import { betsTagged, createBet, expect, test } from './helpers';
+import { betsTagged, createBet, expect, saved, test } from './helpers';
 
 test('Ctrl+Z: a bet added by mistake goes; an edit goes back; a deleted bet comes back as it was', async ({ page, request, tag }) => {
   await page.goto('/');
@@ -95,4 +95,27 @@ test('Remove from ladder: the rung stays as a plain bet (bonus money kept), the 
       return b.rolloverId != null && b.rolloverId === a.rolloverId && b.ladder != null;
     })
     .toBe(true);
+});
+
+test('a slow server: settle then Z at once saves in order, "saving…" shows, and the page waits before leaving', async ({ page, request, tag }) => {
+  const b = await createBet(request, { betText: `${tag} slow`, stake: 10, odds: 2, result: 'pending', money: 'real' });
+  await page.goto('/');
+  await page.getByLabel('Search bets').fill(tag);
+  // the first PATCH answers late (like an overlapping request landing on a slower server instance)
+  let n = 0;
+  await page.route(`**/api/bets/${b.id}`, async (route) => {
+    if (route.request().method() === 'PATCH' && n++ === 0) await new Promise((r) => setTimeout(r, 1500));
+    await route.continue();
+  });
+  const row = page.locator(`[data-bet-id="${b.id}"]`).first();
+  await row.click();
+  await page.keyboard.press('l');
+  await page.keyboard.press('z');
+  await expect(page.getByTestId('saving')).toBeVisible();
+  await saved(page);
+  await expect(page.getByTestId('saving')).toBeHidden();
+  expect((await betsTagged(request, tag))[0]).toMatchObject({ result: 'pending' });
+  await page.reload();
+  await page.getByLabel('Search bets').fill(tag);
+  await expect(page.locator(`[data-bet-id="${b.id}"]`).first().getByTestId('result')).toHaveText('Pending');
 });
