@@ -657,9 +657,11 @@ function BetRow({ b, open, toggle, selected, select, settle, split, link, annota
   const bankable = rollover.canBank(b);
   // BT-35: a won plain bet can become rung 1 of a ladder
   const startable = !nested && !link && rollover.canStartLadder(b);
-  // a dutch's bets are logged without bet text: its selection is the text, edited on the leg
-  const textOnLeg = !b.betText && solo && nested;
-  const rawText = b.betText || (nested ? betLabel(b) : '');
+  // a dutch's bets are logged without bet text: its selection is the text, edited on the leg (also under its shot
+  // once a split is banked)
+  const fromDutch = nested || !!b.dutchId;
+  const textOnLeg = !b.betText && solo && fromDutch;
+  const rawText = b.betText || (fromDutch ? betLabel(b) : '');
   const text = rawText && tidyText(rawText, names);
   const hits = comboHits(b);
   const leg0 = b.legs[0];

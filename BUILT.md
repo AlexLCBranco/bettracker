@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-24
+- A banked dutch split shows its name under its shot (v0.32.1)
+  Under a shot started from a dutch split, the bet row now shows the split's selection (e.g. "Scottie 2 4Q ass") instead of "(no text)".
 - Bank a positive cash-out for a rollover (v0.32.0)
   A bet cashed out for more than its stake now has the Bank button (and B) like a won bet: its cash-out amount starts a shot and is the next leg's stake.
 - Z right after a delete or edit always undoes it (v0.31.2)

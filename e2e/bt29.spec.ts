@@ -133,6 +133,21 @@ test('a won dutch split banks: its shot starts from the split payout, dutch + sh
   await expect(page.getByTestId('stat-net-value')).toHaveText(/\+R\$\s60,00/);
 });
 
+test('a banked dutch split is named by its selection under its shot, not "(no text)"', async ({ page, request, tag }) => {
+  const d = `${tag}-dn`.replace(/[^A-Za-z0-9_-]/g, '');
+  const leg = (selection: string) => ({ selection, game: `${tag} game`, sport: 'NBA', market: 'pts', odds: null, actual: '' });
+  // a dutch's splits are logged without bet text: the name is the leg's selection
+  const won = await createBet(request, { dutchId: d, betText: '', legs: [leg('Scottie 2 4Q ass')], stake: 46.62, odds: 3, result: 'won', money: 'real' });
+  await createBet(request, { dutchId: d, betText: '', legs: [leg('Scottie 9 4Q pts')], stake: 53.38, odds: 2.62, result: 'lost', money: 'real' });
+  await search(page, tag);
+  await page.locator(`[data-split-of="${d}"][data-bet-id="${won.id}"]`).getByTestId('bank').click();
+  const shot = page.getByTestId('rollover-row');
+  await expect(shot.getByTestId('result')).toHaveText('Open');
+  const under = page.locator(`[data-bet-id="${won.id}"]:not([data-split-of])`);
+  await expect(under.getByTestId('bet-text')).toContainText('Scottie 2 4Q ass');
+  await expect(under.getByTestId('bet-text')).not.toContainText('(no text)');
+});
+
 test('several banked bets: the top bar shows how many and how much, each opens on the Banked tab', async ({ page, request, tag }) => {
   const a = await createBet(request, { betText: `${tag} a`, stake: 100, odds: 1.6, result: 'won', money: 'real', rolloverId: `${tag}-ra`.replace(/[^A-Za-z0-9_-]/g, ''), banked: true });
   const b = await createBet(request, { betText: `${tag} b`, stake: 50, odds: 1.9, result: 'won', money: 'real', rolloverId: `${tag}-rb`.replace(/[^A-Za-z0-9_-]/g, ''), banked: true });
