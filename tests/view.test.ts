@@ -6,6 +6,7 @@ import type { Bet } from '@/lib/types';
 let n = 0;
 const bet = (over: Partial<Bet> = {}): Bet => ({
   id: `b${++n}`,
+  noBrainer: false,
   book: '',
   placedDate: '2026-11-20',
   gameDate: '2026-11-20',

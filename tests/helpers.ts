@@ -31,6 +31,7 @@ export function bet(over: Partial<Bet> = {}): Bet {
     unitSize: null,
     money: 'real',
     label: '',
+    noBrainer: false,
     createdAt: '2026-11-20T12:00:00.000Z',
     updatedAt: '2026-11-20T12:00:00.000Z',
     ...over,

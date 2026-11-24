@@ -195,6 +195,8 @@ export interface DutchDraft {
   /** dd/mm/yyyy as typed */
   placedDate: string;
   gameDate: string;
+  /** BT-44: the no brainer mark, for the whole dutch. Missing = off. */
+  noBrainer?: boolean;
 }
 
 type DraftRowIn = { selection: string; odds: number; stake: number; legs?: DraftLeg[] };
@@ -250,6 +252,7 @@ function draftOf(bets: Bet[]): Omit<DutchDraft, 'placedDate' | 'gameDate'> {
     markets: distinct(allLegs.map((l) => l.market)),
     situation: bets[0]!.situation,
     money: bets[0]!.money,
+    noBrainer: bets.some((b) => b.noBrainer),
   };
 }
 
@@ -332,6 +335,7 @@ export function draftToBets(d: DutchDraft, lastBook: string, dutchId: string, to
       betText: combo ? legs.map((x) => x.l.selection.trim()).join(' + ') : '',
       dutchId,
       money: d.money,
+      noBrainer: !!d.noBrainer,
       legs: combo ? legs.map((x) => leg(x, x.l.selection, x.l.odds)) : [leg(legs[0]!, legs[0]!.l.selection || r.selection, r.odds)],
     });
     if (!v.ok)

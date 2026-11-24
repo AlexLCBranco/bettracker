@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Fragment, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useApp } from '@/components/AppProvider';
+import { useToggleNoBrainer } from '@/components/NoBrainer';
 import { Autocomplete } from '@/components/Autocomplete';
 import { BetTable } from '@/components/BetTable';
 import { DateField } from '@/components/BetFormModal';
@@ -48,6 +49,7 @@ const HELP: [string, string][] = [
   ['B', 'Bank a won bet for a rollover; on an open shot, close it'],
   ['A', 'Open shot: add the next leg'],
   ['T', 'Label and actual result'],
+  ['X', 'No brainer on / off (a dutch: the whole dutch)'],
   ['Ctrl+Z or Z', 'Undo the last change: add, edit, delete, settle, ladder or rollover step'],
   ['N', 'New bet'],
   ['M', 'Insert money (bankroll)'],
@@ -122,6 +124,7 @@ function Bets() {
     restored: (k) => setPicked(k),
   });
   const rollover = useRollover(settle);
+  const toggleNoBrainer = useToggleNoBrainer();
 
   const [help, setHelp] = useState(false);
   // BT-27: the row whose label / actual editor is open; it never opens on its own (settling stays W / L / V)
@@ -158,6 +161,16 @@ function Bets() {
       if (k === 't') {
         e.preventDefault();
         return setAnnotating(selected);
+      }
+      // BT-44: X toggles the no brainer mark (a split marks its whole dutch)
+      if (k === 'x') {
+        e.preventDefault();
+        const one = selected.startsWith('bet:') ? byId.get(selected.slice(4)) : undefined;
+        const dutchId = selected.startsWith('dutch:') ? selected.slice(6) : one?.dutchId;
+        const rowBets = dutchId ? shown.filter((b) => b.dutchId === dutchId) : one ? [one] : [];
+        if (!rowBets.length) return notify('X marks a bet or a dutch as a no brainer', 'error');
+        void toggleNoBrainer(rowBets);
+        return;
       }
       // BT-29: a rollover shot, or a bet in one: B banks / closes, A adds a leg, W / L / V settle its pending bet
       const sel = selected.startsWith('bet:') ? byId.get(selected.slice(4)) : undefined;

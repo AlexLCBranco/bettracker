@@ -24,31 +24,6 @@ Words the owner uses (keep them in the UI):
   works in volume. Before, it was done in Excalidraw with AIs inventing the scheme per batch, the history lived only
   in the bookmaker's app and vanished, and both building and following 100 PPs was the part that broke.
 
-### BT-44 — "No brainer" mark on a bet
-**In short:** Mark a bet as a "no brainer" and its whole bet cell is highlighted, so those bets stand out in the table.
-
-From the owner, 2026-11-24: "a 'no brainer' label option and highlights the whole cell maybe in yellow idk".
-The details below are the session's proposal; he has not confirmed them.
-
-- A separate on/off mark, NOT the free-text label of BT-27: a bet has one label, and a no brainer must still be able
-  to carry "LOST BY ONE" later. New boolean on the bet (`noBrainer`, default off, existing bets off), saved with it.
-- Setting it: a "No brainer" checkbox in the add / edit bet form and the dutch form (for a dutch it applies to the
-  whole dutch); `#nb` at the end of a quick-add line; and a one-click toggle on the row (same place as "+ label /
-  result"), with a keyboard key shown in its tooltip. Free the key from clashing with the existing ones (T, W / L /
-  V / C).
-- Showing: the whole bet cell (the wide cell with the selection text) gets a tinted background and a small
-  "NO BRAINER" chip before the label chip. Colour: violet, not yellow. Amber / yellow already means "partial result"
-  everywhere (`src/lib/tone.ts`, BT-13), and is the colour of the label chip and of "woulda won", so a yellow cell
-  would read as a half-win. If the owner still wants yellow, it is one class to change: keep the colour in one
-  place.
-- The tint must not change the row height, the column widths or the table alignment, and adds no "…" cut text.
-  The chip's text keeps it readable without colour.
-- Export / import (`DataTransfer`) carries the mark; an older file without it imports as off.
-- Not in this item: a no-brainer filter or a no-brainer record in Analytics (goes with I-3, labels in filters and
-  Analytics).
-- Tests: unit tests for the quick-add `#nb` parsing and the import default; one e2e that adds a throwaway bet,
-  toggles the mark from the row, sees the tinted cell and chip, reloads and still sees them.
-
 ### BT-45 — Marquee select and bulk actions on the Bets table
 **In short:** Drag a box over the Bets table to select several bets at once, then settle, label or delete them together and see their totals.
 

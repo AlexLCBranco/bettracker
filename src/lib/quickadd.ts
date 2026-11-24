@@ -12,8 +12,8 @@ export interface QuickLadder {
 
 /** `units`: the stake was typed in units ("1,5u", BT-38): `stake` is that number of units, not money yet. */
 export type QuickAdd =
-  | { ok: true; stake: number; odds: number; betText: string; money?: Money; ladder?: QuickLadder; units?: true }
-  | { ok: false; stake: number | null; odds: number | null; betText: string; reason: string; money?: Money; ladder?: QuickLadder; units?: true };
+  | { ok: true; stake: number; odds: number; betText: string; money?: Money; ladder?: QuickLadder; units?: true; noBrainer?: true }
+  | { ok: false; stake: number | null; odds: number | null; betText: string; reason: string; money?: Money; ladder?: QuickLadder; units?: true; noBrainer?: true };
 
 const NUM = String.raw`\d+(?:[.,]\d+)?`;
 /** An odds token after "@": decimal, signed (American / Indonesian / Malay), fractional or a percentage. */
@@ -35,6 +35,13 @@ export function parseQuickAdd(line: string): QuickAdd {
     ladder = { goalRungs: v != null && !lad[2] ? Math.round(v) : null, goalAmount: v != null && lad[2] ? v : null };
     rest = (rest.slice(0, lad.index) + ' ' + rest.slice(lad.index + lad[0].length)).trim();
   }
+  // BT-44: "#nb" (at the end of the line) marks the bet as a no brainer
+  let noBrainer = false;
+  const nb = /(^|\s)#nb(?=\s|$)/i.exec(rest);
+  if (nb) {
+    noBrainer = true;
+    rest = (rest.slice(0, nb.index) + ' ' + rest.slice(nb.index + nb[0].length)).trim();
+  }
   const tokens = rest.split(/\s+/).filter(Boolean);
   let stake: number | null = null;
   // "H$150" = hypothetical money (BT-14), "B$150" = bonus (BT-33), "R$150" = real; no prefix = the last-used money
@@ -55,7 +62,7 @@ export function parseQuickAdd(line: string): QuickAdd {
     tokens.splice(stakeIdx, 1);
   }
   const betText = tokens.join(' ');
-  const m = { ...(money ? { money } : {}), ...(ladder ? { ladder } : {}), ...(units ? { units: true as const } : {}) };
+  const m = { ...(money ? { money } : {}), ...(ladder ? { ladder } : {}), ...(units ? { units: true as const } : {}), ...(noBrainer ? { noBrainer: true as const } : {}) };
   if (stake == null || !(stake > 0)) return { ok: false, stake: stake && stake > 0 ? stake : null, odds, betText, reason: 'No stake found', ...m };
   if (odds == null) return { ok: false, stake, odds: null, betText, reason: 'No @odds found', ...m };
   if (!(odds > 1)) return { ok: false, stake, odds: null, betText, reason: 'Odds must be above 1', ...m };

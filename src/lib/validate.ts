@@ -116,6 +116,8 @@ export function validateBet(raw: unknown): Validated {
       money,
       // BT-27: one label per bet, kept as typed (shown uppercase)
       label: str(r.label).replace(/\s+/g, ' ').slice(0, 60),
+      // BT-44: a missing mark (older files and clients) is off
+      noBrainer: r.noBrainer === true || r.noBrainer === 1,
     },
   };
 }

@@ -43,6 +43,8 @@ export interface BetForm {
   /** BT-27: the bet's label and (solo) the actual result of its leg. */
   label: string;
   actual: string;
+  /** BT-44: the no brainer mark. */
+  noBrainer: boolean;
 }
 
 export const emptyLeg = (sport = ''): LegForm => ({ sport, game: '', market: '', selection: '', odds: '', result: 'pending', actual: '' });
@@ -77,6 +79,7 @@ export function newForm(defaults: Defaults, today = todayISO()): BetForm {
     money: defaults.money ?? 'real',
     label: '',
     actual: '',
+    noBrainer: false,
   };
 }
 
@@ -103,6 +106,7 @@ export function formFromBet(b: Bet): BetForm {
     money: b.money,
     label: b.label,
     actual: solo?.actual ?? '',
+    noBrainer: b.noBrainer,
   };
 }
 
@@ -137,6 +141,7 @@ export function nextForm(f: BetForm): BetForm {
     postAnalysis: '',
     label: '',
     actual: '',
+    noBrainer: false,
     legs: f.type === 'combination' ? [] : [],
   };
 }
@@ -182,6 +187,7 @@ export function formToBet(f: BetForm, today = todayISO(), sizes: UnitSizes = NO_
     legs,
     money: st.money,
     label: f.label,
+    noBrainer: f.noBrainer,
   });
 }
 

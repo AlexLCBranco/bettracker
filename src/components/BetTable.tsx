@@ -22,6 +22,7 @@ import { comboHits, dutchHits, missesTitle } from '@/lib/hits';
 import { tidyText } from '@/lib/tidy';
 import { DutchSettleButtons } from './DutchSettle';
 import { GameTarget } from './GameEditor';
+import { isNoBrainer, NB_TINT, NoBrainerButton, NoBrainerChip } from './NoBrainer';
 import { linksForBets, siteMark, siteName, type GameLink } from '@/lib/gameLinks';
 import { betTone, groupTone, resultTone } from '@/lib/tone';
 import { TONE_BADGE, TONE_EDGE, TONE_TEXT } from './tone';
@@ -341,6 +342,8 @@ function DutchGroup({ bets, dutchId, open, toggle, selected, select, settle, ann
   const winners = settle.winners(dutchId);
   const book = shared(bets, (b) => b.book);
   const label = sharedLabel(bets);
+  // BT-44: the whole dutch is a no brainer
+  const nb = isNoBrainer(bets);
   const annotateHere = () => {
     select(key);
     annotate(key);
@@ -349,9 +352,10 @@ function DutchGroup({ bets, dutchId, open, toggle, selected, select, settle, ann
     <>
       <tr className={ROW} data-testid="dutch-row" data-dutch-id={dutchId} data-key={key} data-selected={isSel || undefined} data-tone={tone} data-money={money} onClick={() => select(key)}>
         <td className={`${TONE_EDGE[tone]}`} />
-        <td className={CELL}>
+        <td className={`${CELL} ${nb ? NB_TINT : ''}`} data-no-brainer={nb || undefined}>
           <div className={`${TEXT} flex items-center gap-1.5`} data-testid="bet-text" title={names}>
             <span data-testid="type">Dutch ×{bets.length}</span>
+            {nb && <NoBrainerChip />}
             {label && <LabelChip label={label} />}
             {live && <LiveTag />}
           </div>
@@ -391,6 +395,7 @@ function DutchGroup({ bets, dutchId, open, toggle, selected, select, settle, ann
               <DutchSettleButtons dutchId={dutchId} bets={bets} onSettle={(a) => settle.settleDutch(dutchId, bets, a)} />
             )}
             <span className={HOVER_ONLY} data-testid="row-actions">
+              <NoBrainerButton bets={bets} />
               {!pending.length && <AnnotateButton onClick={annotateHere} />}
               <IconButton label="Edit dutch" onClick={() => openDutch(editDutchDraft(bets), undefined, { dutchId, bets })}>
                 ✎
@@ -722,7 +727,7 @@ function BetRow({ b, open, toggle, selected, select, settle, split, link, annota
   const soloActual = solo ? (leg0?.actual ?? '') : '';
   const group = split?.group ?? [b];
   const losses = losingLegs(b, split?.group ?? []);
-  const flow = !!(chip || soloActual || link || b.banked || b.wouldHave);
+  const flow = !!(chip || soloActual || link || b.banked || b.wouldHave || (b.noBrainer && !nested));
   const annotateHere = () => {
     select(key);
     annotate(key);
@@ -743,7 +748,7 @@ function BetRow({ b, open, toggle, selected, select, settle, split, link, annota
             </span>
           )}
         </td>
-        <td className={`${CELL} ${indent ? 'pl-5' : ''}`}>
+        <td className={`${CELL} ${indent ? 'pl-5' : ''} ${b.noBrainer && !nested ? NB_TINT : ''}`} data-no-brainer={(b.noBrainer && !nested) || undefined}>
           <div className="flex items-start gap-1.5">
             {link && (
               <span className={`mt-px shrink-0 text-[10px] leading-4 ${link.current ? 'rounded bg-indigo-500/20 px-1 font-semibold text-indigo-200' : 'text-zinc-500'}`} data-testid="chain-label" data-current={link.current || undefined}>
@@ -783,6 +788,7 @@ function BetRow({ b, open, toggle, selected, select, settle, split, link, annota
                   {soloActual}
                 </span>
               )}
+              {b.noBrainer && !nested && <NoBrainerChip />}
               {chip && <LabelChip label={chip} />}
               <WouldaChip bet={b} fmt={inUnits} />
               {(link || b.banked) && !b.ladder && <TierChip odds={b.dutchId && (!link || link.index === 0) ? firstFactor(b, allBets) : b.odds} banked={b.banked && (link ? link.index === link.chain.length - 1 : rollover.chainOf(b).length === 1)} />}
@@ -895,6 +901,7 @@ function BetRow({ b, open, toggle, selected, select, settle, split, link, annota
                       Start ladder
                     </button>
                   )}
+                  <NoBrainerButton bets={[b]} />
                   <AnnotateButton onClick={annotateHere} />
                   <IconButton label="Edit" onClick={() => openEdit(b)}>
                     ✎

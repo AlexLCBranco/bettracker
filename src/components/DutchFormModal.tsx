@@ -172,6 +172,11 @@ function Body() {
           </L>
         </div>
 
+        <label className="flex w-fit items-center gap-1.5 text-sm text-zinc-300" title="Marks the whole dutch as a no brainer: its bet cell is highlighted in the table">
+          <input type="checkbox" checked={!!d.noBrainer} onChange={(e) => set('noBrainer', e.target.checked)} aria-label="No brainer" />
+          No brainer
+        </label>
+
         <table className="w-full text-sm" aria-label="Bets to log">
           <thead>
             <tr className="border-b border-zinc-800 text-left text-xs text-zinc-400">

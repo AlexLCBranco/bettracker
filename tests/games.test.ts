@@ -8,6 +8,7 @@ let n = 0;
 const leg = (over: Partial<Leg> = {}): Leg => ({ id: `l${++n}`, sport: '', game: '', market: '', selection: 'x', odds: null, result: 'pending', actual: '', ...over });
 const bet = (over: Partial<Bet> = {}): Bet => ({
   id: `b${++n}`,
+  noBrainer: false,
   book: '',
   placedDate: '2026-11-23',
   gameDate: '2026-11-23',

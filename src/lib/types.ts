@@ -74,6 +74,8 @@ export interface Bet {
   unitSize: number | null;
   /** BT-27: one short free-text label ("lost by one"), shown uppercase as a chip; empty = none. */
   label: string;
+  /** BT-44: marked as a "no brainer" (its own on/off mark, separate from the label); false on older bets. */
+  noBrainer: boolean;
   /** ISO timestamps, used for "most recent" ordering. */
   createdAt: string;
   updatedAt: string;

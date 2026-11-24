@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-24
+- BT-44 — "No brainer" mark on a bet (v0.39.0)
+  A bet or a whole dutch can be marked a no brainer (the NB button on the row, X on the selected row, the checkbox in the bet and dutch forms, or "#nb" at the end of a quick-add line): its bet cell is tinted violet with a "NO BRAINER" chip, separate from its label.
 - BT-43 — The day ends at 05:00, not midnight (v0.38.0)
   Until 5 in the morning the app still treats it as the day before: new bets, dutches, PPs, ladders and money entries default to it, "Today" / "Yesterday" headers and typed "t" / "y" follow it, so late NBA games stay on the night they were bet.
 - BT-42 — Game page links (Hoops Junkie / Sofascore) (v0.37.0)

@@ -194,6 +194,11 @@ function FormBody() {
           </div>
         )}
 
+        <label className="flex w-fit items-center gap-1.5 text-sm text-zinc-300" title="Marks the bet as a no brainer: its bet cell is highlighted in the table (X on a selected row)">
+          <input type="checkbox" checked={f.noBrainer} onChange={(e) => set('noBrainer', e.target.checked)} aria-label="No brainer" />
+          No brainer
+        </label>
+
         {presets.length > 0 && !rollover && (
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <span className="text-zinc-500">Stakes:</span>

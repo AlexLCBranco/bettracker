@@ -57,19 +57,20 @@ export function QuickAdd() {
     const base = {
       ...newForm(defaults),
       ...(p.money ? { money: p.money } : {}),
+      noBrainer: !!p.noBrainer,
       // BT-17: a solo, or a combination with its legs; never a combination without legs (the last-used type)
       type: legs ? ('combination' as const) : ('solo' as const),
       legs: legs ? legs.map((selection) => ({ ...emptyLeg(defaults.sport), selection })) : [],
     };
     if (!p.ok) {
-      openNew({ type: base.type, legs: base.legs, stake: p.stake != null ? String(p.stake) : '', odds: p.odds != null ? String(p.odds) : '', betText: p.betText, ...(p.money ? { money: p.money } : {}) });
+      openNew({ type: base.type, legs: base.legs, stake: p.stake != null ? String(p.stake) : '', odds: p.odds != null ? String(p.odds) : '', betText: p.betText, noBrainer: base.noBrainer, ...(p.money ? { money: p.money } : {}) });
       notify(`${p.reason}: finish the bet in the form`);
       setLine('');
       return;
     }
     const v = formToBet({ ...base, stake: String(p.stake), odds: String(p.odds), betText: p.betText });
     if (!v.ok) {
-      openNew({ type: base.type, legs: base.legs, stake: String(p.stake), odds: String(p.odds), betText: p.betText, money: base.money });
+      openNew({ type: base.type, legs: base.legs, stake: String(p.stake), odds: String(p.odds), betText: p.betText, money: base.money, noBrainer: base.noBrainer });
       notify(v.error, 'error');
       return;
     }
@@ -114,7 +115,7 @@ export function QuickAdd() {
           toQuery={(v) => splitQuickAddText(v).text}
           applySuggestion={(v, s) => (v.trim() ? splitQuickAddText(v).prefix + s : s)}
           placeholder="Quick add: 150 @2.10 lakers ml"
-          title='Quick add: "150 @2.10 lakers ml" then Enter. "1u" = 1 unit (unit sizes on the Bankroll page). "B$150" = bonus money, "H$150" = hypothetical, "R$150" = real. "ladder" (or "ladder:5" rungs, "ladder:R$1600" amount) starts a ladder.'
+          title='Quick add: "150 @2.10 lakers ml" then Enter. "1u" = 1 unit (unit sizes on the Bankroll page). "B$150" = bonus money, "H$150" = hypothetical, "R$150" = real. "ladder" (or "ladder:5" rungs, "ladder:R$1600" amount) starts a ladder. "#nb" marks a no brainer.'
           aria-label="Quick add"
           data-testid="quick-add"
           className="field w-full"
