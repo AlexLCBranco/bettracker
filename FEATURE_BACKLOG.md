@@ -81,3 +81,22 @@ Agreed with the owner on 2026-11-24.
   and for units of old / new bets after a unit-size change; e2e: set a unit size, quick-add with `1,5u`, check the
   saved stake, toggle U and check the row and Analytics; a Playwright check that column x-positions and row height
   are identical in money view and units view.
+
+### BT-39 — Bug: a shot banked from a dutch split shows the split's odds instead of the dutch's real odds
+**In short:** A shot started from a won dutch split must count the whole dutch's stake, so it reads 1.39 (not 3.00) and is not marked "already 1.80+ (Shot)".
+
+Reported by the owner on 2026-11-24 with a screenshot: Banked list shows `H$ 139,86 @ 3.00 Shot · 1 bet · already
+1.80+ (Shot)`. The dutch staked about H$ 100 in total and its winning split (@ 3.00) returned H$ 139,86, so the real
+odds so far are 139,86 / total dutch stake ≈ 1.39: a "semi", still needing about 1.30 to become a shot.
+
+- **Cause (read on 2026-11-24):** `chainSummary` in `src/lib/rollover.ts` multiplies each bet's own odds
+  (`factor(b)` returns `b.odds` for a win) and only sees the chain's bets, so the losing splits' stakes of the same
+  `dutchId` are ignored.
+- **Fix:** when a chain's first bet is a dutch split, that bet's factor is what the split returned ÷ the total stake
+  of every bet in its dutch, and the chain's stake is that total. Everything derived follows: odds shown, tier chip
+  (mini / semi / Pepsi / shot), `needs`, progress bar, "already 1.80+", the BANKED SHOT chip on the row, and
+  `chainAsBet` / Analytics for the closed shot. Check that the dutch + its shot are still counted as one bet and
+  that money is not counted twice (dutch money figures stay bet by bet).
+- **Tests:** unit: dutch of 2 splits totalling 100, winning split 46,62 @ 3.00 banked → odds 1.40 (139,86 / 100),
+  tier semi, needs 1.29 rounded up per `neededOdds`, not "already there"; then a next bet @ 1.30 closes it as a shot.
+  A plain (non-dutch) banked bet is unchanged. e2e: bank a won dutch split and read the Banked list line.
