@@ -184,8 +184,9 @@ gauntlet repo on 2026-11-24):
 
 Owner's stopgap (2026-11-24), until a better system: he names each daily gauntlet page with its day by hand
 (renaming a page already exists there). So gauntlet only needs an address like `/?date=YYYY-MM-DD` that jumps to
-the page whose name is that day, or says "No board for dd/mm" when there is none. That item is not written in
-gauntlet's backlog yet (no push access from the session that wrote this).
+the page whose name is that day, or says "No board for dd/mm" when there is none. That is gauntlet GT-23
+(written 2026-11-24).
+Blocked: waits for gauntlet GT-23
 
 When gauntlet has it, this item is small:
 - Each day header in the Bets table (`formatDayHeader`, `src/lib/dates.ts`) gets a small whiteboard mark that opens
