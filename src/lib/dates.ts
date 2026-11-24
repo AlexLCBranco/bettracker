@@ -3,9 +3,19 @@
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
-/** Today's local date. */
+/**
+ * BT-43: the app's day starts at 05:00, not midnight: late NBA games run past midnight in Brazil, so a bet logged or
+ * settled at 01:30 belongs to the day before.
+ */
+export const DAY_START_HOUR = 5;
+
+/**
+ * The app's "today": the local calendar date, still the day before until DAY_START_HOUR (04:59 on the 25th is the
+ * 24th; 05:00 is the 25th). The single source of "today" everywhere (default dates, Today / Yesterday, "t" / "y").
+ */
 export function todayISO(now: Date = new Date()): string {
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  const d = now.getHours() < DAY_START_HOUR ? new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 12) : now;
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 export function isValidISODate(s: string): boolean {

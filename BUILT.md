@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-24
+- BT-43 — The day ends at 05:00, not midnight (v0.38.0)
+  Until 5 in the morning the app still treats it as the day before: new bets, dutches, PPs, ladders and money entries default to it, "Today" / "Yesterday" headers and typed "t" / "y" follow it, so late NBA games stay on the night they were bet.
 - BT-42 — Game page links (Hoops Junkie / Sofascore) (v0.37.0)
   In the game editor (double click a game) a "Game link" box takes a pasted Hoops Junkie or Sofascore page (any site works, up to two per game); every bet on that game and date then shows a small HJ / SS mark next to the game that opens the page in a new tab.
 - BT-41 — Analytics: dutch split stats (v0.36.0)

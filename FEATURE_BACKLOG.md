@@ -24,24 +24,6 @@ Words the owner uses (keep them in the UI):
   works in volume. Before, it was done in Excalidraw with AIs inventing the scheme per batch, the history lived only
   in the bookmaker's app and vanished, and both building and following 100 PPs was the part that broke.
 
-### BT-43 — The day ends at 05:00, not midnight
-**In short:** Until 5 in the morning the app still treats it as the day before, so late NBA games stay on the night he bet them.
-
-From the owner, 2026-11-24: "the day here doesn't end until 5am cause of the timezones with the NBA games".
-NBA games run past midnight in Brazil, so a bet logged or settled at 01:30 belongs to the previous day.
-
-- Rule: the app's "today" is the local calendar date of (now − 5 hours). 04:59 on the 25th is still the 24th;
-  05:00 on the 25th is the 25th. One constant (`DAY_START_HOUR = 5`) in `src/lib/dates.ts`.
-- Where: `todayISO()` in `src/lib/dates.ts` is the single source of "today" (default date of a new bet, dutch, PP,
-  ladder and bankroll entry, "Today / Yesterday" day headers, typed dates like "today" in `parseDateInput`, the
-  settle queue and its count in the menu, export file names). Change it there; find and fix any place that makes a
-  date from `new Date()` without it. Server code too, if any builds a "today".
-- Not changed: dates already saved, and dates the user types or picks by hand. Still local "YYYY-MM-DD" strings,
-  never UTC (rule in CLAUDE.md).
-- Tests: unit tests for 00:00, 04:59 and 05:00, on the 1st of a month and on 1 January (rolls back to the month and
-  year before), in the 3 time zones the date tests already run in; one e2e with the browser clock set to 02:00 that
-  opens the add-bet form and sees the day before as the default date.
-
 ### BT-44 — "No brainer" mark on a bet
 **In short:** Mark a bet as a "no brainer" and its whole bet cell is highlighted, so those bets stand out in the table.
 
