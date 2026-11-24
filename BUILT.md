@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-24
+- BT-47 — See a bet's description without opening the form (v0.41.0)
+  A bet (or dutch, rollover, ladder) with a description shows a small ¶ mark: hovering it peeks at the Before / After text, a click or D opens both texts under the row to read and edit (a click elsewhere saves, Esc discards), and the "Descriptions" switch above the table opens every row that has one.
 - BT-45 — Marquee select and bulk actions on the Bets table (v0.40.0)
   Drag a box over rows (starting outside the text), Ctrl+click, Shift+click or Ctrl+A to select several; a bar at the bottom shows how many, their stake, settled profit and what the pending ones would pay, with Won / Lost / Void (pending plain bets), label, game date, book, no brainer on / off and Delete, each one Ctrl+Z step; also fixes the no brainer button pushing a pending dutch's actions past the table edge (now in its ⋯ menu).
 - BT-44 — "No brainer" mark on a bet (v0.39.0)

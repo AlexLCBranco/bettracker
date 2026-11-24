@@ -4,7 +4,9 @@ import { Fragment, useEffect, useRef, useState, type KeyboardEvent, type ReactNo
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { formatDate, formatDayHeader, formatDayMonth, parseDateInput } from '@/lib/dates';
-import { betLabel, duplicateDutchDraft, dutchSummary, editDutchDraft, rowKey, type GroupOutcome } from '@/lib/dutch';
+import { betLabel, duplicateDutchDraft, dutchSummary, editDutchDraft, rowBets, rowKey, type GroupOutcome } from '@/lib/dutch';
+import { DescriptionMark, DescriptionRow, type DescriptionControl } from './Description';
+import { hasDescription } from '@/lib/descriptions';
 import { duplicateForm } from '@/lib/form';
 import { formatMoney, formatOdds, MONEY_SYMBOL, oddsFromText, parseNumber, profit, profitMoney, winReturn, type MoneyScope } from '@/lib/money';
 import { MONEY_TEXT, MONEY_TITLE } from './moneyStyle';
@@ -205,6 +207,8 @@ interface TableProps {
   rollover: Rollover;
   /** BT-45: the rows selected together (marquee, Ctrl / Shift+click), tinted apart from the keyboard-selected row. */
   multi?: ReadonlySet<string>;
+  /** BT-47: which rows show their description under them. */
+  desc?: DescriptionControl;
   empty?: string;
 }
 
@@ -214,7 +218,7 @@ interface TableProps {
  * two lines: the bet text (wraps, never cut) and a muted line with game, sport, market, book and tags. A dutch is a
  * summary row with one such block per split under it. A click selects a row (keyboard settling), a double click edits.
  */
-export function BetTable({ days, selected, select, settle, annotating, annotate, rollover, multi = NO_KEYS, empty = 'No bets yet. Type one in the quick-add line above.' }: TableProps) {
+export function BetTable({ days, selected, select, settle, annotating, annotate, rollover, multi = NO_KEYS, desc = NO_DESC, empty = 'No bets yet. Type one in the quick-add line above.' }: TableProps) {
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [unitsView] = useUnitsView();
   const toggle = (id: string) =>
@@ -227,7 +231,7 @@ export function BetTable({ days, selected, select, settle, annotating, annotate,
 
   if (!days.length) return <p className="py-10 text-center text-sm text-zinc-500">{empty}</p>;
   const th = 'sticky top-14 z-[2] bg-zinc-950 px-2 py-2 text-[11px] font-medium text-zinc-500 shadow-[inset_0_-1px_0_rgb(39_39_42)]';
-  const row = { open, toggle, selected, multi, select, settle, annotating, annotate, rollover };
+  const row = { open, toggle, selected, multi, desc, select, settle, annotating, annotate, rollover };
 
   return (
     <div data-testid="bet-table-scroll">
@@ -277,15 +281,19 @@ export function BetTable({ days, selected, select, settle, annotating, annotate,
                   </div>
                 </td>
               </tr>
-              {d.rows.map((r) =>
-                r.kind === 'bet' ? (
-                  <BetRow key={r.bet.id} b={r.bet} {...row} />
-                ) : r.kind === 'dutch' ? (
-                  <DutchGroup key={r.dutchId} dutchId={r.dutchId} bets={r.bets} {...row} />
-                ) : (
-                  <RolloverGroup key={r.rolloverId} rolloverId={r.rolloverId} bets={r.bets} {...row} />
-                ),
-              )}
+              {d.rows.map((r) => (
+                <Fragment key={rowKey(r)}>
+                  {r.kind === 'bet' ? (
+                    <BetRow b={r.bet} {...row} />
+                  ) : r.kind === 'dutch' ? (
+                    <DutchGroup dutchId={r.dutchId} bets={r.bets} {...row} />
+                  ) : (
+                    <RolloverGroup rolloverId={r.rolloverId} bets={r.bets} {...row} />
+                  )}
+                  {/* BT-47: the description, opened under its row (under a dutch's or chain's last line) */}
+                  {desc.isOpen(rowKey(r), rowBets(r)) && <DescriptionRow rowKey={rowKey(r)} bets={rowBets(r)} cols={COLS} control={desc} />}
+                </Fragment>
+              ))}
             </Fragment>
           ))}
         </tbody>
@@ -295,6 +303,7 @@ export function BetTable({ days, selected, select, settle, annotating, annotate,
 }
 
 const NO_KEYS: ReadonlySet<string> = new Set();
+const NO_DESC: DescriptionControl = { isOpen: () => false, toggle: () => {}, close: () => {}, switchOn: false };
 
 const OUTCOME_LABEL: Record<GroupOutcome, string> = { pending: 'Pending', won: 'Won', lost: 'Lost', even: 'Even' };
 
@@ -304,7 +313,7 @@ function shared(bets: Bet[], pick: (b: Bet) => string) {
   return vals.length === 1 ? vals[0]! : vals.length > 1 ? 'Mixed' : '';
 }
 
-type RowProps = { open: Set<string>; toggle(id: string): void; selected: string | null; multi: ReadonlySet<string>; select(key: string): void; settle: Settler; annotating: string | null; annotate(key: string | null): void; rollover: Rollover };
+type RowProps = { open: Set<string>; toggle(id: string): void; selected: string | null; multi: ReadonlySet<string>; desc: DescriptionControl; select(key: string): void; settle: Settler; annotating: string | null; annotate(key: string | null): void; rollover: Rollover };
 
 /** BT-27: "+ label / result", faint, on row hover (T on the selected row does the same). */
 function AnnotateButton({ onClick }: { onClick(): void }) {
@@ -324,7 +333,7 @@ function AnnotateButton({ onClick }: { onClick(): void }) {
   );
 }
 
-function DutchGroup({ bets, dutchId, open, toggle, selected, multi, select, settle, annotating, annotate, rollover }: { bets: Bet[]; dutchId: string } & RowProps) {
+function DutchGroup({ bets, dutchId, open, toggle, selected, multi, desc, select, settle, annotating, annotate, rollover }: { bets: Bet[]; dutchId: string } & RowProps) {
   const { removeDutch, openDutch, names: nameCasing, gameLinks } = useApp();
   const s = dutchSummary(bets);
   // BT-38: the units view, when every split has a unit size
@@ -362,6 +371,7 @@ function DutchGroup({ bets, dutchId, open, toggle, selected, multi, select, sett
             <span data-testid="type">Dutch ×{bets.length}</span>
             {nb && <NoBrainerChip />}
             {label && <LabelChip label={label} />}
+            <DescriptionMark rowKey={key} bets={bets} selected={isSel} control={desc} />
             {live && <LiveTag />}
           </div>
           <SubLine
@@ -438,6 +448,7 @@ function DutchGroup({ bets, dutchId, open, toggle, selected, multi, select, sett
           annotating={annotating}
           annotate={annotate}
           multi={multi}
+          desc={desc}
           rollover={rollover}
           split={{
             group: bets,
@@ -462,7 +473,7 @@ const CHAIN_LABEL: Record<ChainOutcome, string> = { pending: 'Pending', open: 'O
  * first stake) with its bets under it, like a dutch's splits. An open shot shows what is banked and the odds the next
  * bet needs, with Add leg and Close.
  */
-function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, multi, select, settle, annotating, annotate, rollover }: { bets: Bet[]; rolloverId: string } & RowProps) {
+function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, multi, desc, select, settle, annotating, annotate, rollover }: { bets: Bet[]; rolloverId: string } & RowProps) {
   const { names: nameCasing, remove, undoGroup, bets: allBets } = useApp();
   // BT-39: a shot banked from a dutch split counts the whole dutch's stake in its odds
   const s = chainSummary(raw, allBets);
@@ -509,6 +520,7 @@ function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, multi, s
               </>
             )}
             {live && <LiveTag />}
+            <DescriptionMark rowKey={key} bets={raw} selected={isSel} control={desc} />
           </div>
           <SubLine
             parts={[
@@ -666,6 +678,7 @@ function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, multi, s
           annotating={annotating}
           annotate={annotate}
           multi={multi}
+          desc={desc}
           rollover={rollover}
           link={{ index: i, last: i === bets.length - 1 && !open.has(b.id), chainKey: key, chain: bets, ladder, current: ladder && (b.result === 'pending' || (isOpen && i === bets.length - 1)) }}
         />
@@ -700,7 +713,7 @@ interface Split {
   pick: { n: number; on: boolean; toggle(): void } | null;
 }
 
-function BetRow({ b, open, toggle, selected, multi, select, settle, split, link, annotating, annotate, rollover }: { b: Bet; split?: Split; link?: ChainLink } & RowProps) {
+function BetRow({ b, open, toggle, selected, multi, desc, select, settle, split, link, annotating, annotate, rollover }: { b: Bet; split?: Split; link?: ChainLink } & RowProps) {
   const { update, remove, openEdit, openNew, names, bets: allBets, gameLinks } = useApp();
   // BT-38: amounts in units when the view is on and the bet has a unit size
   const [unitsView] = useUnitsView();
@@ -737,7 +750,7 @@ function BetRow({ b, open, toggle, selected, multi, select, settle, split, link,
   const soloActual = solo ? (leg0?.actual ?? '') : '';
   const group = split?.group ?? [b];
   const losses = losingLegs(b, split?.group ?? []);
-  const flow = !!(chip || soloActual || link || b.banked || b.wouldHave || (b.noBrainer && !nested));
+  const flow = !!(chip || soloActual || link || b.banked || b.wouldHave || (b.noBrainer && !nested) || (!nested && !link && hasDescription(b)));
   const annotateHere = () => {
     select(key);
     annotate(key);
@@ -800,6 +813,7 @@ function BetRow({ b, open, toggle, selected, multi, select, settle, split, link,
               )}
               {b.noBrainer && !nested && <NoBrainerChip />}
               {chip && <LabelChip label={chip} />}
+              {!nested && !link && <DescriptionMark rowKey={key} bets={[b]} selected={isSel} control={desc} />}
               <WouldaChip bet={b} fmt={inUnits} />
               {(link || b.banked) && !b.ladder && <TierChip odds={b.dutchId && (!link || link.index === 0) ? firstFactor(b, allBets) : b.odds} banked={b.banked && (link ? link.index === link.chain.length - 1 : rollover.chainOf(b).length === 1)} />}
             </div>

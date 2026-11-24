@@ -18,7 +18,9 @@ import { useSettle } from '@/components/useSettle';
 import { useRollover } from '@/components/useRollover';
 import { chainSummary } from '@/lib/rollover';
 import { parseDateInput, todayISO } from '@/lib/dates';
-import { countBets } from '@/lib/dutch';
+import { countBets, rowBets, rowKey } from '@/lib/dutch';
+import { useDescriptionsSwitch, type DescriptionControl } from '@/components/Description';
+import { isDescriptionOpen, rowHasDescription } from '@/lib/descriptions';
 import { filterBets, NO_FILTERS, type Filters } from '@/lib/filters';
 import { formatMoney } from '@/lib/money';
 import { byMoney } from '@/lib/scope';
@@ -53,6 +55,7 @@ const HELP: [string, string][] = [
   ['A', 'Open shot: add the next leg'],
   ['T', 'Label and actual result'],
   ['X', 'No brainer on / off (a dutch: the whole dutch)'],
+  ['D', 'Description: open / close it under the row'],
   ['Ctrl+Z or Z', 'Undo the last change: add, edit, delete, settle, ladder or rollover step'],
   ['N', 'New bet'],
   ['M', 'Insert money (bankroll)'],
@@ -166,6 +169,29 @@ function Bets() {
     anchor.current = k;
     if (multi.size) setMulti(new Set());
   };
+  // BT-47: descriptions opened under their rows; the switch opens every row that has one
+  const [descSwitch, setDescSwitchRaw] = useDescriptionsSwitch();
+  const [flipped, setFlipped] = useState<ReadonlySet<string>>(new Set());
+  const setDescSwitch = (on: boolean) => {
+    setFlipped(new Set());
+    setDescSwitchRaw(on);
+  };
+  const desc = useMemo<DescriptionControl>(
+    () => ({
+      switchOn: descSwitch,
+      isOpen: (k, bets) => isDescriptionOpen(k, rowHasDescription(bets), descSwitch, flipped),
+      toggle: (k) => setFlipped((f) => toggleKey(f, k)),
+      close: (k, bets) =>
+        setFlipped((f) => {
+          const n = new Set(f);
+          if (descSwitch && rowHasDescription(bets)) n.add(k);
+          else n.delete(k);
+          return n;
+        }),
+    }),
+    [descSwitch, flipped],
+  );
+
   // a click on empty space (outside the table rows and the bar) clears the selection
   useEffect(() => {
     if (!multi.size) return;
@@ -221,6 +247,13 @@ function Bets() {
       if (k === 't') {
         e.preventDefault();
         return setAnnotating(selected);
+      }
+      // BT-47: D opens or closes the selected row's description (a split: its dutch's)
+      if (k === 'd') {
+        e.preventDefault();
+        const r = allRows.find((x) => rowKey(x) === navKey(selected));
+        if (r) desc.toggle(rowKey(r), rowBets(r));
+        return;
       }
       // BT-44: X toggles the no brainer mark (a split marks its whole dutch)
       if (k === 'x') {
@@ -427,6 +460,10 @@ function Bets() {
             )}
           </button>
         ))}
+        <label className={`${settle.canUndo && lastUndo ? '' : 'ml-auto'} mr-3 flex items-center gap-1.5 text-xs text-zinc-400`} title="Open every bet's description under its row (D opens one)">
+          <input type="checkbox" checked={descSwitch} onChange={(e) => setDescSwitch(e.target.checked)} aria-label="Descriptions" />
+          Descriptions
+        </label>
         {settle.canUndo && lastUndo && (
           <button className="ml-auto max-w-md truncate text-xs text-zinc-400 hover:text-white" title={`Undo: ${lastUndo.label} (Ctrl+Z or Z)`} onClick={settle.undo} data-testid="undo-last">
             ↶ Undo: {lastUndo.label} <span className="text-zinc-600">· Ctrl+Z</span>
@@ -438,6 +475,7 @@ function Bets() {
         {loaded ? (
           <BetTable
             multi={multi}
+            desc={desc}
             days={days}
             selected={selected}
             select={setPicked}
