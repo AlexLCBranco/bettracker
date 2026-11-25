@@ -24,6 +24,23 @@ Words the owner uses (keep them in the UI):
   works in volume. Before, it was done in Excalidraw with AIs inventing the scheme per batch, the history lived only
   in the bookmaker's app and vanished, and both building and following 100 PPs was the part that broke.
 
+### BT-49 — Banked shot "what if": try a next-leg odd and see the final shot
+**In short:** On a banked shot, type a possible next-leg odd and see the final odds, tier, payout and profit before placing anything.
+
+From the owner, 2026-11-25. His example: banked @ 1.55, a mini @ 1.20 → final 1.86 (Shot).
+- A banked row (and its entry in the top-bar Banked list / Banked tab) gets a small "what if" odds box, with a free
+  key to open it (W is taken; e.g. ?). Typing an odd in any format the app already accepts (1,2 / 1.2 / -500 / +20)
+  shows live: final odds (banked × new), the Mini / Semi / Pepsi / Shot chip, payout (banked amount × new odd) and
+  profit against the FIRST stake, in the shot's money type, and in units when the $ | u switch is on.
+- Several odds can be tried at once, comma-separated ("1,15; 1,2; 1,3" or one per line) → one result line each, to
+  compare.
+- Nothing is saved. Enter (or "Place this leg") opens "+ Add leg" with that odd filled in; Esc closes.
+- The "+ Add leg" form itself shows the same live preview under its odds field.
+- Keep the existing "needs 1.13+ to reach 1.80" hint next to the box.
+- Table alignment: the box opens below the row (like descriptions) and never widens a column.
+- Tests: unit tests for the math (US odds, rounding) and a Playwright test for type → preview → Enter → Add leg
+  filled in.
+
 ## Held (needs the owner's "go"; never built from "build the backlog")
 
 ### BT-46 — Day header opens that day's gauntlet whiteboard page
