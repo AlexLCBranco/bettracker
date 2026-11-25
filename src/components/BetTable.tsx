@@ -28,8 +28,9 @@ import { DutchSettleButtons } from './DutchSettle';
 import { GameTarget } from './GameEditor';
 import { isNoBrainer, NB_TINT, NoBrainerButton, NoBrainerChip, useToggleNoBrainer } from './NoBrainer';
 import { linksForBets, siteMark, siteName, type GameLink } from '@/lib/gameLinks';
-import { betTone, groupTone, resultTone } from '@/lib/tone';
+import { betTone, groupTone, resultTone, type Tone } from '@/lib/tone';
 import { TONE_BADGE, TONE_EDGE, TONE_TEXT } from './tone';
+import { dayGames, type DayGame } from '@/lib/gamesInvolved';
 import { betResultLine, betsText, displayGame, dutchResultLine, legGames, legMarkets, type DayGroup } from '@/lib/table';
 import type { Settler } from './useSettle';
 import { losingLegs, sharedLabel } from '@/lib/actuals';
@@ -213,7 +214,15 @@ interface TableProps {
   desc?: DescriptionControl;
   /** BT-49: which banked shot shows its "what if" box. */
   whatIf?: WhatIfControl;
+  /** BT-50: the days showing their games instead of their bets, and what a click on a game does. */
+  games?: GamesControl;
   empty?: string;
+}
+
+export interface GamesControl {
+  days: ReadonlySet<string>;
+  toggle(date: string): void;
+  pick(g: DayGame): void;
 }
 
 /**
@@ -222,9 +231,10 @@ interface TableProps {
  * two lines: the bet text (wraps, never cut) and a muted line with game, sport, market, book and tags. A dutch is a
  * summary row with one such block per split under it. A click selects a row (keyboard settling), a double click edits.
  */
-export function BetTable({ days, selected, select, settle, annotating, annotate, rollover, multi = NO_KEYS, desc = NO_DESC, whatIf = NO_WHATIF, empty = 'No bets yet. Type one in the quick-add line above.' }: TableProps) {
+export function BetTable({ days, selected, select, settle, annotating, annotate, rollover, multi = NO_KEYS, desc = NO_DESC, whatIf = NO_WHATIF, games = NO_GAMES, empty = 'No bets yet. Type one in the quick-add line above.' }: TableProps) {
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [unitsView] = useUnitsView();
+  const { names, gameLinks } = useApp();
   const toggle = (id: string) =>
     setOpen((s) => {
       const n = new Set(s);
@@ -273,6 +283,7 @@ export function BetTable({ days, selected, select, settle, annotating, annotate,
                         {formatDayHeader(d.date)}
                       </span>
                       <DayLinks date={d.date} />
+                      <GamesToggle on={games.days.has(d.date)} date={d.date} onClick={() => games.toggle(d.date)} />
                     </span>
                     <span className="tabular-nums text-zinc-400" data-testid="day-totals">
                       {betsText(d.count)}
@@ -288,7 +299,9 @@ export function BetTable({ days, selected, select, settle, annotating, annotate,
                   </div>
                 </td>
               </tr>
-              {d.rows.map((r) => (
+              {games.days.has(d.date) ? (
+                <DayGameRows games={dayGames(d.rows, names, gameLinks)} onPick={games.pick} />
+              ) : d.rows.map((r) => (
                 <Fragment key={rowKey(r)}>
                   {r.kind === 'bet' ? (
                     <BetRow b={r.bet} {...row} />
@@ -325,6 +338,76 @@ function DayLinks({ date }: { date: string }) {
   );
 }
 
+/** BT-50: switches a day between its bets and its games. */
+function GamesToggle({ on, date, onClick }: { on: boolean; date: string; onClick(): void }) {
+  return (
+    <button
+      type="button"
+      className={`rounded px-1 text-[10px] font-semibold leading-4 ${on ? 'bg-sky-500/25 text-sky-100' : 'text-zinc-500 hover:bg-zinc-800 hover:text-white'}`}
+      title={on ? `Show the bets of ${formatDate(date).slice(0, 5)}` : `Show the games bet on, ${formatDate(date).slice(0, 5)}`}
+      aria-pressed={on}
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      data-testid="day-games-toggle"
+    >
+      Games
+    </button>
+  );
+}
+
+/** BT-50: a day's games, one row each: game, sport, links, bets on it, total stake, net and pending / settled. */
+function DayGameRows({ games, onPick }: { games: DayGame[]; onPick(g: DayGame): void }) {
+  if (!games.length)
+    return (
+      <tr className="border-b border-zinc-900" data-testid="no-games">
+        <td />
+        <td colSpan={COLS - 1} className="px-2 py-1.5 text-xs text-zinc-500">
+          No games on these bets.
+        </td>
+      </tr>
+    );
+  return (
+    <>
+      {games.map((g) => {
+        const tone: Tone = g.pending ? 'pending' : g.profit > 0 ? 'win' : g.profit < 0 ? 'loss' : 'neutral';
+        const sub = g.sports.join(', ');
+        return (
+          <tr key={g.key} className={`${ROW} cursor-pointer`} data-testid="game-row" data-game={g.key} data-tone={tone} onClick={() => onPick(g)} title={`${g.game}: show only the bets on it`}>
+            <td className={TONE_EDGE[tone]} />
+            <td className={CELL}>
+              <div className={TEXT} data-testid="game-name">
+                {g.game}
+                {g.links.length > 0 && <GameLinkMarks links={g.links} />}
+              </div>
+              <div className={`${SUB} overflow-hidden text-ellipsis whitespace-nowrap`} title={sub} data-testid="game-sub">
+                {sub}
+              </div>
+            </td>
+            <td className={NUM} data-testid="game-stake" data-col="stake">
+              <span className={MONEY_TEXT[g.money] || 'text-zinc-200'}>{formatMoney(g.stake, g.money)}</span>
+            </td>
+            <td className={NUM} />
+            <td className={NUM} data-testid="profit" data-col="profit">
+              <ProfitText value={g.profit} pending={g.pending === g.count} money={profitMoney(g.money)} />
+            </td>
+            <td className={CELL} data-col="result">
+              <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${TONE_BADGE[tone]}`} data-testid="game-status" title={g.pending ? `${g.pending} of ${betsText(g.count)} pending` : 'All settled'}>
+                {g.pending ? 'Pending' : 'Settled'}
+              </span>
+            </td>
+            <td className={`${ACTIONS} text-xs text-zinc-500`} data-testid="game-count">
+              {betsText(g.count)}
+            </td>
+          </tr>
+        );
+      })}
+    </>
+  );
+}
+
+const NO_GAMES: GamesControl = { days: new Set(), toggle: () => {}, pick: () => {} };
 const NO_KEYS: ReadonlySet<string> = new Set();
 const NO_DESC: DescriptionControl = { isOpen: () => false, toggle: () => {}, close: () => {}, switchOn: false };
 const NO_WHATIF: WhatIfControl = { openId: null, toggle: () => {}, close: () => {} };

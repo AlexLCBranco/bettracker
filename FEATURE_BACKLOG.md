@@ -24,24 +24,6 @@ Words the owner uses (keep them in the UI):
   works in volume. Before, it was done in Excalidraw with AIs inventing the scheme per batch, the history lived only
   in the bookmaker's app and vanished, and both building and following 100 PPs was the part that broke.
 
-### BT-50 — Games involved: the games I bet on, per day
-**In short:** Each day can show the list of games you placed a bet on, one row per game, instead of one row per bet.
-
-From the owner, 2026-11-25 ("a games involved section": the games where I placed a bet).
-- Where: a "Games" toggle on each day header in the Bets table switches that day between its bets and its games.
-  Days follow the existing day rules (game date, 5am end of day).
-- A game counts when any bet of that day has it: a solo's game, any combo leg's game, any dutch split's game.
-  PPs (own tables, BT-30) stay out.
-- One row per game: game ("Celtics vs Warriors"), sport, number of bets on it, total stake, and its existing links
-  (HJ / SS from BT-42). Settled / pending shown in the same style as the bet rows.
-- Click a game: the Bets table shows only the bets that include it (clear with Esc or an ×).
-- Matching: by the tidied game text (BT-20, `tidyGame`), case and accents ignored, and "A vs B" equals "B vs A".
-  Games typed differently beyond that show as two rows; that is accepted.
-- A combo whose legs are on different days lists all its games under the bet's game date (legs have no date).
-- Table alignment rules apply as everywhere else (no cut text without full text on hover).
-- Tests: unit tests for grouping and matching (A vs B / B vs A, combo legs, dutch splits, PPs excluded); e2e that the
-  toggle shows the games of a day and that clicking one filters the bets.
-
 ### BT-52 — Three descriptions per bet (Pre / Live / Post), clickable in every cell
 **In short:** A bet's description becomes three notes, Pre, Live and Post, like the Slate's game notes, and every bet cell has a spot you click to open or add them.
 

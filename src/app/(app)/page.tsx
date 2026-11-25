@@ -22,6 +22,8 @@ import { countBets, rowBets, rowKey } from '@/lib/dutch';
 import { useDescriptionsSwitch, type DescriptionControl } from '@/components/Description';
 import { isDescriptionOpen, rowHasDescription } from '@/lib/descriptions';
 import { filterBets, NO_FILTERS, type Filters } from '@/lib/filters';
+import { daysWithGame } from '@/lib/gamesInvolved';
+import type { GamesControl } from '@/components/BetTable';
 import { formatMoney } from '@/lib/money';
 import { byMoney } from '@/lib/scope';
 import { settleQueue, SETTLE_KEYS, sharedLegOf } from '@/lib/settle';
@@ -91,7 +93,24 @@ function Bets() {
   const today = todayISO();
   const scoped = useMemo(() => byMoney(all, scope), [all, scope]);
   const filtered = useMemo(() => filterBets(scoped, { ...f, money: '', from: parseDateInput(fromText) ?? '', to: parseDateInput(toText) ?? '' }), [scoped, f, fromText, toText]);
-  const days = useMemo(() => tabDays(filtered, tab, today), [filtered, tab, today]);
+  // BT-50: a game picked from a day's games shows only the bets that include it (Esc or × clears it)
+  const [gameFilter, setGameFilter] = useState<{ key: string; game: string } | null>(null);
+  const [gameDays, setGameDays] = useState<ReadonlySet<string>>(new Set());
+  const games = useMemo<GamesControl>(
+    () => ({
+      days: gameDays,
+      toggle: (d) => setGameDays((s) => toggleKey(s, d)),
+      pick: (g) => {
+        setGameFilter({ key: g.key, game: g.game });
+        setGameDays(new Set());
+      },
+    }),
+    [gameDays],
+  );
+  const days = useMemo(() => {
+    const d = tabDays(filtered, tab, today);
+    return gameFilter ? daysWithGame(d, gameFilter.key) : d;
+  }, [filtered, tab, today, gameFilter]);
   const shown = useMemo(() => tabBets(days), [days]);
   const keys = useMemo(() => rowKeys(days), [days]);
   const counts = useMemo(() => ({ pending: rowKeys(tabDays(filtered, 'pending', today)).length, banked: rowKeys(tabDays(filtered, 'banked', today)).length, settle: settleQueue(filtered, today).length }), [filtered, today]);
@@ -251,6 +270,7 @@ function Bets() {
       if (k === 'Escape') {
         if (help) setHelp(false);
         else if (multi.size) setMulti(new Set());
+        else if (gameFilter) setGameFilter(null);
         else setPicked(null);
         return;
       }
@@ -495,12 +515,23 @@ function Bets() {
         )}
       </div>
 
+      {gameFilter && (
+        <div className="flex items-center gap-2 text-xs text-zinc-400" data-testid="game-filter">
+          <span>
+            Bets on <b className="text-zinc-100">{gameFilter.game}</b>
+          </span>
+          <button className="rounded px-1.5 py-0.5 text-zinc-400 hover:bg-zinc-800 hover:text-white" title="Show every bet again (Esc)" aria-label="Clear the game filter" onClick={() => setGameFilter(null)} data-testid="game-filter-clear">
+            ×
+          </button>
+        </div>
+      )}
       <section ref={tableBox} className="card px-2 pb-2" onClickCapture={onTableClick}>
         {loaded ? (
           <BetTable
             multi={multi}
             desc={desc}
             whatIf={whatIf}
+            games={games}
             days={days}
             selected={selected}
             select={setPicked}

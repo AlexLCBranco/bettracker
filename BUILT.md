@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-25
+- BT-50 — Games involved: the games I bet on, per day (v0.46.0)
+  A "Games" switch on each day header shows that day as one row per game bet on (sport, links, bets on it, total stake, net, pending or settled); clicking a game shows only the bets that include it, cleared with Esc or ×.
 - BT-53 — Bank a rollover again, with "needs a Mini · 1.06+" to become a shot (v0.45.0)
   A rollover that finished under 1.80 shows "Finished @ 1.70 · needs 1.06+" and has Bank on its own row too (not only its last bet), and open shots and the Banked list now say the tier and minimum the next bet needs ("needs a Mini · 1.13+").
 - BT-51 — Cash-outs missing "woulda won / lost" keep their W / L buttons on screen (v0.44.0)
