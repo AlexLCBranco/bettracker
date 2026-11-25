@@ -42,6 +42,19 @@ From the owner, 2026-11-25 ("a games involved section": the games where I placed
 - Tests: unit tests for grouping and matching (A vs B / B vs A, combo legs, dutch splits, PPs excluded); e2e that the
   toggle shows the games of a day and that clicking one filters the bets.
 
+### BT-51 — Cash-outs missing "woulda won / lost" keep their W / L buttons on screen
+**In short:** A cash-out with no "woulda won / woulda lost" yet shows its W / L buttons all the time, not only on hover.
+
+From the owner, 2026-11-25. Today (BT-37) the dim W / L beside a cash-out's pill only appear when hovering the row
+(`ResultCell`, `src/components/BetTable.tsx`), so open ones are easy to miss. He wants them to stay on screen until
+answered.
+- While `wouldHave` is empty: W and L always visible beside the Cash-out pill (the faint "?" can go, the buttons say
+  it). Once one is picked they disappear and the row shows the WOULDA chip as now.
+- Same for cash-outs inside dutches and in the multi-select bar's results, wherever a cash-out can be.
+- No change to row height or column widths: the buttons sit in the space the hover ones use now.
+- Tests: e2e that a cash-out with no answer shows W / L without hover, that clicking one hides them and shows the
+  chip, and that an answered cash-out shows no buttons.
+
 ## Held (needs the owner's "go"; never built from "build the backlog")
 
 ### BT-46 — Day header opens that day's gauntlet whiteboard page
