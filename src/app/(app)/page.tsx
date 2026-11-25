@@ -113,7 +113,7 @@ function Bets() {
   }, [filtered, tab, today, gameFilter]);
   const shown = useMemo(() => tabBets(days), [days]);
   const keys = useMemo(() => rowKeys(days), [days]);
-  const counts = useMemo(() => ({ pending: rowKeys(tabDays(filtered, 'pending', today)).length, banked: rowKeys(tabDays(filtered, 'banked', today)).length, settle: settleQueue(filtered, today).length }), [filtered, today]);
+  const counts = useMemo(() => ({ pending: rowKeys(tabDays(filtered, 'pending', today, false)).length, banked: rowKeys(tabDays(filtered, 'banked', today)).length, settle: settleQueue(filtered, today).length }), [filtered, today]);
   // BT-38: in the units view the strip counts units, when every bet shown has a unit size and one money type
   const [unitsView] = useUnitsView();
   const unitBets = useMemo(() => (unitsView ? asUnitBets(shown) : null), [unitsView, shown]);

@@ -1,6 +1,7 @@
 // BT-26: the Bets page's tabs (All / Pending / To settle), the order its rows are in, and where the selection goes.
 
-import { groupRows, rowKey, type BetRow } from './dutch';
+import { todayISO } from './dates';
+import { groupRows, rowBets, rowKey, type BetRow } from './dutch';
 import { chainSummary, chainPending } from './rollover';
 import { settleQueue } from './settle';
 import { dayGroups, type DayGroup } from './table';
@@ -23,20 +24,34 @@ export const isBankedRow = (r: BetRow) => r.kind === 'rollover' && chainSummary(
 const due = (b: Bet) => b.gameDate || b.placedDate;
 
 /**
+ * A bet cashed out today (by its last save, in the app's day): it stays on the Pending and To settle tabs, so a
+ * cash-out never makes its row vanish from where it was settled (W / L "woulda" can still be set there).
+ */
+export const cashedOutToday = (b: Bet, today: string) => b.result === 'cash-out' && !!b.updatedAt && !Number.isNaN(Date.parse(b.updatedAt)) && todayISO(new Date(b.updatedAt)) === today;
+const keptRow = (r: BetRow, today: string) => rowBets(r).some((b) => cashedOutToday(b, today));
+
+/**
  * The table's days for a tab. All: every bet, newest first, under its bet date. Pending: the bets (and dutches with a
  * bet) still pending, same order. To settle: the old Settle queue (pending, game date today or earlier), oldest first,
- * under its game date.
+ * under its game date. `keep`: Pending and To settle also keep the bets cashed out today (off for the tab counts).
  */
-export function tabDays(bets: Bet[], tab: Tab, today: string): DayGroup[] {
+export function tabDays(bets: Bet[], tab: Tab, today: string, keep = true): DayGroup[] {
   if (tab === 'all') return dayGroups(groupRows(bets));
-  if (tab === 'pending') return dayGroups(groupRows(bets).filter(isPendingRow));
+  if (tab === 'pending') return dayGroups(groupRows(bets).filter((r) => isPendingRow(r) || (keep && keptRow(r, today))));
   if (tab === 'banked') return dayGroups(groupRows(bets).filter(isBankedRow));
   // a rollover's pending bet is queued on its own; the tab shows its whole shot
   const chain = (id: string) => bets.filter((b) => b.rolloverId === id);
   const rows: BetRow[] = settleQueue(bets, today).map((it) =>
     it.kind === 'dutch' ? { kind: 'dutch', dutchId: it.dutchId, bets: it.bets } : it.bet.rolloverId ? { kind: 'rollover', rolloverId: it.bet.rolloverId, bets: chain(it.bet.rolloverId) } : { kind: 'bet', bet: it.bet },
   );
-  return dayGroups(rows, (r) => (r.kind === 'bet' ? due(r.bet) : r.bets.filter((b) => b.result === 'pending').map(due).sort()[0]!));
+  const dateOf = (r: BetRow) => (r.kind === 'bet' ? due(r.bet) : (r.bets.filter((b) => b.result === 'pending').map(due).sort()[0] ?? r.bets.map(due).sort().at(-1)!));
+  if (keep) {
+    const queued = new Set(rows.map(rowKey));
+    const kept = groupRows(bets).filter((r) => keptRow(r, today) && !queued.has(rowKey(r)));
+    // oldest first; a kept row goes last in its day (the sort is stable)
+    if (kept.length) return dayGroups([...rows, ...kept].sort((a, b) => dateOf(a).localeCompare(dateOf(b))), dateOf);
+  }
+  return dayGroups(rows, dateOf);
 }
 
 /** The bets a tab shows (for the stats strip), each once (a banked dutch split is in two rows). */

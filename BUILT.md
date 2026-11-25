@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-25
+- Cash-outs never vanish from the Pending and To settle tabs (v0.48.1)
+  A bet cashed out today stays on the tab it was settled from, showing its cash-out amount (and the W / L "woulda" buttons), also after a reload; the tab counts still count only pending bets.
 - BT-54 — A dutch as the next leg of a rollover shot (v0.48.0)
   An open shot has a "+ Dutch leg" button that opens the Betting Tool with the whole banked payout as the locked total; the logged dutch sits under the shot as "Bet n · dutch", and the shot rolls on with what the dutch returned (lost only if every split lost, bankable again when it made a profit).
 - BT-52 — Three notes per bet (Pre / Live / Post), clickable in every cell (v0.47.0)

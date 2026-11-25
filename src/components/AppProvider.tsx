@@ -344,7 +344,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const before = betsRef.current.find((b) => b.id === id);
       // optimistic: show the change at once, put it back if the server refuses
       // (legs patched from the settle queue get the bet's existing leg ids until the server answers)
-      if (before) setBets((bs) => bs.map((b) => (b.id === id ? ({ ...b, ...patch, legs: patch.legs ? patch.legs.map((l, i) => ({ ...l, id: b.legs[i]?.id ?? `new-${i}` })) : b.legs } as Bet) : b)));
+      // (updatedAt too: a bet cashed out today stays on the Pending / To settle tabs, view.ts)
+      if (before) setBets((bs) => bs.map((b) => (b.id === id ? ({ ...b, ...patch, updatedAt: new Date().toISOString(), legs: patch.legs ? patch.legs.map((l, i) => ({ ...l, id: b.legs[i]?.id ?? `new-${i}` })) : b.legs } as Bet) : b)));
       const token = updates.begin(id);
       // the undo step is there at once (Z right after works); writes go in order, so its revert follows this edit
       let failed = false;

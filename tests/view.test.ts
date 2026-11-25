@@ -78,3 +78,27 @@ describe('selection', () => {
     expect(nextKey(['a'], 'a')).toBeNull();
   });
 });
+
+describe('a cash-out never vanishes from the Pending / To settle tabs', () => {
+  // the app's day starts at 05:00 local; noon UTC is the same day in every zone the tests run in
+  const now = `${TODAY}T12:00:00.000Z`;
+  const cashed = bet({ result: 'cash-out', cashout: 111, stake: 100, updatedAt: now });
+  const older = bet({ result: 'cash-out', cashout: 50, updatedAt: '2026-11-10T12:00:00.000Z' });
+  const won = bet({ result: 'won', updatedAt: now });
+  const open = bet();
+  const bets = [cashed, older, won, open];
+  const ids = (tab: 'pending' | 'settle', keep?: boolean) => tabBets(tabDays(bets, tab, TODAY, keep)).map((b) => b.id).sort();
+
+  it('keeps a bet cashed out today on both tabs, not older cash-outs or other results', () => {
+    expect(ids('pending')).toEqual([cashed.id, open.id].sort());
+    expect(ids('settle')).toEqual([cashed.id, open.id].sort());
+  });
+  it('the tab counts still count only what is pending', () => {
+    expect(ids('pending', false)).toEqual([open.id]);
+  });
+  it('a dutch with a split cashed out today stays on To settle', () => {
+    const a = bet({ dutchId: 'd1', result: 'cash-out', cashout: 111, updatedAt: now });
+    const b = bet({ dutchId: 'd1', result: 'lost', updatedAt: now });
+    expect(tabBets(tabDays([a, b], 'settle', TODAY)).map((x) => x.id).sort()).toEqual([a.id, b.id].sort());
+  });
+});
