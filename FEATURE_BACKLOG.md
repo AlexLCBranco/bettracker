@@ -66,7 +66,7 @@ available, working kinda the same as on the Slate: post, live and pregame thots"
   corner, notes under the game). Read calendarkit's Slate code and copy its behaviour where it fits a table row;
   do not invent a different scheme.
 - Clickable in each cell: every bet cell (single, combo, dutch, split, rollover, ladder) has the mark, also on rows
-  with no description yet (dim, to add one). The mark shows which slots are filled (e.g. P · L · P lit / dim).
+  with no description yet (dim, to add one). The mark shows which slots are filled (Pre · Live · Post, each lit or dim).
   Click opens the notes under the row on the last filled slot (or Pre when empty), with the three slots one click
   apart; D on the selected row does the same. Hover still peeks. Click away saves, Esc discards, as now.
 - Links typed in a note are clickable (open in a new tab).
