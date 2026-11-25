@@ -44,7 +44,9 @@ export interface Bet {
   result: Result;
   /** Amount returned by a cash-out; null unless result is cash-out. */
   cashout: number | null;
+  /** BT-52: the bet's three notes: Pre (before, BT-47's "Before"), Live (during), Post (after, BT-47's "After"). */
   preAnalysis: string;
+  liveAnalysis: string;
   postAnalysis: string;
   betText: string;
   /** Solo: exactly 1. Combination: 0 (not entered) or 2+. */

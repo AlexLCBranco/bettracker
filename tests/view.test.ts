@@ -17,6 +17,7 @@ const bet = (over: Partial<Bet> = {}): Bet => ({
   result: 'pending',
   cashout: null,
   preAnalysis: '',
+    liveAnalysis: '',
   postAnalysis: '',
   betText: '',
   legs: [],

@@ -215,7 +215,7 @@ function Bets() {
   const desc = useMemo<DescriptionControl>(
     () => ({
       switchOn: descSwitch,
-      isOpen: (k, bets) => isDescriptionOpen(k, rowHasDescription(bets), descSwitch, flipped),
+      isOpen: (k, bets, byHand) => isDescriptionOpen(k, !byHand && rowHasDescription(bets), descSwitch, flipped),
       toggle: (k) => setFlipped((f) => toggleKey(f, k)),
       close: (k, bets) =>
         setFlipped((f) => {

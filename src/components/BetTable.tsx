@@ -7,7 +7,6 @@ import { formatDate, formatDayHeader, formatDayMonth, parseDateInput } from '@/l
 import { betLabel, duplicateDutchDraft, dutchSummary, editDutchDraft, rowBets, rowKey, type GroupOutcome } from '@/lib/dutch';
 import { DescriptionMark, DescriptionRow, type DescriptionControl } from './Description';
 import { WhatIfPanel, type WhatIfControl } from './WhatIf';
-import { hasDescription } from '@/lib/descriptions';
 import { footballDayUrl, nbaSlateUrl } from '@/lib/dayLinks';
 import { duplicateForm } from '@/lib/form';
 import { formatMoney, formatOdds, MONEY_SYMBOL, oddsFromText, parseNumber, profit, profitMoney, winReturn, type MoneyScope } from '@/lib/money';
@@ -919,7 +918,8 @@ function BetRow({ b, open, toggle, selected, multi, desc, select, settle, split,
   const soloActual = solo ? (leg0?.actual ?? '') : '';
   const group = split?.group ?? [b];
   const losses = losingLegs(b, split?.group ?? []);
-  const flow = !!(chip || soloActual || link || b.banked || b.wouldHave || (b.noBrainer && !nested) || (!nested && !link && hasDescription(b)));
+  // BT-52: every bet cell has its notes mark, so the text always flows inline with what follows it
+  const flow = true;
   const annotateHere = () => {
     select(key);
     annotate(key);
@@ -982,7 +982,8 @@ function BetRow({ b, open, toggle, selected, multi, desc, select, settle, split,
               )}
               {b.noBrainer && !nested && <NoBrainerChip />}
               {chip && <LabelChip label={chip} />}
-              {!nested && !link && <DescriptionMark rowKey={key} bets={[b]} selected={isSel} control={desc} />}
+              {/* BT-52: a dutch split or a chain's bet has its own notes, opened by hand (the switch opens its row's) */}
+              <DescriptionMark rowKey={key} bets={[b]} selected={selected === key} control={desc} byHand={nested || !!link} />
               <WouldaChip bet={b} fmt={inUnits} />
               {(link || b.banked) && !b.ladder && <TierChip odds={b.dutchId && (!link || link.index === 0) ? firstFactor(b, allBets) : b.odds} banked={b.banked && (link ? link.index === link.chain.length - 1 : rollover.chainOf(b).length === 1)} />}
             </div>
@@ -1122,6 +1123,7 @@ function BetRow({ b, open, toggle, selected, multi, desc, select, settle, split,
           )}
         </td>
       </tr>
+      {(nested || !!link) && desc.isOpen(key, [b], true) && <DescriptionRow rowKey={key} bets={[b]} cols={COLS} control={desc} />}
       {expanded && combo && b.legs.length === 0 && (
         <tr className="border-b border-zinc-900 text-xs" data-testid="no-legs">
           <td />

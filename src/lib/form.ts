@@ -35,6 +35,7 @@ export interface BetForm {
   selection: string;
   betText: string;
   preAnalysis: string;
+  liveAnalysis: string;
   postAnalysis: string;
   /** Combination legs. */
   legs: LegForm[];
@@ -74,6 +75,7 @@ export function newForm(defaults: Defaults, today = todayISO()): BetForm {
     selection: '',
     betText: '',
     preAnalysis: '',
+    liveAnalysis: '',
     postAnalysis: '',
     legs: [],
     money: defaults.money ?? 'real',
@@ -101,6 +103,7 @@ export function formFromBet(b: Bet): BetForm {
     selection: solo?.selection ?? '',
     betText: b.betText,
     preAnalysis: b.preAnalysis,
+    liveAnalysis: b.liveAnalysis,
     postAnalysis: b.postAnalysis,
     legs: b.type === 'combination' ? b.legs.map((l) => ({ sport: l.sport, game: l.game, market: l.market, selection: l.selection, odds: formatOdds(l.odds), result: l.result, actual: l.actual })) : [],
     money: b.money,
@@ -118,6 +121,7 @@ export function duplicateForm(b: Bet, today = todayISO()): BetForm {
     cashout: '',
     placedDate: formatDate(today),
     gameDate: formatDate(today),
+    liveAnalysis: '',
     postAnalysis: '',
     label: '',
     actual: '',
@@ -138,6 +142,7 @@ export function nextForm(f: BetForm): BetForm {
     selection: '',
     betText: '',
     preAnalysis: '',
+    liveAnalysis: '',
     postAnalysis: '',
     label: '',
     actual: '',
@@ -182,6 +187,7 @@ export function formToBet(f: BetForm, today = todayISO(), sizes: UnitSizes = NO_
     result: f.result,
     cashout,
     preAnalysis: f.preAnalysis,
+    liveAnalysis: f.liveAnalysis,
     postAnalysis: f.postAnalysis,
     betText: f.betText,
     legs,

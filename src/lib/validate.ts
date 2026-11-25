@@ -104,6 +104,7 @@ export function validateBet(raw: unknown): Validated {
       result,
       cashout,
       preAnalysis: str(r.preAnalysis),
+      liveAnalysis: str(r.liveAnalysis),
       postAnalysis: str(r.postAnalysis),
       betText: tidy.betText,
       legs: tidy.legs,

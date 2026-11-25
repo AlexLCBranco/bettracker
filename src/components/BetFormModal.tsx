@@ -340,12 +340,16 @@ function FormBody() {
           )}
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2">
-          <L label="Pre-bet analysis">
-            <textarea className="field min-h-20" value={f.preAnalysis} onChange={(e) => set('preAnalysis', e.target.value)} aria-label="Pre-bet analysis" />
+        {/* BT-52: the three notes, as in the table */}
+        <div className="grid gap-3 md:grid-cols-3">
+          <L label="Pre">
+            <textarea className="field min-h-20" value={f.preAnalysis} onChange={(e) => set('preAnalysis', e.target.value)} placeholder="Why this bet" aria-label="Pre note" />
           </L>
-          <L label="Post-bet analysis">
-            <textarea className="field min-h-20" value={f.postAnalysis} onChange={(e) => set('postAnalysis', e.target.value)} aria-label="Post-bet analysis" />
+          <L label="Live">
+            <textarea className="field min-h-20" value={f.liveAnalysis} onChange={(e) => set('liveAnalysis', e.target.value)} placeholder="During the game" aria-label="Live note" />
+          </L>
+          <L label="Post">
+            <textarea className="field min-h-20" value={f.postAnalysis} onChange={(e) => set('postAnalysis', e.target.value)} placeholder="What happened" aria-label="Post note" />
           </L>
         </div>
 

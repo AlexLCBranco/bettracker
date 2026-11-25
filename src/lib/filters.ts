@@ -14,7 +14,7 @@ export interface Filters {
   type: TypeFilter;
   situation: Situation | '';
   result: Result | '';
-  /** Free text over bet text, game, market, selection. */
+  /** Free text over bet text, game, market, selection and the Pre / Live / Post notes (BT-52). */
   text: string;
   /** Real or hypothetical money only (BT-14); "" = both. */
   money: Money | '';
@@ -39,7 +39,7 @@ export function filterBets(bets: Bet[], f: Filters): Bet[] {
       (!f.situation || b.situation === f.situation) &&
       (!f.result || b.result === f.result) &&
       (!f.money || b.money === f.money) &&
-      (!text || [b.betText, ...b.legs.flatMap((l) => [l.game, l.market, l.selection])].some((s) => normalize(s).includes(text))),
+      (!text || [b.betText, b.preAnalysis, b.liveAnalysis, b.postAnalysis, ...b.legs.flatMap((l) => [l.game, l.market, l.selection])].some((s) => normalize(s).includes(text))),
   );
   return withWholeGroups(bets, matched);
 }

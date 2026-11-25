@@ -331,6 +331,7 @@ export function draftToBets(d: DutchDraft, lastBook: string, dutchId: string, to
       result,
       cashout: null,
       preAnalysis: '',
+      liveAnalysis: '',
       postAnalysis: '',
       betText: combo ? legs.map((x) => x.l.selection.trim()).join(' + ') : '',
       dutchId,
@@ -401,7 +402,7 @@ export function planDutchEdit(d: DutchDraft, original: Bet[], lastBook: string, 
       const same = old.legs.find((o) => isLeg(o.selection, l.selection)) ?? (old.legs.length === input.legs.length ? old.legs[k] : undefined);
       return { ...l, result: same?.result ?? 'pending', actual: same?.actual ?? '' };
     });
-    plan.updates.push({ id: old.id, patch: { ...input, result: old.result, cashout: old.cashout, preAnalysis: old.preAnalysis, postAnalysis: old.postAnalysis, label: old.label, legs } });
+    plan.updates.push({ id: old.id, patch: { ...input, result: old.result, cashout: old.cashout, preAnalysis: old.preAnalysis, liveAnalysis: old.liveAnalysis, postAnalysis: old.postAnalysis, label: old.label, legs } });
   }
   const kept = new Set(d.rows.map((r) => r.betId).filter(Boolean));
   plan.deletes = original.filter((b) => !kept.has(b.id)).map((b) => b.id);

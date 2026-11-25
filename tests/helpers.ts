@@ -20,6 +20,7 @@ export function bet(over: Partial<Bet> = {}): Bet {
     result: 'pending',
     cashout: null,
     preAnalysis: '',
+    liveAnalysis: '',
     postAnalysis: '',
     betText: 'lakers ml',
     legs: [leg()],

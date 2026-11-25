@@ -14,15 +14,15 @@ test('descriptions: peek on hover, D opens it under the row, click away saves, E
   const descRow = (x: { id: string }) => page.locator(`[data-desc-for="bet:${x.id}"]`);
   await expect(row(d)).toBeVisible();
 
-  // the mark only where there is text
-  await expect(row(a).getByTestId('desc-mark')).toHaveCount(1);
-  await expect(row(c).getByTestId('desc-mark')).toHaveCount(1);
-  await expect(row(b).getByTestId('desc-mark')).toHaveCount(0);
+  // BT-52: a mark on every row, its dots lit for the slots with text
+  await expect(row(a).getByTestId('desc-mark')).toHaveAttribute('data-filled', 'pre,post');
+  await expect(row(c).getByTestId('desc-mark')).toHaveAttribute('data-filled', 'post');
+  await expect(row(b).getByTestId('desc-mark')).not.toHaveAttribute('data-filled');
 
   // peek: both parts, headed
   await row(a).getByTestId('desc-mark').hover();
   const peek = page.getByTestId('desc-peek');
-  await expect(peek).toContainText('Before');
+  await expect(peek).toContainText('Pre');
   await expect(peek).toContainText('Jokic vs a weak front court');
   await expect(peek).toContainText('lost by one');
   // it never covers its row
@@ -35,20 +35,22 @@ test('descriptions: peek on hover, D opens it under the row, click away saves, E
   await row(b).locator('td').first().click();
   await page.keyboard.press('d');
   await expect(descRow(b)).toBeVisible();
-  await descRow(b).getByLabel('Before').fill('typed from the table');
+  await descRow(b).getByLabel('Pre note').fill('typed from the table');
   await page.getByTestId('stats').click({ position: { x: 4, y: 4 } });
   await expect(descRow(b)).toHaveCount(0);
   await saved(page);
   await expect.poll(async () => (await betsTagged(request, tag)).find((x) => x.id === b.id)!.preAnalysis).toBe('typed from the table');
   await page.reload();
   await page.getByLabel('Search bets').fill(tag);
-  await expect(row(b).getByTestId('desc-mark')).toHaveCount(1);
+  await expect(row(b).getByTestId('desc-mark')).toHaveAttribute('data-filled', 'pre');
 
   // a click on the mark opens it; Esc closes without saving
   await row(a).getByTestId('desc-mark').click();
   await expect(descRow(a)).toBeVisible();
-  await descRow(a).getByLabel('Before').fill('not saved');
-  await descRow(a).getByLabel('Before').press('Escape');
+  await descRow(a).getByLabel('Show Pre').click();
+  await descRow(a).getByLabel('Edit the Pre note').click();
+  await descRow(a).getByLabel('Pre note').fill('not saved');
+  await descRow(a).getByLabel('Pre note').press('Escape');
   await expect(descRow(a)).toHaveCount(0);
   await saved(page);
   expect((await betsTagged(request, tag)).find((x) => x.id === a.id)!.preAnalysis).toBe('Jokic vs a weak front court');
