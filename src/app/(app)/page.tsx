@@ -18,7 +18,7 @@ import { useSettle } from '@/components/useSettle';
 import { useRollover } from '@/components/useRollover';
 import { chainSummary, isLadder } from '@/lib/rollover';
 import { parseDateInput, todayISO } from '@/lib/dates';
-import { countBets, rowBets, rowKey } from '@/lib/dutch';
+import { chainDutchIds, countBets, rowBets, rowKey, rowKeyOf } from '@/lib/dutch';
 import { useDescriptionsSwitch, type DescriptionControl } from '@/components/Description';
 import { isDescriptionOpen, rowHasDescription } from '@/lib/descriptions';
 import { filterBets, NO_FILTERS, type Filters } from '@/lib/filters';
@@ -136,7 +136,7 @@ function Bets() {
   const navKey = (k: string | null) => {
     const b = k?.startsWith('bet:') ? byId.get(k.slice(4)) : undefined;
     if (!b || keys.includes(k!)) return k;
-    return b.dutchId ? `dutch:${b.dutchId}` : b.rolloverId ? `rollover:${b.rolloverId}` : k;
+    return b.dutchId || b.rolloverId ? rowKeyOf(b, chainDutchIds(shown)) : k;
   };
   const keysRef = useRef(keys);
   const selRef = useRef(selected);

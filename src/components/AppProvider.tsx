@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { betNames, buildIndex, lastUsed, stakePresets, suggest, type Field, type SuggestIndex } from '@/lib/autocomplete';
-import { betLabel, type DutchDraft } from '@/lib/dutch';
+import { betLabel, chainDutchIds, rowKeyOf, type DutchDraft } from '@/lib/dutch';
 import type { BetForm } from '@/lib/form';
 import { latestGate } from '@/lib/latest';
 import { loadWhenQuiet, REFRESH_MIN_MS, refreshGate } from '@/lib/refresh';
@@ -20,7 +20,8 @@ export type UndoAs = false | { label?: string; key?: string };
 
 /** The bet's text, short, for undo labels. */
 const describe = (b: Bet) => (b.betText || betLabel(b) || 'bet').slice(0, 60);
-const keyOf = (b: Bet) => (b.dutchId ? `dutch:${b.dutchId}` : b.rolloverId ? `rollover:${b.rolloverId}` : `bet:${b.id}`);
+/** The row a bet is shown in (BT-54: a dutch placed as a rollover leg is in its shot's row); `all`: every bet. */
+const keyOf = (b: Bet, all: Bet[]) => rowKeyOf(b, chainDutchIds(all));
 
 /** BT-20: names typed "Mccain" saved as "McCain" once that spelling is known (the server tidies games and units). */
 function tidyPatch<T extends Partial<BetInput>>(p: T, names: NameCasing): T {
@@ -293,7 +294,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const input = tidyPatch(raw, namesRef.current);
       const bet = await write<Bet>('/api/bets', { method: 'POST', body: JSON.stringify(input) });
       setBets((bs) => [bet, ...bs]);
-      if (undo) history.record({ label: undo.label ?? `Added: ${describe(bet)}`, key: undo.key ?? keyOf(bet), revert: () => drop([bet.id]) });
+      if (undo) history.record({ label: undo.label ?? `Added: ${describe(bet)}`, key: undo.key ?? keyOf(bet, [bet, ...betsRef.current]), revert: () => drop([bet.id]) });
       return bet;
     },
     [write, history, drop],
@@ -307,7 +308,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (undo && made.length)
         history.record({
           label: undo.label ?? (made.length === 1 ? `Added: ${describe(made[0]!)}` : `Added ${made.length} bets`),
-          key: undo.key ?? keyOf(made[0]!),
+          key: undo.key ?? keyOf(made[0]!, [...made, ...betsRef.current]),
           revert: () => drop(made.map((b) => b.id)),
         });
       return made;
@@ -349,7 +350,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       let failed = false;
       if (undo && before) {
         const back = revertPatch(before, patch);
-        history.record({ label: undo.label ?? `Edited: ${describe(before)}`, key: undo.key ?? keyOf(before), revert: () => (failed ? undefined : updateRef.current?.(id, back).catch(() => undefined)) });
+        history.record({ label: undo.label ?? `Edited: ${describe(before)}`, key: undo.key ?? keyOf(before, betsRef.current), revert: () => (failed ? undefined : updateRef.current?.(id, back).catch(() => undefined)) });
       }
       try {
         const bet = await write<Bet>(`/api/bets/${id}`, { method: 'PATCH', body: JSON.stringify(patch) });
@@ -376,7 +377,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setBets((bs) => bs.filter((b) => b.id !== id));
       // the undo step is there at once (Z right after works); writes go in order, so its restore follows the delete
       let failed = false;
-      if (undo && gone) history.record({ label: undo.label ?? `Deleted: ${describe(gone)}`, key: undo.key ?? keyOf(gone), revert: () => (failed ? undefined : restore([gone])) });
+      if (undo && gone) history.record({ label: undo.label ?? `Deleted: ${describe(gone)}`, key: undo.key ?? keyOf(gone, before), revert: () => (failed ? undefined : restore([gone])) });
       try {
         await write(`/api/bets/${id}`, { method: 'DELETE' });
       } catch (e) {

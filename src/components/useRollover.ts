@@ -4,7 +4,7 @@
 // BT-35: ladders: start one from a won bet, add the next rung, take the money, set the goal.
 import { betLabel } from '@/lib/dutch';
 import { formatMoney, formatOdds } from '@/lib/money';
-import { canBank, payoutOf, canStartLadder, chainOrder, chainSummary, detachPlan, isLadder, ladderOf, newRolloverId } from '@/lib/rollover';
+import { canBank, payoutOf, canStartLadder, chainLegs, chainOrder, chainSummary, detachPlan, isLadder, ladderOf, newRolloverId } from '@/lib/rollover';
 import type { Bet, Ladder } from '@/lib/types';
 import { useApp } from './AppProvider';
 import type { Settler } from './useSettle';
@@ -63,13 +63,16 @@ export function useRollover(settle: Settler): Rollover {
       const ordered = chainOrder(chain);
       const last = ordered.at(-1)!;
       if (isLadder(ordered)) return notify('A ladder ends when a rung loses or with its Take button', 'error');
-      if (!last.banked) return;
+      // BT-54: a dutch leg is banked by whichever of its splits was used
+      const marked = chainLegs(ordered).at(-1)!.filter((b) => b.banked);
+      if (!marked.length) return;
       if (ordered.some((b) => b.result === 'pending')) return notify('Settle its pending bet first', 'error');
-      const before = { rolloverId: last.rolloverId, banked: last.banked };
       // a shot of one bet goes back to being a plain won bet
       const alone = ordered.length === 1;
-      save(last.id, alone ? { rolloverId: null, banked: false } : { banked: false });
-      settle.record(alone ? `bet:${last.id}` : `rollover:${last.rolloverId}`, alone ? `Closed: a plain ${last.result === 'won' ? 'won' : 'cashed-out'} bet again` : 'Shot closed', () => save(last.id, before));
+      for (const b of marked) save(b.id, alone ? { rolloverId: null, banked: false } : { banked: false });
+      settle.record(alone ? `bet:${last.id}` : `rollover:${last.rolloverId}`, alone ? `Closed: a plain ${last.result === 'won' ? 'won' : 'cashed-out'} bet again` : 'Shot closed', () =>
+        marked.forEach((b) => save(b.id, { rolloverId: b.rolloverId, banked: true })),
+      );
     },
     canStartLadder,
     startLadder(b) {

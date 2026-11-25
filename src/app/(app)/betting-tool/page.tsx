@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useApp } from '@/components/AppProvider';
 import { OutcomeTable } from '@/components/OutcomeTable';
 import { newDutchDraft } from '@/lib/dutch';
@@ -10,6 +11,7 @@ import { formatBRL, formatMoney, formatOdds, ODDS_FORMAT_LABEL, ODDS_FORMATS, pa
 import { previewText, readStake } from '@/lib/units';
 import { sharedUsed, showsLegs, splitCalc, type LegText, type SplitText } from '@/lib/splits';
 import { formatPercent } from '@/lib/stats';
+import { chainSummary, isLadder, tierOf } from '@/lib/rollover';
 
 interface ToolState {
   stake: string;
@@ -73,7 +75,11 @@ export default function BettingToolPage() {
     () => true,
     () => false,
   );
-  return inBrowser ? <Tool /> : null;
+  return inBrowser ? (
+    <Suspense fallback={null}>
+      <Tool />
+    </Suspense>
+  ) : null;
 }
 
 const ROW_GRID = 'grid grid-cols-[minmax(0,1fr)_7rem_7.5rem_2rem] gap-2';
@@ -82,7 +88,14 @@ const ROW_GRID = 'grid grid-cols-[minmax(0,1fr)_7rem_7.5rem_2rem] gap-2';
 const cleared = (s: ToolState): ToolState => ({ ...INITIAL, stake: s.stake, step: s.step, mode: s.mode, target: s.target, targetFormat: s.targetFormat });
 
 function Tool() {
-  const { defaults, openDutch, units } = useApp();
+  const { defaults, openDutch, units, bets, loaded } = useApp();
+  const router = useRouter();
+  // BT-54: ?rollover=<id> dutches an open shot's whole banked payout as its next leg
+  const rolloverId = useSearchParams().get('rollover');
+  const chain = rolloverId ? bets.filter((b) => b.rolloverId === rolloverId) : [];
+  const shotNow = chain.length ? chainSummary(chain, bets) : null;
+  const ro = rolloverId && shotNow?.outcome === 'open' && !isLadder(chain) ? { id: rolloverId, banked: shotNow.banked, odds: shotNow.odds, money: chain[0]!.money } : null;
+  const fmt = (n: number, signed = false) => formatMoney(n, ro?.money ?? 'real', signed);
   const [s, setS] = useState<ToolState>(loadSaved);
   useEffect(() => localStorage.setItem(STORAGE_KEY, JSON.stringify(s)), [s]);
   // BT-9: after a dutch is logged the tool clears; this keeps what it held, for "Undo clear". Shown while the tool is
@@ -119,10 +132,10 @@ function Tool() {
   // unrounded decimal odds (a combination split's total odds): the maths and the logged bets use these
   const oddsValues = used.map((r) => calcs.get(r.id)!.odds);
   // BT-38: the total stake can be typed in units ("2u", real money's unit size; "H$2u" hypothetical)
-  const typed = readStake(s.stake, 'real', units.unitSizes);
-  const stake = typed?.ok ? typed.amount : NaN;
+  const typed = ro ? null : readStake(s.stake, 'real', units.unitSizes);
+  const stake = ro ? ro.banked : typed?.ok ? typed.amount : NaN;
   const unitHint = typed && (!typed.ok ? { ok: false, text: typed.error } : typed.units != null ? { ok: true, text: previewText(typed.units, typed.amount, typed.money, formatMoney) } : null);
-  const result = dutch(stake, oddsValues, s.step);
+  const result = dutch(stake, oddsValues, ro ? 0.01 : s.step);
   const byId = new Map(used.map((r, i) => [r.id, i]));
   const ok = 'error' in result ? null : result;
 
@@ -178,8 +191,7 @@ function Tool() {
     const legName = (name: string, k: number, n: number) => name || (k === 0 ? `Selection ${n}` : `Leg ${k + 1}`);
     const first = used[0] ? calcs.get(used[0].id)! : null;
     const sharedLegs = first?.combo ? first.legs.slice(first.legs.length - sharedCount).map((l, k) => ({ selection: l.name || `Shared leg ${k + 1}`, odds: l.odds })) : [];
-    openDutch(
-      newDutchDraft(
+    const draft = newDutchDraft(
         used.map((r, i) => {
           const c = calcs.get(r.id)!;
           const n = s.rows.indexOf(r) + 1;
@@ -191,14 +203,18 @@ function Tool() {
             legs: own.map((l, k) => ({ selection: legName(l.name, k, n), odds: c.combo ? l.odds : oddsValues[i]! })),
           };
         }),
-        defaults,
+        ro ? { ...defaults, money: ro.money } : defaults,
         undefined,
         sharedLegs,
-      ),
-      (bets) => {
+      );
+    openDutch(
+      ro ? { ...draft, rolloverId: ro.id } : draft,
+      (made) => {
         const after = cleared(before);
         setS(after);
-        setLogged({ count: bets.length, stake: bets.reduce((t, b) => t + b.stake, 0), before, after });
+        // BT-54: back to the shot, its new leg selected
+        if (ro) return router.push(`/?sel=${encodeURIComponent(`rollover:${ro.id}`)}`);
+        setLogged({ count: made.length, stake: made.reduce((t, b) => t + b.stake, 0), before, after });
       },
     );
   };
@@ -218,7 +234,7 @@ function Tool() {
       {showLogged && (
         <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-emerald-800 bg-emerald-950 px-4 py-2 text-sm text-emerald-200" data-testid="dutch-logged">
           <span>
-            Dutch logged: {showLogged.count} bets, {formatBRL(showLogged.stake)}
+            Dutch logged: {showLogged.count} bets, {fmt(showLogged.stake)}
           </span>
           <span className="text-emerald-700">·</span>
           <Link href="/" className="underline hover:text-white">
@@ -236,6 +252,33 @@ function Tool() {
           </button>
         </div>
       )}
+
+      {rolloverId &&
+        loaded &&
+        (ro ? (
+          <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-sky-800 bg-sky-950/60 px-4 py-2 text-sm text-sky-200" data-testid="rollover-mode">
+            <span>
+              Rollover leg: the whole banked payout, <b>{fmt(ro.banked)}</b>, is split across these selections. Shot so far @ {formatOdds(ro.odds, 2)}
+              {ok && (
+                <>
+                  {' '}
+                  → with this dutch @ <b data-testid="rollover-mode-odds">{formatOdds(ro.odds * ok.combinedOdds, 2)}</b>
+                  {tierOf(ro.odds * ok.combinedOdds) ? ` (${tierOf(ro.odds * ok.combinedOdds)})` : ''}
+                </>
+              )}
+            </span>
+            <Link href="/betting-tool" className="underline hover:text-white">
+              Cancel
+            </Link>
+          </div>
+        ) : (
+          <div role="alert" className="flex flex-wrap items-center gap-x-3 rounded-md border border-amber-700 bg-amber-950/60 px-4 py-2 text-sm text-amber-200" data-testid="rollover-mode-closed">
+            <span>That shot is not open (no banked payout waiting), so this logs a normal dutch.</span>
+            <Link href="/betting-tool" className="underline hover:text-white">
+              Dismiss
+            </Link>
+          </div>
+        ))}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <section className="card space-y-4 p-5">
@@ -276,9 +319,13 @@ function Tool() {
             </div>
           )}
           <div className="grid grid-cols-2 gap-3">
-            <Label text="Total stake (R$)">
+            <Label text={ro ? 'Total stake (the banked payout)' : 'Total stake (R$)'}>
               <span className="relative flex flex-col">
-                <input className="field" inputMode="decimal" value={s.stake} onChange={(e) => setS((x) => ({ ...x, stake: e.target.value }))} aria-label="Total stake" title='An amount, or units: "2u"' />
+                {ro ? (
+                  <input className="field text-sky-200" value={fmt(ro.banked)} readOnly aria-label="Total stake" title="A rollover leg stakes the whole banked payout" />
+                ) : (
+                  <input className="field" inputMode="decimal" value={s.stake} onChange={(e) => setS((x) => ({ ...x, stake: e.target.value }))} aria-label="Total stake" title='An amount, or units: "2u"' />
+                )}
                 {unitHint && (
                   <span className={`pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 truncate rounded bg-zinc-900 px-1 text-[11px] tabular-nums ${unitHint.ok ? 'text-sky-300' : 'text-amber-300'}`} style={{ maxWidth: '90%' }} title={unitHint.text} data-testid="unit-preview">
                     {unitHint.text}
@@ -289,7 +336,8 @@ function Tool() {
             <Label text="Round stakes to">
               <select
                 className="field"
-                value={s.step}
+                value={ro ? 0.01 : s.step}
+                disabled={!!ro}
                 onChange={(e) =>
                   setS((x) => ({
                     ...x,
@@ -411,8 +459,8 @@ function Tool() {
                 Use in dutch
               </button>
             ) : (
-              <button className="btn btn-primary ml-auto" disabled={!ok} onClick={logAsBets} title={ok ? 'Save one pending bet per selection, linked as one dutch' : 'Needs a valid calculation'}>
-                Log as bets
+              <button className="btn btn-primary ml-auto" disabled={!ok} onClick={logAsBets} title={ok ? (ro ? 'Save the selections as one dutch: the next leg of the shot' : 'Save one pending bet per selection, linked as one dutch') : 'Needs a valid calculation'}>
+                {ro ? 'Log as rollover leg' : 'Log as bets'}
               </button>
             )}
           </div>
@@ -445,11 +493,11 @@ function Tool() {
           ) : (
             <>
               <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
-                <Tile label="Every selection returns" testId="dutch-return" sub={ok.maxReturn > ok.minReturn ? `up to ${formatBRL(ok.maxReturn)}` : undefined}>
-                  {formatBRL(ok.minReturn)}
+                <Tile label="Every selection returns" testId="dutch-return" sub={ok.maxReturn > ok.minReturn ? `up to ${fmt(ok.maxReturn)}` : undefined}>
+                  {fmt(ok.minReturn)}
                 </Tile>
-                <Tile label="Profit if 1 wins" testId="dutch-profit" sub={ok.maxProfit > ok.minProfit ? `up to ${formatBRL(ok.maxProfit, true)}` : undefined}>
-                  <span className={ok.minProfit > 0 ? 'text-emerald-400' : ok.minProfit < 0 ? 'text-red-400' : ''}>{formatBRL(ok.minProfit, true)}</span>
+                <Tile label="Profit if 1 wins" testId="dutch-profit" sub={ok.maxProfit > ok.minProfit ? `up to ${fmt(ok.maxProfit, true)}` : undefined}>
+                  <span className={ok.minProfit > 0 ? 'text-emerald-400' : ok.minProfit < 0 ? 'text-red-400' : ''}>{fmt(ok.minProfit, true)}</span>
                 </Tile>
                 <Tile label="Combined odds" testId="dutch-odds" sub={`book ${formatPercent(ok.book)}`}>
                   {formatOdds(ok.combinedOdds, 2)}
@@ -479,11 +527,11 @@ function Tool() {
                         <td className="py-2 pr-3 text-zinc-100">{splitName(r)}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{formatOdds(oddsValues[i])}</td>
                         <td className="px-3 py-2 text-right font-semibold tabular-nums text-white" data-testid="dutch-stake">
-                          {formatBRL(ok.stakes[i]!)}
+                          {fmt(ok.stakes[i]!)}
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums text-zinc-400">{formatPercent(ok.stakes[i]! / stake)}</td>
                         <td className="py-2 pl-3 text-right tabular-nums" data-testid="dutch-row-return">
-                          {formatBRL(ok.returns[i]!)}
+                          {fmt(ok.returns[i]!)}
                         </td>
                       </tr>
                     );

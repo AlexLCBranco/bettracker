@@ -35,7 +35,7 @@ import type { Settler } from './useSettle';
 import { losingLegs, sharedLabel } from '@/lib/actuals';
 import { normalize } from '@/lib/autocomplete';
 import { Annotator, LabelChip, LossLine } from './Annotator';
-import { bankAgainNeeds, chainPending, chainSummary, firstFactor, goalText, isLadder, ladderOf, ladderProgress, ladderStrip, needsText, tierOf, type ChainOutcome } from '@/lib/rollover';
+import { bankAgainNeeds, chainLegs, chainPending, chainSummary, firstFactor, goalText, isLadder, ladderOf, ladderProgress, ladderStrip, needsText, tierOf, type ChainOutcome } from '@/lib/rollover';
 import type { Rollover } from './useRollover';
 
 const QUICK_RESULTS: { r: Result; key: string; cls: string }[] = [
@@ -594,7 +594,10 @@ function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, multi, d
   const isSel = selected === key;
   const isOpen = s.outcome === 'open';
   const last = bets.at(-1)!;
-  const pendingBet = bets.find((b) => b.result === 'pending');
+  // BT-54: a dutch placed as a leg is one leg; its splits are settled on their own rows
+  const legs = chainLegs(bets);
+  const legOf = new Map(legs.flatMap((l, i) => l.map((b) => [b.id, { n: i + 1, dutch: l.length > 1 }] as const)));
+  const pendingBet = bets.find((b) => b.result === 'pending' && !legOf.get(b.id)!.dutch);
   const names = bets.map((b) => tidyText(b.betText || betLabel(b), nameCasing)).join(' → ');
   const books = [...new Set(bets.map((b) => b.book).filter(Boolean))];
   const live = bets.every((b) => b.situation === 'live');
@@ -625,7 +628,7 @@ function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, multi, d
               </>
             ) : (
               <>
-                <span data-testid="type">Rollover ×{bets.length}</span>
+                <span data-testid="type">Rollover ×{legs.length}</span>
                 <TierChip odds={s.odds} banked={isOpen} />
                 {isOpen && (
                   <button
@@ -747,6 +750,18 @@ function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, multi, d
                   + Add leg
                 </button>
                 <button
+                  className="whitespace-nowrap rounded px-1.5 py-0.5 text-xs font-semibold text-sky-300 hover:bg-sky-600/30"
+                  title="Dutch the banked payout across several selections as the next leg (opens the Betting Tool)"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    select(key);
+                    router.push(`/betting-tool?rollover=${encodeURIComponent(rolloverId)}`);
+                  }}
+                  data-testid="dutch-leg"
+                >
+                  + Dutch leg
+                </button>
+                <button
                   className="rounded px-1.5 py-0.5 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-white"
                   title="Close the shot: no more legs (B)"
                   onClick={(e) => {
@@ -829,7 +844,7 @@ function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, multi, d
           multi={multi}
           desc={desc}
           rollover={rollover}
-          link={{ index: i, last: i === bets.length - 1 && !open.has(b.id), chainKey: key, chain: bets, ladder, current: ladder && (b.result === 'pending' || (isOpen && i === bets.length - 1)) }}
+          link={{ index: i, leg: legOf.get(b.id)!, last: i === bets.length - 1 && !open.has(b.id), chainKey: key, chain: bets, ladder, current: ladder && (b.result === 'pending' || (isOpen && i === bets.length - 1)) }}
         />
       ))}
       {/* BT-49: the "what if" box opens under the shot, never widening a column */}
@@ -858,6 +873,8 @@ function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, multi, d
 /** BT-29: a bet shown under its rollover shot. */
 interface ChainLink {
   index: number;
+  /** BT-54: the leg it is in (a dutch leg's splits share one), shown "Bet 2 · dutch". */
+  leg: { n: number; dutch: boolean };
   last: boolean;
   chainKey: string;
   chain: Bet[];
@@ -944,7 +961,8 @@ function BetRow({ b, open, toggle, selected, multi, desc, select, settle, split,
           <div className="flex items-start gap-1.5">
             {link && (
               <span className={`mt-px shrink-0 text-[10px] leading-4 ${link.current ? 'rounded bg-indigo-500/20 px-1 font-semibold text-indigo-200' : 'text-zinc-500'}`} data-testid="chain-label" data-current={link.current || undefined}>
-                {link.ladder ? 'Rung' : 'Bet'} {link.index + 1}
+                {link.ladder ? 'Rung' : 'Bet'} {link.leg.n}
+                {link.leg.dutch && ' · dutch'}
               </span>
             )}
             {nested &&

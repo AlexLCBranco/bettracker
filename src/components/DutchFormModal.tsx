@@ -142,6 +142,12 @@ function Body() {
           <span className="text-xs text-zinc-500">Enter saves · Esc closes</span>
         </div>
 
+        {d.rolloverId && (
+          <p className="rounded-md border border-sky-800 bg-sky-950/60 px-3 py-2 text-sm text-sky-200" data-testid="dutch-rollover-note">
+            Rollover leg: these bets are the shot&apos;s next leg, staking its whole banked payout ({formatMoney(d.rows.reduce((t, r) => t + r.stake, 0), d.money)}).
+          </p>
+        )}
+
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
           <L label="Sport">
             <Autocomplete ref={first} value={d.sport} onChange={(v) => set('sport', v)} getSuggestions={(q) => suggestFor('sport', q)} aria-label="Sport" />
@@ -159,7 +165,7 @@ function Body() {
             <DateField value={d.gameDate} onChange={(v) => set('gameDate', v)} aria-label="Game date" />
           </L>
           <L label="Money">
-            <MoneySelect value={d.money} onChange={(m) => set('money', m)} />
+            <MoneySelect value={d.money} onChange={(m) => set('money', m)} disabled={!!d.rolloverId} />
           </L>
           <L label="Situation">
             <select className="field" value={d.situation} onChange={(e) => set('situation', e.target.value as DutchDraft['situation'])} aria-label="Situation">
@@ -346,7 +352,7 @@ function Body() {
             Cancel
           </button>
           <button type="submit" className="btn btn-primary" disabled={saving}>
-            {edit ? 'Save changes' : `Log ${d.rows.length} bets`}
+            {edit ? 'Save changes' : d.rolloverId ? `Log ${d.rows.length} bets as the next leg` : `Log ${d.rows.length} bets`}
           </button>
         </div>
       </form>

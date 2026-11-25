@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-25
+- BT-54 — A dutch as the next leg of a rollover shot (v0.48.0)
+  An open shot has a "+ Dutch leg" button that opens the Betting Tool with the whole banked payout as the locked total; the logged dutch sits under the shot as "Bet n · dutch", and the shot rolls on with what the dutch returned (lost only if every split lost, bankable again when it made a profit).
 - BT-52 — Three notes per bet (Pre / Live / Post), clickable in every cell (v0.47.0)
   Every bet cell (bets, combos, dutches and their splits, rollovers, ladders) has a small ¶ mark with three dots lit for the notes it holds; a click or D opens Pre, Live and Post under the row on the last filled one, links in a note open in a new tab, and the old Before / After texts are now Pre / Post; the form and search cover all three.
 - BT-50 — Games involved: the games I bet on, per day (v0.46.0)

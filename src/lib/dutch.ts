@@ -17,6 +17,7 @@ const byCreated = (a: Bet, b: Bet) => (a.createdAt < b.createdAt ? -1 : a.create
  * in both: its dutch, and its shot's row (where it is the first bet).
  */
 export function groupRows(bets: Bet[]): BetRow[] {
+  const inChain = chainDutchIds(bets);
   const rows: BetRow[] = [];
   const groups = new Map<string, Bet[]>();
   const seen = new Set<string>();
@@ -27,7 +28,8 @@ export function groupRows(bets: Bet[]): BetRow[] {
       rows.push({ kind: 'bet', bet: b });
       continue;
     }
-    for (const id of [b.dutchId && `d:${b.dutchId}`, b.rolloverId && `r:${b.rolloverId}`]) {
+    // BT-54: a dutch placed as a rollover leg is shown under its shot only
+    for (const id of [b.dutchId && !inChain.has(b.dutchId) && `d:${b.dutchId}`, b.rolloverId && `r:${b.rolloverId}`]) {
       if (!id) continue;
       let g = groups.get(id);
       if (!g) {
@@ -40,6 +42,28 @@ export function groupRows(bets: Bet[]): BetRow[] {
   }
   for (const g of groups.values()) g.sort(byCreated);
   return rows;
+}
+
+/**
+ * BT-54: the dutches placed as a leg of a rollover shot: every bet of the dutch (two or more) is in the same chain.
+ * (A shot banked from a dutch split, BT-39, has only that split in its chain: that dutch is not one of these.)
+ */
+export function chainDutchIds(bets: Bet[]): Set<string> {
+  const chainOf = new Map<string, string | null>();
+  const size = new Map<string, number>();
+  for (const b of bets) {
+    if (!b.dutchId) continue;
+    size.set(b.dutchId, (size.get(b.dutchId) ?? 0) + 1);
+    const prev = chainOf.get(b.dutchId);
+    chainOf.set(b.dutchId, prev === undefined ? b.rolloverId : prev === b.rolloverId ? prev : null);
+  }
+  return new Set([...chainOf].filter(([id, r]) => r != null && size.get(id)! >= 2).map(([id]) => id));
+}
+
+/** The row a bet is shown in: its dutch's, its shot's (BT-29; a dutch leg's too, BT-54), or its own. */
+export function rowKeyOf(b: Bet, inChain: Set<string>): string {
+  if (b.dutchId && !inChain.has(b.dutchId)) return `dutch:${b.dutchId}`;
+  return b.rolloverId ? `rollover:${b.rolloverId}` : `bet:${b.id}`;
 }
 
 /** A row's selection key: "bet:<id>", "dutch:<dutchId>" or "rollover:<rolloverId>". */
@@ -122,9 +146,11 @@ export interface Counts {
 export function countBets(bets: Bet[]): Counts {
   const c: Counts = { count: 0, pending: 0, wins: 0, losses: 0 };
   const chains = chainsOf(bets);
+  const inChain = chainDutchIds(bets);
   for (const r of groupRows(bets)) {
-    // a shot started from a dutch split is counted with its dutch: dutch + shot are ONE bet
-    if (r.kind === 'rollover' && r.bets.some((b) => b.dutchId)) continue;
+    // a shot started from a dutch split is counted with its dutch: dutch + shot are ONE bet (a dutch placed as a
+    // later leg, BT-54, is inside the shot and has no row of its own: the shot counts)
+    if (r.kind === 'rollover' && r.bets.some((b) => b.dutchId && !inChain.has(b.dutchId))) continue;
     c.count++;
     if (r.kind === 'bet') {
       if (r.bet.result === 'pending') c.pending++;
@@ -197,6 +223,8 @@ export interface DutchDraft {
   gameDate: string;
   /** BT-44: the no brainer mark, for the whole dutch. Missing = off. */
   noBrainer?: boolean;
+  /** BT-54: a dutch placed as the next leg of this open rollover shot (its stakes add up to the banked payout). */
+  rolloverId?: string;
 }
 
 type DraftRowIn = { selection: string; odds: number; stake: number; legs?: DraftLeg[] };
@@ -335,6 +363,7 @@ export function draftToBets(d: DutchDraft, lastBook: string, dutchId: string, to
       postAnalysis: '',
       betText: combo ? legs.map((x) => x.l.selection.trim()).join(' + ') : '',
       dutchId,
+      rolloverId: d.rolloverId ?? null,
       money: d.money,
       noBrainer: !!d.noBrainer,
       legs: combo ? legs.map((x) => leg(x, x.l.selection, x.l.odds)) : [leg(legs[0]!, legs[0]!.l.selection || r.selection, r.odds)],

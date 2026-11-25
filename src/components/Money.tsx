@@ -7,11 +7,12 @@ import { MONEY, type Money } from '@/lib/types';
 import { MONEY_OPTION_LABEL, MONEY_TITLE } from './moneyStyle';
 
 /** Real (R$), bonus (B$, BT-33) or hypothetical (H$) money for a bet or a dutch (BT-14). */
-export function MoneySelect({ value, onChange, className = 'field' }: { value: Money; onChange(m: Money): void; className?: string }) {
+export function MoneySelect({ value, onChange, className = 'field', disabled }: { value: Money; onChange(m: Money): void; className?: string; disabled?: boolean }) {
   return (
     <select
       className={`${className} ${value === 'hypothetical' ? 'border-violet-500 text-violet-300' : value === 'bonus' ? 'border-amber-500 text-amber-300' : ''}`}
       value={value}
+      disabled={disabled}
       onChange={(e) => onChange(e.target.value as Money)}
       aria-label="Money"
       title={MONEY_TITLE[value]}

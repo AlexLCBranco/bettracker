@@ -86,6 +86,59 @@ const byCreated = (a: Bet, b: Bet) => (a.createdAt < b.createdAt ? -1 : a.create
 /** A chain's bets in the order they were placed. */
 export const chainOrder = (bets: Bet[]) => [...bets].sort(byCreated);
 
+// BT-54: a leg of a chain is one bet, or a dutch placed as one leg: two or more of the chain's bets sharing a dutch id.
+// (A shot banked from a dutch split, BT-39, has that split alone in the chain: it is a one-bet leg.)
+
+/** A chain's legs in the order they were placed, each leg's bets in order. */
+export function chainLegs(bets: Bet[]): Bet[][] {
+  const ordered = chainOrder(bets);
+  const shared = new Map<string, number>();
+  for (const b of ordered) if (b.dutchId) shared.set(b.dutchId, (shared.get(b.dutchId) ?? 0) + 1);
+  const legs: Bet[][] = [];
+  const byDutch = new Map<string, Bet[]>();
+  for (const b of ordered) {
+    if (b.dutchId && shared.get(b.dutchId)! >= 2) {
+      const leg = byDutch.get(b.dutchId);
+      if (leg) leg.push(b);
+      else {
+        const l = [b];
+        byDutch.set(b.dutchId, l);
+        legs.push(l);
+      }
+    } else legs.push([b]);
+  }
+  return legs;
+}
+
+/** What a leg put in: its bets' stakes. */
+export const legStake = (leg: Bet[]) => round2(leg.reduce((s, b) => s + b.stake, 0));
+
+/** What a settled leg paid back in total; a pending one: its settled bets plus the best its pending ones can return. */
+export function legReturned(leg: Bet[]): number {
+  if (leg.length === 1) return returned(leg[0]!);
+  const settled = leg.filter((b) => b.result !== 'pending').reduce((s, b) => s + returned(b), 0);
+  const pending = leg.filter((b) => b.result === 'pending').map(returned);
+  return settled + (pending.length ? Math.max(...pending) : 0);
+}
+
+/** What a leg multiplies a chain by: a bet's factor; a dutch leg what it returned ÷ its stake (pending: its combined odds). */
+function legFactor(leg: Bet[]): number {
+  if (leg.length === 1) return factor(leg[0]!);
+  if (leg.every((b) => b.result === 'pending')) return 1 / leg.reduce((s, b) => s + 1 / b.odds, 0);
+  const stake = legStake(leg);
+  return stake > 0 ? legReturned(leg) / stake : 0;
+}
+
+const legPending = (leg: Bet[]) => leg.some((b) => b.result === 'pending');
+
+/** A leg that ended the chain at nothing: a lost bet, or a dutch whose every split lost. */
+const legLost = (leg: Bet[]) => (leg.length === 1 ? leg[0]!.result === 'lost' : !legPending(leg) && Math.round(legReturned(leg) * 100) === 0);
+
+/** A leg whose payout can roll on: a bankable bet, or a settled dutch that returned more than its stake. */
+const legBankable = (leg: Bet[]) => (leg.length === 1 ? bankableResult(leg[0]!) : !legPending(leg) && Math.round((legReturned(leg) - legStake(leg)) * 100) > 0);
+
+const legBanked = (leg: Bet[]) => leg.some((b) => b.banked);
+
 export type ChainOutcome = 'pending' | 'open' | 'won' | 'lost' | 'even';
 
 export interface ChainSummary {
@@ -131,18 +184,20 @@ export function chainSummary(raw: Bet[], all: Bet[] = raw): ChainSummary {
     return { ...base, outcome: c > 0 ? 'won' : c < 0 ? 'lost' : 'even', profit: net };
   }
   // a cash-out ends the chain (the bets after it, there should be none, do not multiply it further), unless it was
-  // banked: a positive cash-out banked rolls its amount on like a win
-  const upto = bets.findIndex((b) => b.result === 'cash-out' && !b.banked);
-  const counted = upto >= 0 ? bets.slice(0, upto + 1) : bets;
-  const odds = counted.reduce((p, b, i) => p * f(b, i), 1);
+  // banked: a positive cash-out banked rolls its amount on like a win. BT-54: a dutch leg counts as one leg.
+  const legs = chainLegs(bets);
+  const upto = legs.findIndex((l) => l.length === 1 && l[0]!.result === 'cash-out' && !l[0]!.banked);
+  const counted = upto >= 0 ? legs.slice(0, upto + 1) : legs;
+  const odds = counted.reduce((p, l, i) => p * (i === 0 && l.length === 1 ? firstFactor(l[0]!, all) : legFactor(l)), 1);
   const base = { stake, baseStake, odds, profit: 0, banked: 0, needs: null as number | null, bets };
-  if (bets.some((b) => b.result === 'lost')) return { ...base, outcome: 'lost', profit: round2(-stake) };
+  if (legs.some(legLost)) return { ...base, outcome: 'lost', profit: round2(-stake) };
   if (bets.some((b) => b.result === 'pending')) return { ...base, outcome: 'pending' };
   const end = counted.at(-1)!;
-  if (last.banked && bankableResult(last) && upto < 0) {
-    return { ...base, outcome: 'open', banked: round2(returned(last)), needs: neededOdds(odds) };
+  const lastLeg = legs.at(-1)!;
+  if (legBanked(lastLeg) && legBankable(lastLeg) && upto < 0) {
+    return { ...base, outcome: 'open', banked: round2(legReturned(lastLeg)), needs: neededOdds(odds) };
   }
-  const net = round2(returned(end) - stake);
+  const net = round2(legReturned(end) - stake);
   const cents = Math.round(net * 100);
   return { ...base, outcome: cents > 0 ? 'won' : cents < 0 ? 'lost' : 'even', profit: net };
 }
@@ -185,7 +240,7 @@ export function chainAsBet(raw: Bet[], all: Bet[] = raw): Bet {
   const last = s.bets.at(-1)!;
   const shown = { ...first, id: `rollover:${first.rolloverId}`, odds: s.odds, legs: s.bets.flatMap((b) => b.legs), placedDate: last.placedDate, gameDate: last.gameDate, banked: false, cashout: null };
   if (chainPending(s.outcome)) return { ...shown, result: 'pending' };
-  if (s.outcome === 'lost' && s.bets.some((b) => b.result === 'lost')) return { ...shown, result: 'lost' };
+  if (s.outcome === 'lost' && chainLegs(s.bets).some(legLost)) return { ...shown, result: 'lost' };
   // won at exactly its odds: a plain win; anything else (void, cash-out, half results inside) as the amount returned
   const payout = round2(s.stake + s.profit);
   if (s.outcome === 'won' && s.baseStake === s.stake && round2(s.stake * s.odds) === payout) return { ...shown, result: 'won' };
@@ -214,10 +269,12 @@ export function canBank(b: Bet, chain: Bet[] = []): boolean {
   // BT-33: a bonus bet's payout is its winnings only, in real money: it cannot roll on as the same money
   // BT-35: a ladder's rungs are never banked (a won rung rides on by itself)
   // a won dutch split starts a shot with its payout; the dutch and its shot are then one bet (see countBets)
-  if (!bankableResult(b) || b.banked || b.money === 'bonus' || b.ladder) return false;
-  if (!b.rolloverId) return true;
-  const ordered = chainOrder(chain);
-  return ordered.at(-1)?.id === b.id && chainSummary(ordered).outcome === 'won';
+  // BT-54: a split of a dutch leg banks the whole dutch: what it returned rolls on, whichever split won
+  if (b.banked || b.money === 'bonus' || b.ladder) return false;
+  if (!b.rolloverId) return bankableResult(b);
+  const lastLeg = chainLegs(chain).at(-1);
+  if (!lastLeg?.some((x) => x.id === b.id) || legBanked(lastLeg) || !legBankable(lastLeg)) return false;
+  return chainSummary(chain).outcome === 'won';
 }
 
 /**
@@ -392,7 +449,7 @@ export function bankedItems(bets: Bet[]): BankedItem[] {
       // on a log scale (odds multiply), judged at 2 decimals like neededOdds
       progress: ladder ? null : s.needs == null ? 1 : Math.min(1, Math.log(Math.max(1, s.odds)) / Math.log(SHOT_TARGET)),
       ladder,
-      legs: s.bets.length,
+      legs: chainLegs(s.bets).length,
       since: last.gameDate || last.placedDate,
     });
   }
