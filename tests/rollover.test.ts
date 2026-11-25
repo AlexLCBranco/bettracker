@@ -40,7 +40,7 @@ describe('chain summary', () => {
     expect(s.profit).toBe(0);
     expect(s.banked).toBe(160);
     expect(s.needs).toBe(1.13);
-    expect(needsText(s)).toBe('needs 1.13+ to reach 1.80 (Shot)');
+    expect(needsText(s)).toBe('needs a Mini · 1.13+');
   });
 
   it('a later bet pending → pending; lost → lost the first stake only', () => {
@@ -96,8 +96,8 @@ describe('needed odds and tiers', () => {
     expect(tierOf(1.92)).toBe('Shot');
   });
 
-  it('a 1.40 shot shows "needs 1.29+ for a Shot"', () => {
-    expect(needsText({ needs: neededOdds(1.4) })).toBe('needs 1.29+ to reach 1.80 (Shot)');
+  it('a 1.40 shot shows "needs a Mini · 1.29+"', () => {
+    expect(needsText({ needs: neededOdds(1.4) })).toBe('needs a Mini · 1.29+');
     expect(needsText({ needs: null })).toBe('already 1.80+ (Shot)');
   });
 });

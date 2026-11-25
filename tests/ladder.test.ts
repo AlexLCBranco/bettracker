@@ -119,7 +119,7 @@ describe('shots unaffected', () => {
     const shot = [bet({ rolloverId: 's', stake: 100, odds: 1.6, result: 'won', banked: true })];
     expect(isLadder(shot)).toBe(false);
     expect(chainSummary(shot)).toMatchObject({ outcome: 'open', banked: 160 });
-    expect(needsText(chainSummary(shot))).toContain('to reach 1.80');
+    expect(needsText(chainSummary(shot))).toMatch(/^needs /);
     const notBanked = [bet({ rolloverId: 's', stake: 100, odds: 1.6, result: 'won' }), bet({ rolloverId: 's', stake: 160, odds: 1.2, result: 'won', createdAt: '2026-11-21T00:00:00Z' })];
     expect(chainSummary(notBanked).outcome).toBe('won');
   });

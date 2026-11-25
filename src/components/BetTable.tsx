@@ -35,7 +35,7 @@ import type { Settler } from './useSettle';
 import { losingLegs, sharedLabel } from '@/lib/actuals';
 import { normalize } from '@/lib/autocomplete';
 import { Annotator, LabelChip, LossLine } from './Annotator';
-import { chainPending, chainSummary, firstFactor, goalText, isLadder, ladderOf, ladderProgress, ladderStrip, needsText, tierOf, type ChainOutcome } from '@/lib/rollover';
+import { bankAgainNeeds, chainPending, chainSummary, firstFactor, goalText, isLadder, ladderOf, ladderProgress, ladderStrip, needsText, tierOf, type ChainOutcome } from '@/lib/rollover';
 import type { Rollover } from './useRollover';
 
 const QUICK_RESULTS: { r: Result; key: string; cls: string }[] = [
@@ -517,6 +517,10 @@ function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, multi, d
   const books = [...new Set(bets.map((b) => b.book).filter(Boolean))];
   const live = bets.every((b) => b.situation === 'live');
   const shot = `Banked ${formatMoney(s.banked, money)} @ ${formatOdds(s.odds, 2)} · ${needsText(s)}`;
+  // BT-53: finished under 1.80 and bankable again: what the next bet would need to make it a shot
+  const again = isOpen ? null : bankAgainNeeds(raw, allBets);
+  const againText = again != null ? `Finished @ ${formatOdds(s.odds, 2)} · ${needsText({ needs: again })}` : '';
+  const bankable = rollover.canBank(last);
   // BT-35: a ladder: rungs, no odds target, no Shot / Mini / Semi / Pepsi chip
   const ladder = isLadder(bets);
   const progress = ladder ? ladderProgress(bets) : null;
@@ -570,6 +574,14 @@ function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, multi, d
                 node: (
                   <span className="text-sky-300" data-testid="shot-line">
                     {shot}
+                  </span>
+                ),
+              },
+              !!againText && {
+                text: againText,
+                node: (
+                  <span className="text-sky-300" data-testid="again-line">
+                    {againText}
                   </span>
                 ),
               },
@@ -682,10 +694,24 @@ function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, multi, d
               ))}
             {pendingBet && <CashoutButton onClick={() => settle.startCashout(pendingBet.id)} />}
             <span className={HOVER_ONLY} data-testid="row-actions">
+              {/* BT-53: Bank on the chain's row banks its last bet, the same as the child row's Bank */}
+              {bankable && (
+                <button
+                  className="rounded px-1.5 py-0.5 text-xs font-semibold text-sky-300 hover:bg-sky-600/30"
+                  title="Bank for rollover: keep the payout for the next bet (B)"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    rollover.bank(last);
+                  }}
+                  data-testid="bank"
+                >
+                  Bank
+                </button>
+              )}
               <RowMenu
                 label={ladder ? 'More ladder actions' : 'More rollover actions'}
                 items={[
-                  ...(rollover.canBank(last) ? [{ label: 'Bank for rollover', icon: '⤴', onClick: () => rollover.bank(last) }] : []),
+                  ...(bankable ? [{ label: 'Bank for rollover', icon: '⤴', onClick: () => rollover.bank(last) }] : []),
                   ...(isOpen && !ladder ? [{ label: 'Close shot', icon: '■', onClick: () => rollover.close(bets) }] : []),
                   ...(ladder ? [{ label: 'Set goal', icon: '◎', onClick: () => setGoalOpen(true) }] : []),
                   // BT-36: plan the remaining rungs in the Ladder sim

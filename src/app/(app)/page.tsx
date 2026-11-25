@@ -289,7 +289,8 @@ function Bets() {
       if (k === 'b') {
         e.preventDefault();
         if (chain.length && chainSummary(chain).outcome === 'open') return rollover.close(chain);
-        const target = sel ?? (chain.length ? chainSummary(chain).bets.at(-1) : undefined);
+        // BT-53: on a chain (its row or any of its bets) B banks the chain's last bet
+        const target = chain.length ? chainSummary(chain).bets.at(-1) : sel;
         if (target) return rollover.bank(target);
         return notify('B banks a won or positive cash-out bet', 'error');
       }

@@ -16,7 +16,7 @@ async function bankAndAddLeg(page: Page, tag: string, betId: string) {
   await page.locator(`[data-bet-id="${betId}"]`).getByTestId('bank').click();
   const shot = page.getByTestId('rollover-row');
   await expect(shot.getByTestId('result')).toHaveText('Open');
-  await expect(shot.getByTestId('shot-line')).toHaveText(/^Banked R\$\s160,00 @ 1\.60 · needs 1\.13\+ to reach 1\.80 \(Shot\)$/);
+  await expect(shot.getByTestId('shot-line')).toHaveText(/^Banked R\$\s160,00 @ 1\.60 · needs a Mini · 1\.13\+$/);
   await expect(shot.getByTestId('tier-chip')).toHaveText(/Banked Pepsi/i);
 
   await shot.getByTestId('add-leg').click();
@@ -155,12 +155,12 @@ test('BT-39: a shot banked from a dutch split reads the dutch odds in the Banked
   await search(page, tag);
   await page.locator(`[data-split-of="${d}"][data-bet-id="${won.id}"]`).getByTestId('bank').click();
   const shot = page.getByTestId('rollover-row');
-  await expect(shot.getByTestId('shot-line')).toHaveText(/^Banked R\$\s139,86 @ 1\.40 · needs 1\.29\+ to reach 1\.80 \(Shot\)$/);
+  await expect(shot.getByTestId('shot-line')).toHaveText(/^Banked R\$\s139,86 @ 1\.40 · needs a Mini · 1\.29\+$/);
   await expect(shot.getByTestId('tier-chip')).toHaveText(/Banked Semi/i);
   await saved(page);
   await page.getByTestId('banked').click();
   const item = page.getByTestId('banked-panel').getByTestId('banked-item').filter({ hasText: /R\$\s139,86/ }).filter({ hasText: '@ 1.40 Semi' });
-  await expect(item.first()).toContainText('needs 1.29+ to reach 1.80');
+  await expect(item.first()).toContainText('needs a Mini · 1.29+');
   await expect(item.first()).not.toContainText('already');
 });
 
@@ -175,7 +175,7 @@ test('several banked bets: the top bar shows how many and how much, each opens o
   await bar.click();
   const panel = page.getByTestId('banked-panel');
   const itemA = panel.getByTestId('banked-item').filter({ hasText: /R\$\s160,00/ }).filter({ hasText: '@ 1.60 Pepsi' }).first();
-  await expect(itemA).toContainText('needs 1.13+ to reach 1.80');
+  await expect(itemA).toContainText('needs a Mini · 1.13+');
   await expect(panel.getByTestId('banked-item').filter({ hasText: /R\$\s95,00/ }).first()).toContainText('already 1.80+');
 
   await itemA.click();
@@ -193,7 +193,7 @@ test('BT-29: a positive cash-out banks its amount; the next leg is staked with i
   await page.locator(`[data-bet-id="${first.id}"]`).getByTestId('bank').click();
   const shot = page.getByTestId('rollover-row');
   await expect(shot.getByTestId('result')).toHaveText('Open');
-  await expect(shot.getByTestId('shot-line')).toHaveText(/^Banked R\$\s140,00 @ 1\.40 · needs 1\.29\+ to reach 1\.80 \(Shot\)$/);
+  await expect(shot.getByTestId('shot-line')).toHaveText(/^Banked R\$\s140,00 @ 1\.40 · needs a Mini · 1\.29\+$/);
   await shot.getByTestId('add-leg').click();
   const form = page.getByRole('dialog', { name: 'Add rollover leg' });
   await expect(form.getByLabel('Stake')).toHaveValue('140');

@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-25
+- BT-53 — Bank a rollover again, with "needs a Mini · 1.06+" to become a shot (v0.45.0)
+  A rollover that finished under 1.80 shows "Finished @ 1.70 · needs 1.06+" and has Bank on its own row too (not only its last bet), and open shots and the Banked list now say the tier and minimum the next bet needs ("needs a Mini · 1.13+").
 - BT-51 — Cash-outs missing "woulda won / lost" keep their W / L buttons on screen (v0.44.0)
   A cash-out with no "woulda won / woulda lost" yet shows its W / L beside the pill all the time (not only on hover); once one is picked they go and the WOULDA chip shows.
 - BT-49 — Banked shot "what if": try a next-leg odd and see the final shot (v0.43.0)

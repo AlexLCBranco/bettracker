@@ -220,10 +220,25 @@ export function canBank(b: Bet, chain: Bet[] = []): boolean {
   return ordered.at(-1)?.id === b.id && chainSummary(ordered).outcome === 'won';
 }
 
-/** The open shot's tail: "needs 1.13+ to reach 1.80 (Shot)", or "already 1.80+ (Shot)". */
+/**
+ * BT-53: what a shot's next bet needs to reach 1.80, as the tier those odds fall in and the minimum: "needs a Mini ·
+ * 1.13+"; under the Mini range just "needs 1.06+" (that range has no name); "already 1.80+ (Shot)" once there.
+ */
 export function needsText(s: Pick<ChainSummary, 'needs'>): string {
-  const target = `${SHOT_TARGET.toFixed(2)}`;
-  return s.needs == null ? `already ${target}+ (${TARGET_TIER})` : `needs ${s.needs.toFixed(2)}+ to reach ${target} (${TARGET_TIER})`;
+  if (s.needs == null) return `already ${SHOT_TARGET.toFixed(2)}+ (${TARGET_TIER})`;
+  const t = tierOf(s.needs);
+  return t ? `needs a ${t} · ${s.needs.toFixed(2)}+` : `needs ${s.needs.toFixed(2)}+`;
+}
+
+/**
+ * BT-53: a finished shot under 1.80 that can be banked again: what its next bet would need ("needs a Mini · 1.06+").
+ * Null for a ladder, a chain that cannot be banked, or one already at 1.80+.
+ */
+export function bankAgainNeeds(chain: Bet[], all: Bet[] = chain): number | null {
+  const ordered = chainOrder(chain);
+  const last = ordered.at(-1);
+  if (!last || isLadder(ordered) || !canBank(last, ordered)) return null;
+  return neededOdds(chainSummary(ordered, all).odds);
 }
 
 // BT-35: ladders. A ladder is a rollover chain whose rungs carry `ladder` (its goal and whether it was taken): planned

@@ -19,7 +19,7 @@ test("BT-49: banked @ 1.55, what if 1.20 → 1.86 Shot; Enter opens Add leg with
   await page.keyboard.press('i');
   const box = page.getByTestId('whatif');
   await expect(box).toBeVisible();
-  await expect(box.getByTestId('whatif-needs')).toHaveText('needs 1.17+ to reach 1.80 (Shot)');
+  await expect(box.getByTestId('whatif-needs')).toHaveText('needs a Mini · 1.17+');
   const input = box.getByTestId('whatif-input');
   await expect(input).toBeFocused();
 
