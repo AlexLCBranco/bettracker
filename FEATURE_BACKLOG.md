@@ -75,6 +75,26 @@ available, working kinda the same as on the Slate: post, live and pregame thots"
 - Tests: unit for the Before/After → Pre/Post migration; e2e: add a note from a row with none, switch slots, links
   clickable, D key, switch opens all.
 
+### BT-53 — Bank a rollover again, with "needs a Mini · 1.06+" to become a shot
+**In short:** A rollover that finished under 1.80 can be banked again, and it says which tier and the minimum odds its next bet needs to turn it into a proper shot.
+
+From the owner, 2026-11-25, on a screenshot: "Rollover ×2" won @ 1.70 (Pepsi): Bet 1 won @ 1.53, banked, Bet 2 cashed
+out (H$ 170 on H$ 153). He wants to bank it again and see what is missing to make it a shot (1.80+), as "needs a
+mini" / "needs a pepsi" with the actual minimum number.
+- Banking again: the last bet of a finished rollover under 1.80 (won, or a positive cash-out) has Bank (and B), at
+  any depth (a chain banked 2, 3, ... times). `canBank` (`src/lib/rollover.ts`) looks like it already allows the last
+  bet of a won chain: first write the e2e for the case in the screenshot (won → banked → positive cash-out → bank
+  again) and fix whatever stops it (button hidden on the chain row, cash-out outcome, etc.).
+- The needs text: the needed odds are 1.80 / the chain's odds now (1.80 / 1.70 = 1.06), rounded UP to 2 decimals so
+  hitting it always reaches 1.80. Shown with the tier those odds fall in (`TIERS` in `src/lib/rollover.ts`):
+  "needs a Mini · 1.21+", "needs a Semi · 1.40+", "needs a Pepsi · 1.60+". Under the Mini range (below 1.10): just
+  "needs 1.06+", no tier name (the owner has not named that range). At 1.80+ nothing changes ("already 1.80+").
+- Where: on every finished rollover row under 1.80 (before banking, so he sees it when deciding), on open shots
+  (replaces today's `needsText` "needs 1.29+ to reach 1.80 (Shot)"), in the top-bar Banked list and the Banked tab.
+  Tier names come from `TIERS`, so renaming Pepsi later changes it everywhere.
+- Alignment: the text sits in the row's second line like the other chips, no new column, no taller rows.
+- Tests: unit for needed odds (rounding up, each tier, under Mini, already a shot); e2e for the screenshot case.
+
 ## Held (needs the owner's "go"; never built from "build the backlog")
 
 ### BT-46 — Day header opens that day's gauntlet whiteboard page
