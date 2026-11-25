@@ -55,6 +55,26 @@ answered.
 - Tests: e2e that a cash-out with no answer shows W / L without hover, that clicking one hides them and shows the
   chip, and that an answered cash-out shows no buttons.
 
+### BT-52 — Three descriptions per bet (Pre / Live / Post), clickable in every cell
+**In short:** A bet's description becomes three notes, Pre, Live and Post, like the Slate's game notes, and every bet cell has a spot you click to open or add them.
+
+From the owner, 2026-11-25: "descriptions should be also clickable somehow in each cell" and "3 descriptions
+available, working kinda the same as on the Slate: post, live and pregame thots".
+- Today (BT-47): two texts, Before / After, and a ¶ mark only on rows that already have one. Change to three slots:
+  **Pre**, **Live**, **Post**. Existing Before moves to Pre, After moves to Post (data migration, nothing lost).
+- Work like the Slate's notes in calendarkit (the Slate widget in gauntlet: PRE / LIVE / POST label in the card's
+  corner, notes under the game). Read calendarkit's Slate code and copy its behaviour where it fits a table row;
+  do not invent a different scheme.
+- Clickable in each cell: every bet cell (single, combo, dutch, split, rollover, ladder) has the mark, also on rows
+  with no description yet (dim, to add one). The mark shows which slots are filled (e.g. P · L · P lit / dim).
+  Click opens the notes under the row on the last filled slot (or Pre when empty), with the three slots one click
+  apart; D on the selected row does the same. Hover still peeks. Click away saves, Esc discards, as now.
+- Links typed in a note are clickable (open in a new tab).
+- The "Descriptions" switch and the bet form show the three slots too; quick-add and search cover all three.
+- No change to row height or column widths when closed (alignment rule).
+- Tests: unit for the Before/After → Pre/Post migration; e2e: add a note from a row with none, switch slots, links
+  clickable, D key, switch opens all.
+
 ## Held (needs the owner's "go"; never built from "build the backlog")
 
 ### BT-46 — Day header opens that day's gauntlet whiteboard page
