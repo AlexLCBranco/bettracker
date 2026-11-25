@@ -29,9 +29,9 @@ test('BT-37: cash out, W, W again clears, L, Z, and the Analytics verdict', asyn
   await row.getByLabel('Cash-out amount').press('Enter');
   const pill = row.getByTestId('result');
   await expect(pill).toContainText('Cash-out');
-  // not forgotten: a faint "?" inside the pill
-  await expect(row.getByTestId('woulda-unset')).toBeVisible();
-  await expect(row.getByTestId('woulda-unset')).toHaveAttribute('title', 'W / L: what would have happened');
+  // not forgotten: W / L stay beside the pill until answered (BT-51)
+  await expect(row.getByTestId('woulda-keys')).toHaveAttribute('data-open', 'true');
+  await expect(row.getByTestId('woulda-keys')).toHaveAttribute('title', 'W / L: what would have happened');
   const size = async () => {
     const r = (await pill.boundingBox())!;
     const h = (await row.boundingBox())!.height;
@@ -44,14 +44,14 @@ test('BT-37: cash out, W, W again clears, L, Z, and the Analytics verdict', asyn
   const chip = row.getByTestId('woulda-chip');
   await expect(chip).toHaveText(/^Woulda won · left R\$\s43,00$/);
   await expect(chip).toHaveCSS('text-transform', 'uppercase');
-  await expect(row.getByTestId('woulda-unset')).toHaveCount(0);
+  await expect(row.getByTestId('woulda-keys')).not.toHaveAttribute('data-open', 'true');
   await expect.poll(async () => (await betsTagged(request, tag))[0]).toMatchObject({ wouldHave: 'won' });
   // alignment: the pill and the row keep their size
   expect(await size()).toEqual(plain);
 
   await page.keyboard.press('w');
   await expect(chip).toHaveCount(0);
-  await expect(row.getByTestId('woulda-unset')).toBeVisible();
+  await expect(row.getByTestId('woulda-keys')).toHaveAttribute('data-open', 'true');
   await expect.poll(async () => (await betsTagged(request, tag))[0]).toMatchObject({ wouldHave: null });
 
   // mouse: the dim W / L beside the pill on hover

@@ -1281,7 +1281,9 @@ function ResultCell({ bet, onPick, title, onWouldHave, fmt }: { bet: Bet; onPick
   const cashout = bet.result === 'cash-out' && bet.cashout != null ? cashoutLabel(bet.cashout, bet.stake, bet.odds, bet.money, fmt) : '';
   if (cashout) {
     const amount = cashout.slice('Cash-out · '.length);
-    // BT-37: the pill keeps its size: the "?" (no would-have yet) sits in its padding, W / L show beside it on hover
+    // BT-37: the pill keeps its size, W / L sit beside it. BT-51: while no would-have is set they stay on screen (in
+    // the space the hover ones used, so nothing moves); once answered they show on hover only, to change or clear it.
+    const open = !bet.wouldHave;
     return (
       <span className="group/co relative inline-block">
         <button
@@ -1294,14 +1296,9 @@ function ResultCell({ bet, onPick, title, onWouldHave, fmt }: { bet: Bet; onPick
           <span className="block text-[10px] font-normal tabular-nums" data-testid="cashout-amount">
             {amount}
           </span>
-          {!bet.wouldHave && (
-            <span className="absolute right-[3px] top-[1px] text-[9px] font-semibold leading-3 opacity-50" title="W / L: what would have happened" data-testid="woulda-unset">
-              ?
-            </span>
-          )}
         </button>
         {onWouldHave && (
-          <span className="pointer-events-none absolute left-full top-1/2 z-10 flex -translate-y-1/2 gap-px pl-0.5 opacity-0 group-hover/co:pointer-events-auto group-hover/co:opacity-100" data-testid="woulda-keys">
+          <span className={`absolute left-full top-1/2 z-10 flex -translate-y-1/2 gap-px pl-0.5 ${open ? '' : 'invisible group-hover/co:visible'}`} title={open ? 'W / L: what would have happened' : undefined} data-testid="woulda-keys" data-open={open || undefined}>
             {(['won', 'lost'] as const).map((w) => (
               <button
                 key={w}

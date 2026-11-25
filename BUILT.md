@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-25
+- BT-51 — Cash-outs missing "woulda won / lost" keep their W / L buttons on screen (v0.44.0)
+  A cash-out with no "woulda won / woulda lost" yet shows its W / L beside the pill all the time (not only on hover); once one is picked they go and the WOULDA chip shows.
 - BT-49 — Banked shot "what if": try a next-leg odd and see the final shot (v0.43.0)
   On an open shot, "what if" (or I) opens a box under the row (and in the top-bar Banked list) where you type one or more odds ("1,15; 1,2; -500") and see each one's final odds, tier, payout and profit on the first stake; Enter or "Place this leg" opens "+ Add leg" with that odd, which shows the same preview under its odds box.
 
