@@ -14,6 +14,7 @@ import { useApp } from './AppProvider';
 import { Autocomplete } from './Autocomplete';
 import { MoneySelect } from './Money';
 import { OddsInput } from './OddsInput';
+import { WhatIfPreview } from './WhatIf';
 import { previewText, readStake } from '@/lib/units';
 
 /** The full bet form, as a modal. New bets, edits and duplicates. */
@@ -140,6 +141,7 @@ function FormBody() {
           </L>
           <L label="Total odds *">
             <OddsInput value={f.odds} onChange={(v) => set('odds', v)} placeholder="2.10, -114, 5/2" aria-label="Odds" />
+            {rollover?.shot && <WhatIfPreview shot={rollover.shot} odds={f.odds} money={rollover.money} unitSize={rollover.shot.unitSize} />}
           </L>
           <L label="Result *">
             <select className="field" value={f.result} onChange={(e) => set('result', e.target.value as BetForm['result'])} aria-label="Result">

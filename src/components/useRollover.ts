@@ -14,8 +14,8 @@ export interface Rollover {
   chainOf(b: Bet): Bet[];
   canBank(b: Bet): boolean;
   bank(b: Bet): void;
-  /** Adds the next bet of an open shot, or the next rung of an open ladder. */
-  addLeg(chain: Bet[]): void;
+  /** Adds the next bet of an open shot, or the next rung of an open ladder; `odds` prefills its odds (BT-49). */
+  addLeg(chain: Bet[], odds?: number): void;
   close(chain: Bet[]): void;
   canStartLadder(b: Bet): boolean;
   startLadder(b: Bet): void;
@@ -27,7 +27,7 @@ export interface Rollover {
 }
 
 export function useRollover(settle: Settler): Rollover {
-  const { bets, update, remove, openNew, notify } = useApp();
+  const { bets, update, remove, openNew, notify, units } = useApp();
   const save = (id: string, patch: Partial<Bet>) => void update(id, patch).catch(() => undefined);
   const chainOf = (b: Bet) => (b.rolloverId ? bets.filter((x) => x.rolloverId === b.rolloverId) : [b]);
   return {
@@ -40,19 +40,20 @@ export function useRollover(settle: Settler): Rollover {
       save(b.id, { rolloverId: id, banked: true });
       settle.record(`rollover:${id}`, `Banked for rollover: ${formatMoney(payoutOf(b), b.money)}`, () => save(b.id, before));
     },
-    addLeg(chain) {
-      const s = chainSummary(chain);
+    addLeg(chain, odds) {
+      const s = chainSummary(chain, bets);
       const ladder = isLadder(chain);
       if (s.outcome !== 'open') return notify(ladder ? 'The next rung comes once this one has won' : 'Add a leg to an open shot: bank a won bet first', 'error');
       const first = s.bets[0]!;
       const id = first.rolloverId!;
       openNew(
-        { book: s.bets.at(-1)!.book },
+        { book: s.bets.at(-1)!.book, ...(odds != null ? { odds: String(odds) } : {}) },
         {
           rolloverId: id,
           stake: s.banked,
           money: first.money,
           ladder: ladder ? { ...ladderOf(chain), taken: false } : undefined,
+          shot: ladder ? undefined : { odds: s.odds, banked: s.banked, stake: s.stake, unitSize: first.unitSize ?? units.unitSizes[first.money] },
           onSaved: (bet) =>
             settle.record(`rollover:${id}`, `${ladder ? 'Rung' : 'Leg'} added: ${formatMoney(bet.stake, bet.money)} @ ${formatOdds(bet.odds)} ${bet.betText || betLabel(bet)}`, () => void remove(bet.id, false)),
         },

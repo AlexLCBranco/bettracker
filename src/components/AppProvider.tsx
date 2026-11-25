@@ -36,6 +36,8 @@ export interface RolloverAdd {
   money: Money;
   /** BT-35: the next rung of a ladder carries the ladder's goal. */
   ladder?: Ladder;
+  /** BT-49: a shot (not a ladder): what it is now, for the form's "if it wins" preview, and its unit size. */
+  shot?: { odds: number; banked: number; stake: number; unitSize: number | null };
   onSaved?(bet: Bet): void;
 }
 

@@ -344,6 +344,9 @@ export interface BankedItem {
   money: Bet['money'];
   /** The odds so far (product of its bets). */
   odds: number;
+  /** BT-49: the first bet's stake (profit is counted against it) and unit size. */
+  stake: number;
+  unitSize: number | null;
   /** Shot: the odds the next bet needs to reach the target (null when there); ladder: null. */
   needs: number | null;
   /** Shot: how far its odds are toward the target, 0–1 (1 once there); ladder: null. */
@@ -368,6 +371,8 @@ export function bankedItems(bets: Bet[]): BankedItem[] {
       amount: s.banked,
       money: s.bets[0]!.money,
       odds: s.odds,
+      stake: s.stake,
+      unitSize: s.bets[0]!.unitSize ?? null,
       needs: ladder ? null : s.needs,
       // on a log scale (odds multiply), judged at 2 decimals like neededOdds
       progress: ladder ? null : s.needs == null ? 1 : Math.min(1, Math.log(Math.max(1, s.odds)) / Math.log(SHOT_TARGET)),
@@ -384,4 +389,56 @@ export function bankedTotals(items: BankedItem[]): { money: Bet['money']; amount
   const m = new Map<Bet['money'], number>();
   for (const it of items) m.set(it.money, round2((m.get(it.money) ?? 0) + it.amount));
   return (['real', 'bonus', 'hypothetical'] as const).filter((k) => m.has(k)).map((k) => ({ money: k, amount: m.get(k)! }));
+}
+
+// BT-49: "what if" on a banked shot: a possible next-leg odd and the shot it would make. Nothing is saved.
+
+/** What a banked shot is now: its odds so far, the payout banked (the next stake) and the first stake. */
+export interface ShotNow {
+  odds: number;
+  banked: number;
+  stake: number;
+}
+
+export interface WhatIf {
+  /** The next leg's odds, as decimal. */
+  next: number;
+  /** The shot's odds with that leg won: banked odds × next. */
+  odds: number;
+  tier: TierName | null;
+  /** What the shot pays back: banked amount × next. */
+  payout: number;
+  /** Payout − the first stake. */
+  profit: number;
+}
+
+export function whatIf(shot: ShotNow, next: number): WhatIf {
+  const payout = round2(shot.banked * next);
+  const odds = shot.odds * next;
+  return { next, odds, tier: tierOf(odds), payout, profit: round2(payout - shot.stake) };
+}
+
+/**
+ * The odds typed in the "what if" box, one per entry: entries are split by ";" or new lines, and by commas that are
+ * not decimal commas (a comma followed by a space, or between dot-decimals: "1.15,1.2"). "1,15; 1,2" is two odds.
+ */
+export function splitOddsList(text: string): string[] {
+  const out: string[] = [];
+  for (const part of text.split(/[;\n\r]+/)) {
+    for (const p of part.split(/,\s+/)) {
+      const t = p.trim();
+      if (!t) continue;
+      if (t.includes('.') && t.includes(',')) out.push(...t.split(',').map((x) => x.trim()).filter(Boolean));
+      else out.push(t);
+    }
+  }
+  return out;
+}
+
+/** One line per entry typed: its "what if", or null when the entry cannot be read as odds. */
+export function whatIfLines(text: string, shot: ShotNow, read: (t: string) => number | null): { text: string; result: WhatIf | null }[] {
+  return splitOddsList(text).map((t) => {
+    const next = read(t);
+    return { text: t, result: next == null ? null : whatIf(shot, next) };
+  });
 }

@@ -10,6 +10,7 @@ import { formatMoney, formatOdds } from '@/lib/money';
 import { bankedItems, bankedTotals, needsText, tierOf, type BankedItem } from '@/lib/rollover';
 import { useApp } from './AppProvider';
 import { MONEY_TEXT } from './moneyStyle';
+import { WhatIfPanel } from './WhatIf';
 
 /** A shot's gauge: filled toward the target (sky), full and brighter once there; a ladder: indigo. */
 function Gauge({ it, wide = false }: { it: BankedItem; wide?: boolean }) {
@@ -23,7 +24,9 @@ function Gauge({ it, wide = false }: { it: BankedItem; wide?: boolean }) {
 }
 
 export function BankedBar() {
-  const { bets, loaded } = useApp();
+  const { bets, loaded, units } = useApp();
+  // BT-49: the shot whose "what if" box is open in the list
+  const [whatIf, setWhatIf] = useState<string | null>(null);
   const router = useRouter();
   const items = useMemo(() => bankedItems(bets), [bets]);
   const totals = useMemo(() => bankedTotals(items), [items]);
@@ -82,20 +85,48 @@ export function BankedBar() {
             {items.map((it) => {
               const tier = tierOf(it.odds);
               return (
-                <li key={it.rolloverId}>
+                <li key={it.rolloverId} className="relative">
+                  {!it.ladder && (
+                    <button
+                      className={`absolute right-1.5 top-1 z-[1] rounded px-1 text-[10px] font-bold leading-4 ${whatIf === it.rolloverId ? 'bg-sky-500/30 text-sky-100' : 'text-sky-400 hover:bg-sky-500/20 hover:text-sky-100'}`}
+                      title="What if: try a next-leg odd and see the final shot"
+                      aria-label="What if"
+                      aria-expanded={whatIf === it.rolloverId}
+                      onClick={() => setWhatIf((x) => (x === it.rolloverId ? null : it.rolloverId))}
+                      data-testid="banked-whatif-toggle"
+                    >
+                      what if
+                    </button>
+                  )}
                   <button className="w-full rounded px-1.5 py-1 text-left hover:bg-zinc-800" onClick={() => go(it.rolloverId)} data-testid="banked-item" title="Open it on the Bets page">
                     <span className="flex items-baseline gap-2">
                       <span className={`font-semibold tabular-nums ${MONEY_TEXT[it.money] || 'text-zinc-100'}`}>{formatMoney(it.amount, it.money)}</span>
                       <span className="text-zinc-400">
                         {it.ladder ? `Ladder · rung ${it.legs + 1} next` : `@ ${formatOdds(it.odds, 2)}${tier ? ` ${tier}` : ''} · ${it.legs} bet${it.legs === 1 ? '' : 's'}`}
                       </span>
-                      <span className="ml-auto text-zinc-500">since {formatDayMonth(it.since)}</span>
+                      <span className={`ml-auto text-zinc-500 ${it.ladder ? '' : 'mr-12'}`}>since {formatDayMonth(it.since)}</span>
                     </span>
                     <span className="mt-1 flex items-center gap-2">
                       <Gauge it={it} wide />
                       {!it.ladder && <span className="shrink-0 text-[10px] text-zinc-500">{needsText(it)}</span>}
                     </span>
                   </button>
+                  {whatIf === it.rolloverId && (
+                    <div className="mx-1.5 mb-1 rounded border border-sky-900/60 bg-zinc-950/60 p-1.5">
+                      <WhatIfPanel
+                        shot={{ odds: it.odds, banked: it.amount, stake: it.stake }}
+                        needs={it.needs}
+                        money={it.money}
+                        unitSize={it.unitSize ?? units.unitSizes[it.money]}
+                        onPlace={(next) => {
+                          setWhatIf(null);
+                          setOpen(false);
+                          router.push(`/?tab=banked&sel=${encodeURIComponent(`rollover:${it.rolloverId}`)}&leg=${next}`);
+                        }}
+                        onClose={() => setWhatIf(null)}
+                      />
+                    </div>
+                  )}
                 </li>
               );
             })}

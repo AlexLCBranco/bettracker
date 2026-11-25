@@ -16,7 +16,7 @@ import { asUnitBets, formatUnits } from '@/lib/units';
 import { isTyping, isUndoKey } from '@/components/Shell';
 import { useSettle } from '@/components/useSettle';
 import { useRollover } from '@/components/useRollover';
-import { chainSummary } from '@/lib/rollover';
+import { chainSummary, isLadder } from '@/lib/rollover';
 import { parseDateInput, todayISO } from '@/lib/dates';
 import { countBets, rowBets, rowKey } from '@/lib/dutch';
 import { useDescriptionsSwitch, type DescriptionControl } from '@/components/Description';
@@ -53,6 +53,7 @@ const HELP: [string, string][] = [
   ['S', 'Dutch: shared leg lost'],
   ['B', 'Bank a won bet for a rollover; on an open shot, close it'],
   ['A', 'Open shot: add the next leg'],
+  ['I', 'Open shot: what if (try a next-leg odd, Enter adds it)'],
   ['T', 'Label and actual result'],
   ['X', 'No brainer on / off (a dutch: the whole dutch)'],
   ['D', 'Description: open / close it under the row'],
@@ -133,6 +134,22 @@ function Bets() {
     restored: (k) => setPicked(k),
   });
   const rollover = useRollover(settle);
+  // BT-49: the banked shot whose "what if" box is open
+  const [whatIfId, setWhatIfId] = useState<string | null>(null);
+  const whatIf = useMemo(() => ({ openId: whatIfId, toggle: (id: string) => setWhatIfId((x) => (x === id ? null : id)), close: () => setWhatIfId(null) }), [whatIfId]);
+  // BT-49: the top bar's Banked list places a leg here: ?tab=banked&sel=rollover:<id>&leg=<odds> opens "+ Add leg"
+  const legParam = params.get('leg');
+  const legDone = useRef<string | null>(null);
+  useEffect(() => {
+    if (!loaded || !legParam || !selParam?.startsWith('rollover:')) return;
+    const mark = `${selParam}|${legParam}`;
+    if (legDone.current === mark) return;
+    legDone.current = mark;
+    const chain = all.filter((b) => b.rolloverId === selParam.slice(9));
+    const odds = Number(legParam);
+    if (chain.length && odds > 1) rollover.addLeg(chain, odds);
+    router.replace(`/?tab=banked&sel=${encodeURIComponent(selParam)}`, { scroll: false });
+  }, [loaded, legParam, selParam, all, rollover, router]);
   const toggleNoBrainer = useToggleNoBrainer();
 
   // BT-45: several rows selected at once (drag, Ctrl / Shift+click, Ctrl+A); the single keyboard row stays as it was
@@ -279,6 +296,12 @@ function Bets() {
       if (k === 'a' && chain.length) {
         e.preventDefault();
         return rollover.addLeg(chain);
+      }
+      // BT-49: I opens or closes the open shot's "what if" box
+      if (k === 'i') {
+        e.preventDefault();
+        if (chain.length && !isLadder(chain) && chainSummary(chain).outcome === 'open') return whatIf.toggle(chainId!);
+        return notify('I tries a next-leg odd on an open (banked) shot', 'error');
       }
       if (selected.startsWith('rollover:')) {
         if (!(k in SETTLE_KEYS)) return;
@@ -476,6 +499,7 @@ function Bets() {
           <BetTable
             multi={multi}
             desc={desc}
+            whatIf={whatIf}
             days={days}
             selected={selected}
             select={setPicked}

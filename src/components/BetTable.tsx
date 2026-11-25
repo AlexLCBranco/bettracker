@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { formatDate, formatDayHeader, formatDayMonth, parseDateInput } from '@/lib/dates';
 import { betLabel, duplicateDutchDraft, dutchSummary, editDutchDraft, rowBets, rowKey, type GroupOutcome } from '@/lib/dutch';
 import { DescriptionMark, DescriptionRow, type DescriptionControl } from './Description';
+import { WhatIfPanel, type WhatIfControl } from './WhatIf';
 import { hasDescription } from '@/lib/descriptions';
 import { footballDayUrl, nbaSlateUrl } from '@/lib/dayLinks';
 import { duplicateForm } from '@/lib/form';
@@ -210,6 +211,8 @@ interface TableProps {
   multi?: ReadonlySet<string>;
   /** BT-47: which rows show their description under them. */
   desc?: DescriptionControl;
+  /** BT-49: which banked shot shows its "what if" box. */
+  whatIf?: WhatIfControl;
   empty?: string;
 }
 
@@ -219,7 +222,7 @@ interface TableProps {
  * two lines: the bet text (wraps, never cut) and a muted line with game, sport, market, book and tags. A dutch is a
  * summary row with one such block per split under it. A click selects a row (keyboard settling), a double click edits.
  */
-export function BetTable({ days, selected, select, settle, annotating, annotate, rollover, multi = NO_KEYS, desc = NO_DESC, empty = 'No bets yet. Type one in the quick-add line above.' }: TableProps) {
+export function BetTable({ days, selected, select, settle, annotating, annotate, rollover, multi = NO_KEYS, desc = NO_DESC, whatIf = NO_WHATIF, empty = 'No bets yet. Type one in the quick-add line above.' }: TableProps) {
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [unitsView] = useUnitsView();
   const toggle = (id: string) =>
@@ -232,7 +235,7 @@ export function BetTable({ days, selected, select, settle, annotating, annotate,
 
   if (!days.length) return <p className="py-10 text-center text-sm text-zinc-500">{empty}</p>;
   const th = 'sticky top-14 z-[2] bg-zinc-950 px-2 py-2 text-[11px] font-medium text-zinc-500 shadow-[inset_0_-1px_0_rgb(39_39_42)]';
-  const row = { open, toggle, selected, multi, desc, select, settle, annotating, annotate, rollover };
+  const row = { open, toggle, selected, multi, desc, whatIf, select, settle, annotating, annotate, rollover };
 
   return (
     <div data-testid="bet-table-scroll">
@@ -324,6 +327,7 @@ function DayLinks({ date }: { date: string }) {
 
 const NO_KEYS: ReadonlySet<string> = new Set();
 const NO_DESC: DescriptionControl = { isOpen: () => false, toggle: () => {}, close: () => {}, switchOn: false };
+const NO_WHATIF: WhatIfControl = { openId: null, toggle: () => {}, close: () => {} };
 
 const OUTCOME_LABEL: Record<GroupOutcome, string> = { pending: 'Pending', won: 'Won', lost: 'Lost', even: 'Even' };
 
@@ -333,7 +337,7 @@ function shared(bets: Bet[], pick: (b: Bet) => string) {
   return vals.length === 1 ? vals[0]! : vals.length > 1 ? 'Mixed' : '';
 }
 
-type RowProps = { open: Set<string>; toggle(id: string): void; selected: string | null; multi: ReadonlySet<string>; desc: DescriptionControl; select(key: string): void; settle: Settler; annotating: string | null; annotate(key: string | null): void; rollover: Rollover };
+type RowProps = { open: Set<string>; toggle(id: string): void; selected: string | null; multi: ReadonlySet<string>; desc: DescriptionControl; whatIf?: WhatIfControl; select(key: string): void; settle: Settler; annotating: string | null; annotate(key: string | null): void; rollover: Rollover };
 
 /** BT-27: "+ label / result", faint, on row hover (T on the selected row does the same). */
 function AnnotateButton({ onClick }: { onClick(): void }) {
@@ -493,8 +497,8 @@ const CHAIN_LABEL: Record<ChainOutcome, string> = { pending: 'Pending', open: 'O
  * first stake) with its bets under it, like a dutch's splits. An open shot shows what is banked and the odds the next
  * bet needs, with Add leg and Close.
  */
-function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, multi, desc, select, settle, annotating, annotate, rollover }: { bets: Bet[]; rolloverId: string } & RowProps) {
-  const { names: nameCasing, remove, undoGroup, bets: allBets } = useApp();
+function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, multi, desc, whatIf = NO_WHATIF, select, settle, annotating, annotate, rollover }: { bets: Bet[]; rolloverId: string } & RowProps) {
+  const { names: nameCasing, remove, undoGroup, bets: allBets, units } = useApp();
   // BT-39: a shot banked from a dutch split counts the whole dutch's stake in its odds
   const s = chainSummary(raw, allBets);
   const bets = s.bets;
@@ -537,6 +541,23 @@ function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, multi, d
               <>
                 <span data-testid="type">Rollover ×{bets.length}</span>
                 <TierChip odds={s.odds} banked={isOpen} />
+                {isOpen && (
+                  <button
+                    type="button"
+                    className={`rounded px-1 text-[10px] font-bold leading-4 ${whatIf.openId === rolloverId ? 'bg-sky-500/30 text-sky-100' : 'text-sky-400 hover:bg-sky-500/20 hover:text-sky-100'}`}
+                    title="What if: try a next-leg odd and see the final shot (I)"
+                    aria-label="What if"
+                    aria-expanded={whatIf.openId === rolloverId}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      select(key);
+                      whatIf.toggle(rolloverId);
+                    }}
+                    data-testid="whatif-toggle"
+                  >
+                    what if
+                  </button>
+                )}
               </>
             )}
             {live && <LiveTag />}
@@ -703,6 +724,25 @@ function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, multi, d
           link={{ index: i, last: i === bets.length - 1 && !open.has(b.id), chainKey: key, chain: bets, ladder, current: ladder && (b.result === 'pending' || (isOpen && i === bets.length - 1)) }}
         />
       ))}
+      {/* BT-49: the "what if" box opens under the shot, never widening a column */}
+      {isOpen && !ladder && whatIf.openId === rolloverId && (
+        <tr className="border-b border-zinc-900 bg-sky-500/[0.04]" data-testid="whatif-row">
+          <td />
+          <td colSpan={COLS - 1} className="px-2 py-1.5">
+            <WhatIfPanel
+              shot={s}
+              needs={s.needs}
+              money={money}
+              unitSize={bets[0]!.unitSize ?? units.unitSizes[money]}
+              onPlace={(next) => {
+                whatIf.close();
+                rollover.addLeg(bets, next);
+              }}
+              onClose={whatIf.close}
+            />
+          </td>
+        </tr>
+      )}
     </>
   );
 }

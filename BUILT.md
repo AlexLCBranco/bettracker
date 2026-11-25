@@ -2,6 +2,10 @@
 
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
+## 2026-11-25
+- BT-49 — Banked shot "what if": try a next-leg odd and see the final shot (v0.43.0)
+  On an open shot, "what if" (or I) opens a box under the row (and in the top-bar Banked list) where you type one or more odds ("1,15; 1,2; -500") and see each one's final odds, tier, payout and profit on the first stake; Enter or "Place this leg" opens "+ Add leg" with that odd, which shows the same preview under its odds box.
+
 ## 2026-11-24
 - BT-48 — Day header opens that day's NBA Slate and football day (v0.42.0)
   Each day header in the Bets table has small "NBA" and "Football" marks that open calendarkit's NBA Slate and footykit's games for that day in a new tab.
