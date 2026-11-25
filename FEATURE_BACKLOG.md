@@ -24,6 +24,19 @@ Words the owner uses (keep them in the UI):
   works in volume. Before, it was done in Excalidraw with AIs inventing the scheme per batch, the history lived only
   in the bookmaker's app and vanished, and both building and following 100 PPs was the part that broke.
 
+### BT-54 — A dutch as the next leg of a rollover shot
+**In short:** An open shot gets a "+ Dutch leg" button that splits the whole banked payout across several selections as a dutch, and the shot rolls on with what the dutch returns.
+
+- Owner, 2026-11-25: "how do i add a dutch bet as the next bet in a rollover" (only one bet per leg was possible).
+- The button opens the Betting Tool in rollover mode: the total stake is the banked amount (locked, the shot's money
+  type, rounded to centavos), a banner shows the shot's odds so far and what this dutch would make them. "Log as bets"
+  saves the splits as one dutch inside the shot (they share its rollover id and a dutch id).
+- The chain counts the dutch as ONE leg: it multiplies the shot by what the dutch returned ÷ its whole stake (while
+  pending, by its combined odds), the shot loses only when every split lost, and it can be banked again (then rolls
+  on with the dutch's whole return) when the dutch made a profit. Wagered stays the shot's first stake.
+- In the table the splits show under the shot as "Bet n · dutch", settled on their own rows; the dutch is not a
+  separate dutch row and is not counted again in bet counts.
+
 ## Held (needs the owner's "go"; never built from "build the backlog")
 
 ### BT-46 — Day header opens that day's gauntlet whiteboard page
