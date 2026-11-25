@@ -81,10 +81,12 @@ available, working kinda the same as on the Slate: post, live and pregame thots"
 From the owner, 2026-11-25, on a screenshot: "Rollover ×2" won @ 1.70 (Pepsi): Bet 1 won @ 1.53, banked, Bet 2 cashed
 out (H$ 170 on H$ 153). He wants to bank it again and see what is missing to make it a shot (1.80+), as "needs a
 mini" / "needs a pepsi" with the actual minimum number.
-- Banking again: the last bet of a finished rollover under 1.80 (won, or a positive cash-out) has Bank (and B), at
-  any depth (a chain banked 2, 3, ... times). `canBank` (`src/lib/rollover.ts`) looks like it already allows the last
-  bet of a won chain: first write the e2e for the case in the screenshot (won → banked → positive cash-out → bank
-  again) and fix whatever stops it (button hidden on the chain row, cash-out outcome, etc.).
+- Banking again: already works, but only on the child row (the chain's last bet). The owner saw it there
+  (2026-11-25) and wants it on BOTH the parent row ("Rollover ×2") and the child row. Bank on the parent banks the
+  chain's last bet, the same action as on the child (one bank, not two). B works on either row when selected.
+  Applies at any depth (a chain banked 2, 3, ... times), when the chain finished under 1.80 (won, or a positive
+  cash-out at the end). e2e for the screenshot case (won → banked → positive cash-out): Bank shows on parent and
+  child, either one banks it once.
 - The needs text: the needed odds are 1.80 / the chain's odds now (1.80 / 1.70 = 1.06), rounded UP to 2 decimals so
   hitting it always reaches 1.80. Shown with the tier those odds fall in (`TIERS` in `src/lib/rollover.ts`):
   "needs a Mini · 1.21+", "needs a Semi · 1.40+", "needs a Pepsi · 1.60+". Under the Mini range (below 1.10): just
