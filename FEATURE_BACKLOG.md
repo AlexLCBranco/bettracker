@@ -38,15 +38,6 @@ period, and no way from a number to the bets behind it. Build order: BT-67, BT-6
 (the tabs first, so the other items land in their final place). Every rule in CLAUDE.md on what counts as one bet,
 on bonus money and on PP batches staying out of Analytics still holds.
 
-### BT-68 — Analytics: Dutches down to four headline tiles
-**In short:** The Dutches tab shows four numbers first and keeps the rest one click away.
-
-- Always shown: Net profit, ROI, Win rate (with W / L, and the settled / pending count as its sub line), Splits hit.
-- Behind a "More" switch (remembered): Wagered, Average combined odds, All hit, Some hit, None hit, Sunk by a
-  shared leg alone. Nothing is removed.
-- The three tables (Which split hits, By number of splits, By combined odds) stay visible under the tiles.
-- Tests: e2e that the four tiles show, "More" reveals the other six with the same values as today.
-
 ## Held (needs the owner's "go"; never built from "build the backlog")
 
 ### BT-46 — Day header opens that day's gauntlet whiteboard page

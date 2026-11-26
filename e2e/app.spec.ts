@@ -585,6 +585,8 @@ test('dutch hit count: the owner example settled three ways shows 0 of 2, 0 of 2
 
   // Analytics, Dutches tab (BT-67): the hit tiles count these (plus any real dutches on the live site)
   await page.goto('/analytics?tab=dutches');
+  // BT-68: the hit tiles are behind More
+  await page.getByTestId('dutch-more').click();
   await expect(page.getByTestId('dutch-hits')).toBeVisible();
   for (const id of ['hits-all', 'hits-none', 'hits-shared']) expect(Number(await page.getByTestId(`${id}-value`).textContent())).toBeGreaterThanOrEqual(1);
 });

@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-26
+- BT-68 — Analytics: Dutches down to four headline tiles (v0.69.0)
+  The Dutches tab shows Net profit, ROI, Win rate and Splits hit first; a remembered More switch shows the other six tiles.
 - BT-66 — Analytics: click a row to see its bets (v0.68.0)
   Clicking a breakdown row (or a dutch table row, or a One leg away bet) opens the Bets page filtered to exactly those bets, with a chip saying why.
 - BT-65 — Analytics: small samples greyed out (v0.67.0)

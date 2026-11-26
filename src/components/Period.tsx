@@ -54,3 +54,23 @@ export function PeriodSwitch({ value, onChange }: { value: Period | 'custom'; on
     </div>
   );
 }
+
+/** BT-68: a remembered on / off switch (localStorage), off by default. */
+const flagListeners = new Set<() => void>();
+export function useStoredFlag(key: string): [boolean, (on: boolean) => void] {
+  const on = useSyncExternalStore(
+    (cb) => {
+      flagListeners.add(cb);
+      return () => flagListeners.delete(cb);
+    },
+    () => localStorage.getItem(key) === '1',
+    () => false,
+  );
+  return [
+    on,
+    (v) => {
+      localStorage.setItem(key, v ? '1' : '0');
+      flagListeners.forEach((l) => l());
+    },
+  ];
+}

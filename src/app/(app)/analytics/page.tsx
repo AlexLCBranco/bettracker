@@ -23,7 +23,7 @@ import { summarize } from '@/lib/stats';
 import { filterBets, NO_FILTERS } from '@/lib/filters';
 import { periodRange, previousRange } from '@/lib/period';
 import { todayISO } from '@/lib/dates';
-import { PeriodSwitch, usePeriod } from '@/components/Period';
+import { PeriodSwitch, usePeriod, useStoredFlag } from '@/components/Period';
 import { vsText } from '@/lib/headline';
 import { groupHref, type GroupKind } from '@/lib/groupFilter';
 import Link from 'next/link';
@@ -64,6 +64,7 @@ function Analytics() {
   const scoped = useMemo(() => byMoney(all, scope), [all, scope]);
   // BT-63: the period (shared with the Bets page and remembered) applies to the whole page
   const [period, setPeriod] = usePeriod();
+  const [dutchMore, setDutchMore] = useStoredFlag('bettracker:dutch-more');
   const today = todayISO();
   const money = useMemo(() => filterBets(scoped, { ...NO_FILTERS, ...periodRange(period, today) }), [scoped, period, today]);
   const prevRange = previousRange(period, today);
@@ -211,32 +212,49 @@ function Analytics() {
               </p>
             ) : (
               <div className="space-y-6">
-                <div className="grid gap-4 sm:grid-cols-3 xl:grid-cols-6">
-                  <Tile label="Dutches" value={String(dutches.settled)} sub={dutches.pending ? `settled · ${dutches.pending} pending` : 'settled'} testId="dutches-count" />
-                  <Tile label="Wagered" value={fmt(dutches.wagered)} sub="settled dutches" testId="dutches-wagered" />
-                  <Tile label="Net profit" value={<span className={tone(dutches.profit)}>{fmt(dutches.profit, true, profitScope)}</span>} sub="settled dutches" testId="dutches-profit" />
-                  <Tile label="ROI" value={<span className={tone(dutches.roi)}>{formatPercent(dutches.roi, true)}</span>} sub="profit / wagered" testId="dutches-roi" />
-                  <Tile label="Win rate" value={formatPercent(dutches.winRate)} sub={`${dutches.wins}W / ${dutches.losses}L`} testId="dutches-winrate" />
-                  <Tile label="Average combined odds" value={dutches.averageOdds == null ? '-' : formatOdds(dutches.averageOdds, 2)} sub="1 / Σ(1 / split odds)" testId="dutches-odds" />
+                {/* BT-68: four numbers first; the other six one click away ("More", remembered) */}
+                <div className="flex items-start gap-4">
+                  <div className="grid flex-1 gap-4 sm:grid-cols-2 xl:grid-cols-4" data-testid="dutch-main-tiles">
+                    <Tile label="Net profit" value={<span className={tone(dutches.profit)}>{fmt(dutches.profit, true, profitScope)}</span>} sub="settled dutches" testId="dutches-profit" />
+                    <Tile label="ROI" value={<span className={tone(dutches.roi)}>{formatPercent(dutches.roi, true)}</span>} sub="profit / wagered" testId="dutches-roi" />
+                    <Tile
+                      label="Win rate"
+                      value={formatPercent(dutches.winRate)}
+                      sub={
+                        <>
+                          {dutches.wins}W / {dutches.losses}L · <span data-testid="dutches-count-value">{dutches.settled}</span> settled
+                          {dutches.pending > 0 && ` · ${dutches.pending} pending`}
+                        </>
+                      }
+                      testId="dutches-winrate"
+                    />
+                    <Tile
+                      label="Splits hit"
+                      value={`${dutches.splitHits}/${dutches.splitHits + dutches.splitMisses}`}
+                      sub={`${formatPercent(dutches.splitHitRate)} hit rate · void left out`}
+                      testId="dutches-splits"
+                    />
+                  </div>
+                  <button className={`btn shrink-0 ${dutchMore ? 'border-emerald-600 text-white' : ''}`} aria-pressed={dutchMore} onClick={() => setDutchMore(!dutchMore)} data-testid="dutch-more">
+                    {dutchMore ? 'Less' : 'More'}
+                  </button>
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6" data-testid="dutch-hits">
-                  <Tile
-                    label="Splits hit"
-                    value={`${dutches.splitHits}/${dutches.splitHits + dutches.splitMisses}`}
-                    sub={`${formatPercent(dutches.splitHitRate)} hit rate · void left out`}
-                    testId="dutches-splits"
-                  />
-                  <Tile label="All hit" value={String(hits.allHit)} sub={`of ${hits.settled} settled dutches`} testId="hits-all" />
-                  <Tile label="Some hit" value={String(hits.someHit)} sub={hits.settled ? formatPercent(hits.someHit / hits.settled) : '-'} testId="hits-some" />
-                  <Tile label="None hit" value={String(hits.noneHit)} sub={hits.settled ? formatPercent(hits.noneHit / hits.settled) : '-'} testId="hits-none" />
-                  <Tile
-                    label="Sunk by a shared leg alone"
-                    value={String(hits.sunkByShared)}
-                    sub={hits.noneHit ? `of the ${hits.noneHit} none-hit` : 'no none-hit dutches'}
-                    testId="hits-shared"
-                  />
-                </div>
+                {dutchMore && (
+                  <div className="grid gap-4 sm:grid-cols-3 xl:grid-cols-6" data-testid="dutch-hits">
+                    <Tile label="Wagered" value={fmt(dutches.wagered)} sub="settled dutches" testId="dutches-wagered" />
+                    <Tile label="Average combined odds" value={dutches.averageOdds == null ? '-' : formatOdds(dutches.averageOdds, 2)} sub="1 / Σ(1 / split odds)" testId="dutches-odds" />
+                    <Tile label="All hit" value={String(hits.allHit)} sub={`of ${hits.settled} settled dutches`} testId="hits-all" />
+                    <Tile label="Some hit" value={String(hits.someHit)} sub={hits.settled ? formatPercent(hits.someHit / hits.settled) : '-'} testId="hits-some" />
+                    <Tile label="None hit" value={String(hits.noneHit)} sub={hits.settled ? formatPercent(hits.noneHit / hits.settled) : '-'} testId="hits-none" />
+                    <Tile
+                      label="Sunk by a shared leg alone"
+                      value={String(hits.sunkByShared)}
+                      sub={hits.noneHit ? `of the ${hits.noneHit} none-hit` : 'no none-hit dutches'}
+                      testId="hits-shared"
+                    />
+                  </div>
+                )}
 
                 <div className="grid gap-6 xl:grid-cols-2">
                   <div>
@@ -502,7 +520,7 @@ function SortButton({ active, arrow = true, onClick, children }: { active: boole
   );
 }
 
-function Tile({ label, value, sub, testId }: { label: string; value: ReactNode; sub: string; testId: string }) {
+function Tile({ label, value, sub, testId }: { label: string; value: ReactNode; sub: ReactNode; testId: string }) {
   return (
     <div className="rounded-lg border border-zinc-800 p-4" data-testid={testId}>
       <div className="text-xs text-zinc-400">{label}</div>
