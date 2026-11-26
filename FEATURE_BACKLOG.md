@@ -5,12 +5,11 @@ Item IDs are BT-1, BT-2, ... (never reused; BT is this repo's prefix, unique acr
 
 ## Ready
 
-**Build order when building everything in one go** (owner, 2026-11-23): BT-34, BT-33, BT-30, BT-31, BT-32, BT-35,
-BT-36. One item at a time: finish it, tests green, version bump, moved to `BUILT.md` and committed before starting
-the next. With this order BT-30 gets Bonus money from the start and BT-36 includes its "Start this ladder" part.
+**Build order when building everything in one go** (owner, 2026-11-26): BT-55 to BT-60, BT-61, then BT-67, BT-62,
+BT-63, BT-64, BT-65, BT-66, BT-68. One item at a time: finish it, tests green, version bump, moved to `BUILT.md`,
+committed and pushed before starting the next.
 
-BT-30 to BT-32 are one feature, the "PP system", written up from a conversation on 2026-11-23.
-Build order: BT-30, BT-31, BT-32.
+The PP system (BT-30 to BT-32) is built; these words of the owner's stay in the UI.
 
 Words the owner uses (keep them in the UI):
 - **PP**: one combination ticket aiming at total odds of about 20, placed with bonus money. (What the letters stand
@@ -53,7 +52,7 @@ Rule for all six: the bet table's column alignment must not change (owner, 2026-
 **In short:** One click picks the period the headline tiles and the table show, instead of typing From and To dates.
 
 - A segmented switch next to the tiles: Today, 7d, 30d, Month (this calendar month), All. It drives the BT-55 tiles
-  and the table. Default: not decided by the owner; use All for the table's sake unless he says otherwise, and
+  and the table. Default: All (owner, 2026-11-26), and
   remember the last choice (localStorage, like the money scope).
 - "Today" and day boundaries follow the app's day (ends at 5:00, BT-43, `src/lib/dates.ts`).
 - The From / To fields move into the Filters panel (BT-57) as "Custom"; typing there shows the switch as Custom.
@@ -75,7 +74,7 @@ Rule for all six: the bet table's column alignment must not change (owner, 2026-
 - Day header (`BetTable.tsx`, `day-totals`): net in a larger, bolder, coloured figure; add the day's record
   ("3W 1L", pending count when any) before it. A dutch, rollover or ladder counts once, as in `summarize`.
 - After the last day of each week, one subtotal row: bets, record and net for that week, per money type. Week =
-  Monday to Sunday (not confirmed by the owner). Only on the All tab.
+  Monday to Sunday (owner, 2026-11-26). Only on the All tab.
 - No change to the bet rows' columns or heights.
 - Tests: unit tests for the day record and the week grouping; e2e that the header and subtotal show the numbers.
 
@@ -164,7 +163,7 @@ on bonus money and on PP batches staying out of Analytics still holds.
   table on the page (main breakdown, dutch tables, leg record by market) and by BT-62's best / worst.
 - Faded rows keep their numbers, lose the green / red colour and the profit bar's colour, and show "small sample"
   on hover and as a small mark by the count. Sorting is unchanged.
-- The threshold was proposed by Claude, not set by the owner: keep it easy to change.
+- Threshold 10 confirmed by the owner (2026-11-26): keep it easy to change.
 - Tests: unit test at 9 and 10 settled; e2e that a small row carries the mark.
 
 ### BT-66 — Analytics: click a row to see its bets
