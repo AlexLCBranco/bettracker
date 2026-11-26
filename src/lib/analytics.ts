@@ -7,7 +7,7 @@ import { profit, realStake } from './money';
 import { collapseRollovers, TIERS, tierOf } from './rollover';
 import type { Bet, Leg, Result } from './types';
 
-export const DIMENSIONS = ['sport', 'book', 'market', 'odds', 'type', 'situation'] as const;
+export const DIMENSIONS = ['sport', 'book', 'market', 'odds', 'type', 'situation', 'noBrainer', 'label'] as const;
 export type Dimension = (typeof DIMENSIONS)[number];
 
 export const DIMENSION_LABEL: Record<Dimension, string> = {
@@ -17,10 +17,13 @@ export const DIMENSION_LABEL: Record<Dimension, string> = {
   odds: 'Odds',
   type: 'Type',
   situation: 'Situation',
+  noBrainer: 'No brainer',
+  label: 'Label',
 };
 
 export const NOT_SET = 'Not set';
 export const MIXED = 'Mixed';
+export const NO_LABEL = 'No label';
 
 /**
  * Total-odds buckets, lowest first. `max` is exclusive. BT-61: the main breakdown uses the shot bands below instead;
@@ -113,8 +116,37 @@ function legValue(b: Bet, k: 'sport' | 'market'): { key: string; label: string }
   return { key, label };
 }
 
-function groupOf(b: Bet, d: Dimension): { key: string; label: string } {
+/** BT-64: the dutches and rollover chains of the bets, so a dutch or a chain is judged as a whole. */
+interface Groups {
+  dutch: Map<string, Bet[]>;
+  chain: Map<string, Bet[]>;
+}
+function groupsOf(bets: Bet[]): Groups {
+  const g: Groups = { dutch: new Map(), chain: new Map() };
+  for (const b of bets) {
+    if (b.dutchId) g.dutch.set(b.dutchId, [...(g.dutch.get(b.dutchId) ?? []), b]);
+    if (b.rolloverId) g.chain.set(b.rolloverId, [...(g.chain.get(b.rolloverId) ?? []), b]);
+  }
+  return g;
+}
+/** The bets a (collapsed) bet stands for: its rollover chain, its dutch, or itself. */
+const membersOf = (b: Bet, g: Groups) => (b.rolloverId ? g.chain.get(b.rolloverId) : undefined) ?? (b.dutchId ? g.dutch.get(b.dutchId) : undefined) ?? [b];
+
+function labelOf(b: Bet, g: Groups): { key: string; label: string } {
+  const labels = new Map<string, string>();
+  for (const m of membersOf(b, g)) if (!labels.has(normalize(m.label.trim()))) labels.set(normalize(m.label.trim()), m.label.trim());
+  if (labels.size > 1) return { key: '\u0000mixed', label: MIXED };
+  const [[key, label]] = [...labels];
+  return key ? { key, label: label.toUpperCase() } : { key: '\u0000no-label', label: NO_LABEL };
+}
+
+function groupOf(b: Bet, d: Dimension, g: Groups): { key: string; label: string } {
   switch (d) {
+    // BT-64: a dutch or chain by its own mark (X marks the whole dutch)
+    case 'noBrainer':
+      return membersOf(b, g).some((m) => m.noBrainer) ? { key: 'nb', label: 'No brainer' } : { key: 'other', label: 'Other' };
+    case 'label':
+      return labelOf(b, g);
     case 'sport':
     case 'market':
       return legValue(b, d);
@@ -194,7 +226,12 @@ export function breakdown(bets: Bet[], d: Dimension): Row[] {
     }
     return out;
   }
-  return aggregate(collapsed, (b) => groupOf(b, d)).sort((x, y) => y.bets - x.bets || x.label.localeCompare(y.label));
+  const g = groupsOf(bets);
+  const rows = aggregate(collapsed, (b) => groupOf(b, d, g));
+  if (d === 'noBrainer') return rows.sort((x, y) => (x.key === 'nb' ? -1 : 1) - (y.key === 'nb' ? -1 : 1));
+  // "No label" last
+  const last = (x: Row) => (d === 'label' && x.label === NO_LABEL ? 1 : 0);
+  return rows.sort((x, y) => last(x) - last(y) || y.bets - x.bets || x.label.localeCompare(y.label));
 }
 
 export type SortKey = 'natural' | 'bets' | 'wagered' | 'profit' | 'roi' | 'winRate';

@@ -38,16 +38,6 @@ period, and no way from a number to the bets behind it. Build order: BT-67, BT-6
 (the tabs first, so the other items land in their final place). Every rule in CLAUDE.md on what counts as one bet,
 on bonus money and on PP batches staying out of Analytics still holds.
 
-### BT-64 — Analytics: breakdowns by no brainer and by label
-**In short:** Two new "break down by" choices: no brainer or not, and each label he has put on bets.
-
-- Add `noBrainer` and `label` to `DIMENSIONS` in `src/lib/analytics.ts`, from `Bet.noBrainer` (BT-44) and
-  `Bet.label` (BT-27).
-- No brainer: two rows, "No brainer" and "Other". A dutch counts by its own mark (X marks the whole dutch).
-- Label: one row per label, matched case-insensitively and shown as the chip shows it; bets without one under
-  "No label", last. A dutch or rollover whose bets carry different labels: "Mixed", like the leg breakdowns.
-- Tests: unit tests for both groupings, dutches included; e2e that the two chips show and list rows.
-
 ### BT-65 — Analytics: small samples greyed out
 **In short:** A row with too few settled bets is shown faded with a "small sample" note, so a 2-bet +80% ROI does not read as a finding.
 
