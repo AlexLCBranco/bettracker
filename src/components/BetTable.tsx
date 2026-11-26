@@ -1002,6 +1002,12 @@ function BetRow({ b, open, toggle, selected, multi, desc, select, settle, split,
                 Solo
               </span>
             )}
+            {/* a stand-alone combo gets the same chip in its own color; double click still changes its type */}
+            {combo && !indent && (
+              <span className="mt-0.5 shrink-0" data-testid="type">
+                <Cell bare kind="select" options={['solo', 'combination']} labels={{ solo: 'Solo', combination: 'Combo' }} display={`Combo ×${b.legs.length}`} extraClass="rounded border border-fuchsia-400/40 bg-fuchsia-400/15 px-1 text-[10px] font-bold uppercase leading-4 tracking-wide text-fuchsia-300 hover:bg-fuchsia-400/25" value={b.type} label="Type" onSave={setType} />
+              </span>
+            )}
             {nested &&
               (split.pick ? (
                 <button
@@ -1063,7 +1069,7 @@ function BetRow({ b, open, toggle, selected, multi, desc, select, settle, split,
                   </span>
                 ),
               },
-              combo && {
+              combo && indent && {
                 text: `Combo ×${b.legs.length}`,
                 node: (
                   <span data-testid="type">

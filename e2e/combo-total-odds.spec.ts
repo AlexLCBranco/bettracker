@@ -3,6 +3,7 @@ import { betsTagged, expect, saved, test } from './helpers';
 
 test("combination total odds: legs multiplied, marked estimated; the book's typed price wins", async ({ page, request, tag }) => {
   await page.goto('/');
+  await expect(page.getByTestId('site-version')).toBeVisible(); // the page is ready for the N key
   await page.keyboard.press('n');
   const d = page.getByRole('dialog', { name: 'New bet' });
   await d.getByLabel('Stake').fill('10');

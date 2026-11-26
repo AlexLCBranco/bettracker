@@ -1035,6 +1035,17 @@ test('BT-17–22: combo rows with legs and counts, same styling on every row, ti
   await expect(page.locator(`[data-bet-id="${one.id}"]`).getByTestId('type')).toHaveText('Solo'); // a Solo is tagged like a Dutch
   await expect(page.locator(`[data-bet-id="${one.id}"]`).getByTestId('type')).not.toHaveCSS('color', await page.locator(`[data-bet-id="${one.id}"]`).getByTestId('bet-text').locator('button').first().evaluate((e) => getComputedStyle(e).color)); // set apart from the bet text
   await expect(c.getByTestId('type')).toHaveText('Combo ×2');
+  // a combo gets the Solo's chip, in its own color, at the start of the bet line
+  const chip = (l: typeof c) => l.getByTestId('type').evaluate((t) => {
+    const e = t.querySelector('[role="button"]') ?? t;
+    const st = getComputedStyle(e);
+    return { size: st.fontSize, weight: st.fontWeight, upper: st.textTransform, radius: st.borderTopLeftRadius, color: st.color, top: e.getBoundingClientRect().top };
+  });
+  const soloChip = await chip(page.locator(`[data-bet-id="${one.id}"]`));
+  const comboChip = await chip(c);
+  expect({ ...comboChip, color: '', top: 0 }).toEqual({ ...soloChip, color: '', top: 0 });
+  expect(comboChip.color).not.toBe(soloChip.color);
+  expect(Math.abs(comboChip.top - (await c.getByTestId('bet-text').evaluate((e) => e.getBoundingClientRect().top)))).toBeLessThan(6);
   await expect(dutch.locator('[data-nested]').first().getByTestId('type')).toHaveCount(0); // a split keeps its Split n label
 
   // BT-18: same profit weight, same stake colour (H$ violet), same won-row tint; W/L/V only on unsettled rows

@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-26
+- Combos get a chip like Solo, in fuchsia (v0.54.0)
+  A stand-alone combo starts its row with a "Combo ×n" chip styled like the Solo one; double click it to change the type.
 - Only one window in use at a time, like WhatsApp Web (v0.53.0)
   Opening the site in a new tab or window stops the one open before; it shows "Bet tracker is open in another window" with a Use here button that takes it back.
 - A combination total typed before its legs were complete now follows them (v0.52.1)
