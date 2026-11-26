@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-26
+- A gap between top-level bets on the Bets list (v0.55.1)
+  Solos, dutches and shots are spaced apart; the bets inside a dutch or shot still sit together.
 - The Pending tab becomes Upcoming; To settle, Upcoming and Banked never repeat a bet (v0.55.0)
   To settle holds what is due, Upcoming the games still to come (soonest first), Banked the money waiting for its next bet, so the three counts add up to everything open.
 - The Pending tab no longer repeats the Banked shots (v0.54.1)

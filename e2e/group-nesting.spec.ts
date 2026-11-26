@@ -42,3 +42,23 @@ test('a cash-out leaves the To settle tab once its woulda is set', async ({ page
   await page.getByLabel('Search bets').fill(tag);
   await expect(page.getByText('Nothing to settle.')).toBeVisible();
 });
+
+test('top-level bets are spaced apart, the bets inside a shot are not', async ({ page, request, tag }) => {
+  const rolloverId = `ro-${tag}`;
+  const a = await createBet(request, { betText: `${tag} leg1`, stake: 100, odds: 1.3, result: 'won', rolloverId });
+  const b = await createBet(request, { betText: `${tag} leg2`, stake: 130, odds: 1.5, rolloverId });
+  const solo = await createBet(request, { betText: `${tag} solo`, stake: 10, odds: 2 });
+  await page.goto('/');
+  await page.getByLabel('Search bets').fill(tag);
+  await expect(page.getByTestId('rollover-row')).toHaveCount(1);
+  const top = (l: import('@playwright/test').Locator) => l.evaluate((tr) => tr.getBoundingClientRect().top);
+  const bottom = (l: import('@playwright/test').Locator) => l.evaluate((tr) => tr.getBoundingClientRect().bottom);
+  const [leg1, leg2, soloRow] = [a, b, solo].map((x) => page.locator(`[data-bet-id="${x.id}"]`));
+  // inside the shot: rows touch
+  expect(Math.abs((await top(leg2!)) - (await bottom(leg1!)))).toBeLessThan(1);
+  // between the solo and the shot: one gap, at least 8px
+  await expect(page.getByTestId('row-gap')).toHaveCount(1);
+  const gap = page.getByTestId('row-gap');
+  expect((await gap.evaluate((tr) => tr.getBoundingClientRect().height))).toBeGreaterThanOrEqual(8);
+  expect(await soloRow!.count()).toBe(1);
+});

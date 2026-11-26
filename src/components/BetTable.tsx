@@ -316,8 +316,14 @@ export function BetTable({ days, selected, select, settle, annotating, annotate,
               </tr>
               {games.days.has(d.date) ? (
                 <DayGameRows games={dayGames(d.rows, names, gameLinks)} onPick={games.pick} />
-              ) : d.rows.map((r) => (
+              ) : d.rows.map((r, i) => (
                 <Fragment key={rowKey(r)}>
+                  {/* a gap between top-level bets (a solo, a dutch, a rollover), never inside a group */}
+                  {i > 0 && (
+                    <tr aria-hidden className="border-b border-zinc-900" data-testid="row-gap">
+                      <td colSpan={COLS} className="h-2.5 p-0" />
+                    </tr>
+                  )}
                   {r.kind === 'bet' ? (
                     <BetRow b={r.bet} {...row} />
                   ) : r.kind === 'dutch' ? (
