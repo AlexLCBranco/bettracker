@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-26
+- Solos are tagged "Solo", like dutches (v0.50.0)
+  A stand-alone solo bet starts its row with "Solo", the way a dutch shows "Dutch ×n"; dutch splits and bets inside a shot keep their own labels.
 - Shots and dutches read as one block; a cash-out leaves Pending once its woulda is set (v0.49.0)
   A rollover's or dutch's row is a shaded header with its tone rail running down every bet under it (each bet's own result as a thin inner edge), a dutch leg's splits inside a shot are bracketed one level deeper, and a cash-out with W / L woulda set leaves the Pending and To settle tabs.
 

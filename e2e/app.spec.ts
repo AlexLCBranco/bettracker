@@ -1032,7 +1032,9 @@ test('BT-17–22: combo rows with legs and counts, same styling on every row, ti
   await expect(c.getByTestId('combo-games')).toHaveText(`${tag}Celtics @ ${tag}Warriors+1`);
   await expect(c).toContainText('NBA');
   await expect(c.getByTestId('loss-line')).toHaveText('✗ Lakers W');
-  await expect(page.locator(`[data-bet-id="${one.id}"]`).getByTestId('type')).toHaveCount(0); // a Solo has no type tag
+  await expect(page.locator(`[data-bet-id="${one.id}"]`).getByTestId('type')).toHaveText('Solo'); // a Solo is tagged like a Dutch
+  await expect(c.getByTestId('type')).toHaveText('Combo ×2');
+  await expect(dutch.locator('[data-nested]').first().getByTestId('type')).toHaveCount(0); // a split keeps its Split n label
 
   // BT-18: same profit weight, same stake colour (H$ violet), same won-row tint; W/L/V only on unsettled rows
   for (const row of [c, s, dutch]) await expect(row.getByTestId('profit').locator('span')).toHaveClass(/font-semibold/);
@@ -1239,7 +1241,7 @@ test('BT-25: double click on the game edits it on every row type; "no game" bets
 
   // the legless "Combo" shows as the Solo it is, with an obvious "+ add game"
   const row = page.locator(`[data-bet-id="${jokic.id}"]`);
-  await expect(row.getByTestId('type')).toHaveCount(0);
+  await expect(row.getByTestId('type')).toHaveText('Solo');
   await expect(row.getByTestId('live-tag')).toBeVisible();
   const add = row.getByRole('button', { name: 'Edit Game' });
   await expect(add).toHaveText('+ add game');

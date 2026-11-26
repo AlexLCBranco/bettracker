@@ -984,6 +984,12 @@ function BetRow({ b, open, toggle, selected, multi, desc, select, settle, split,
                 {link.leg.dutch && ' · dutch'}
               </span>
             )}
+            {/* a stand-alone solo is tagged "Solo", as a dutch is "Dutch ×n" (splits and a shot's bets have their own label) */}
+            {solo && !indent && (
+              <span className={`shrink-0 ${TEXT}`} data-testid="type">
+                Solo
+              </span>
+            )}
             {nested &&
               (split.pick ? (
                 <button
