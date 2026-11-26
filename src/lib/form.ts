@@ -66,18 +66,26 @@ export function legsOdds(legs: Pick<LegForm, 'odds'>[]): number | null {
   return Math.round(p * 100) / 100;
 }
 
-/** Whether the total odds box follows the legs: empty, or exactly the legs' estimate. */
-export const oddsFollowLegs = (f: Pick<BetForm, 'odds' | 'legs'>): boolean => {
-  if (!f.odds.trim()) return true;
-  const est = legsOdds(f.legs);
-  return est != null && oddsFromText(f.odds) === est;
-};
-
-/** The form with new legs; a total that follows the legs becomes their new estimate (blank when there is none). */
-export function withLegs(f: BetForm, legs: LegForm[]): BetForm {
-  if (f.type !== 'combination' || !oddsFollowLegs(f)) return { ...f, legs };
+/**
+ * Whether a total odds value overrides the legs: the book's price, typed while every leg has odds and differing from
+ * their product. A total typed before the legs are complete (e.g. the first leg's odds) is not one: it follows the legs.
+ */
+export function overridesLegs(odds: string, legs: Pick<LegForm, 'odds'>[]): boolean {
   const est = legsOdds(legs);
-  return { ...f, legs, odds: est == null ? '' : String(est) };
+  const o = odds.trim() ? oddsFromText(odds) : null;
+  return est != null && o != null && o !== est;
+}
+
+/**
+ * The form with new legs. Unless the total is the book's price (`override`), it becomes the legs' estimate; while
+ * there is none it stays, except a total that was the previous estimate, which blanks.
+ */
+export function withLegs(f: BetForm, legs: LegForm[], override: boolean): BetForm {
+  if (override || f.type !== 'combination') return { ...f, legs };
+  const est = legsOdds(legs);
+  if (est != null) return { ...f, legs, odds: String(est) };
+  const prev = legsOdds(f.legs);
+  return { ...f, legs, odds: prev != null && oddsFromText(f.odds) === prev ? '' : f.odds };
 }
 
 export interface Defaults {

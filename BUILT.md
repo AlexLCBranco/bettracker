@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-26
+- A combination total typed before its legs were complete now follows them (v0.52.1)
+  A total like 1.33 typed in first becomes the legs multiplied once every leg has odds; only a price typed after that is kept as the book's.
 - A combination's total odds fill in from its legs (v0.52.0)
   The legs' odds multiplied show as the total, marked "estimated", until you type the book's price over it.
 - The LIVE tag switches a bet to pregame (v0.51.0)

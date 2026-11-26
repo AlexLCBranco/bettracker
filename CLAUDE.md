@@ -24,7 +24,7 @@ the whole website, but a redesign wider than a backlog item asks for is talked t
   combination split's total odds box with its legs multiplied, marked "estimated" and editable (`src/lib/splits.ts`);
   a PP ticket's odds are its legs multiplied, shown "estimated", unless the book's price was typed over it
   (`src/lib/pp.ts`, BT-30); the bet form fills an empty combination total with its legs multiplied, marked
-  "estimated", and follows the legs until the book's price is typed over it (`legsOdds` in `src/lib/form.ts`).
+  "estimated", and follows the legs until a different price is typed while every leg has odds (the book's price) (`legsOdds` in `src/lib/form.ts`).
 - PP batches (BT-30, `src/lib/pp.ts`, page `/pp`) live in their own tables and never count in the Bets or Analytics
   totals. Bonus money (BT-33): a loss costs no real money, a win pays the winnings only as real money; bonus stakes
   never count in real "wagered" (`src/lib/money.ts`, bankroll in `src/lib/bankroll.ts`).

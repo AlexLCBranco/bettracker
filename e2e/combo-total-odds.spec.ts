@@ -11,8 +11,10 @@ test("combination total odds: legs multiplied, marked estimated; the book's type
   await d.getByLabel('Game date').fill('01/01/2000');
   await d.getByRole('button', { name: '+ Add leg' }).click();
   await d.getByRole('button', { name: '+ Add leg' }).click();
+  // a total typed before the legs are complete still follows them (the owner's case: 1.33 = leg 1)
+  await d.getByLabel('Odds', { exact: true }).fill('1.33');
   await d.getByLabel('Leg 1 odds').fill('1.33');
-  await expect(d.getByLabel('Odds', { exact: true })).toHaveValue('');
+  await expect(d.getByLabel('Odds', { exact: true })).toHaveValue('1.33');
   await d.getByLabel('Leg 2 odds').fill('1.45');
   await expect(d.getByLabel('Odds', { exact: true })).toHaveValue('1.93');
   await expect(d.getByTestId('total-odds-estimated')).toBeVisible();

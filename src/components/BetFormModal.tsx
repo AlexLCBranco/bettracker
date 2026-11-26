@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { formatDate, parseDateInput } from '@/lib/dates';
-import { editPatch, emptyLeg, formFromBet, formToBet, legsOdds, newForm, nextForm, oddsFollowLegs, withLegs, type BetForm, type LegForm } from '@/lib/form';
+import { editPatch, emptyLeg, formFromBet, formToBet, legsOdds, newForm, nextForm, overridesLegs, withLegs, type BetForm, type LegForm } from '@/lib/form';
 import { formatMoney, formatOdds, MONEY_SYMBOL, oddsFromText, parseNumber, profitMoney, winReturn } from '@/lib/money';
 import { MONEY_OPTION_LABEL, MONEY_TEXT } from './moneyStyle';
 import { BalanceHint } from './Bankroll';
@@ -51,7 +51,13 @@ function FormBody() {
 
   const set = <K extends keyof BetForm>(k: K, v: BetForm[K]) => setF((x) => ({ ...x, [k]: v }));
   // a combination's total odds follow its legs (multiplied, "estimated") until the book's price is typed over them
-  const setLegs = (fn: (legs: LegForm[]) => LegForm[]) => setF((x) => withLegs(x, fn(x.legs)));
+  // (the book's price: typed while every leg has odds; a saved bet whose total differs from its legs keeps its own)
+  const [oddsOverride, setOddsOverride] = useState(() => overridesLegs(f.odds, f.legs));
+  const setLegs = (fn: (legs: LegForm[]) => LegForm[]) => setF((x) => withLegs(x, fn(x.legs), oddsOverride));
+  const setTotalOdds = (v: string) => {
+    setOddsOverride(overridesLegs(v, f.legs));
+    set('odds', v);
+  };
   const setLeg = (i: number, patch: Partial<LegForm>) => setLegs((legs) => legs.map((l, j) => (j === i ? { ...l, ...patch } : l)));
 
   const save = async (another: boolean) => {
@@ -81,6 +87,7 @@ function FormBody() {
       if (!rollover) notify(editing ? 'Bet updated' : 'Bet saved');
       if (another && !editing && !rollover) {
         setF(nextForm(f));
+        setOddsOverride(false);
         stakeRef.current?.focus();
       } else closeForm();
     } catch (e) {
@@ -144,14 +151,14 @@ function FormBody() {
           </L>
           <L label="Total odds *">
             <span className="relative flex flex-col">
-              <OddsInput value={f.odds} onChange={(v) => set('odds', v)} placeholder="2.10, -114, 5/2" aria-label="Odds" />
+              <OddsInput value={f.odds} onChange={setTotalOdds} placeholder="2.10, -114, 5/2" aria-label="Odds" />
               {legsEstimate != null &&
-                (oddsFollowLegs(f) ? (
+                (!oddsOverride && oddsFromText(f.odds) === legsEstimate ? (
                   <span className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 rounded bg-zinc-900 px-1 text-[11px] text-amber-300" title="The legs' odds multiplied. Type the book's real price over it." data-testid="total-odds-estimated">
                     estimated
                   </span>
                 ) : (
-                  <button type="button" tabIndex={-1} className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded bg-zinc-900 px-1 text-[11px] text-zinc-400 hover:text-white" title="Use the legs' odds multiplied" onClick={() => set('odds', String(legsEstimate))} data-testid="total-odds-use-legs">
+                  <button type="button" tabIndex={-1} className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded bg-zinc-900 px-1 text-[11px] text-zinc-400 hover:text-white" title="Use the legs' odds multiplied" onClick={() => setTotalOdds(String(legsEstimate))} data-testid="total-odds-use-legs">
                     legs {formatOdds(legsEstimate, 2)}
                   </button>
                 ))}
