@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-26
+- BT-59 — Bets page: key hints for the selected row (v0.60.0)
+  Selecting a row shows a thin line with only the keys that work on it; each hint is also a button that does the same thing.
 - BT-58 — Bets table: day headers with a record, and weekly subtotals (v0.59.0)
   Each day's header shows its W-L record and a bolder net, and on the All tab each week (Monday to Sunday) ends with a subtotal line.
 - BT-57 — Bets filters behind one Filters button, active ones as chips (v0.58.0)

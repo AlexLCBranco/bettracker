@@ -22,6 +22,7 @@ import { useDescriptionsSwitch, type DescriptionControl } from '@/components/Des
 import { isDescriptionOpen, rowHasDescription } from '@/lib/descriptions';
 import { filterBets, NO_FILTERS, type Filters } from '@/lib/filters';
 import { filterChips, withoutChip, type FilterChip } from '@/lib/filterChips';
+import { keyHints } from '@/lib/keyHints';
 import { daysWithGame } from '@/lib/gamesInvolved';
 import type { GamesControl } from '@/components/BetTable';
 import { formatMoney } from '@/lib/money';
@@ -268,6 +269,9 @@ function Bets() {
   }, [multi.size]);
 
   const [help, setHelp] = useState(false);
+  // BT-59: the selected row's keys; a click presses the key, through the same handler as the keyboard
+  const hints = useMemo(() => keyHints(selected, all), [selected, all]);
+  const press = (key: string) => handler.current(new KeyboardEvent('keydown', { key, cancelable: true }));
   // BT-27: the row whose label / actual editor is open; it never opens on its own (settling stays W / L / V)
   const [annotating, setAnnotating] = useState<string | null>(null);
   const handler = useRef<(e: KeyboardEvent) => void>(() => {});
@@ -546,6 +550,28 @@ function Bets() {
         )}
       </div>
 
+      {/* BT-59: the keys that work on the selected row; its height is kept so the table never jumps */}
+      <div className="flex h-6 items-center gap-3 overflow-hidden text-xs text-zinc-400" data-testid="key-hints">
+        {!multiActive &&
+          hints.map((g, i) => (
+            <span key={i} className="flex items-center gap-1.5">
+              {i > 0 && <span className="text-zinc-700">·</span>}
+              {g.map((k) =>
+                k.press ? (
+                  <button key={k.keys} className="flex items-center gap-1 rounded px-1 hover:bg-zinc-800 hover:text-white" onClick={() => press(k.press!)} title={`Press ${k.keys}`} data-testid="key-hint">
+                    <kbd>{k.keys}</kbd>
+                    {k.label}
+                  </button>
+                ) : (
+                  <span key={k.keys} className="flex items-center gap-1 px-1" data-testid="key-hint">
+                    <kbd>{k.keys}</kbd>
+                    {k.label}
+                  </span>
+                ),
+              )}
+            </span>
+          ))}
+      </div>
       <section ref={tableBox} className="card px-2 pb-2" onClickCapture={onTableClick}>
         {loaded ? (
           <BetTable

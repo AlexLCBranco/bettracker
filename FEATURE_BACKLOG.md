@@ -30,17 +30,6 @@ glance. Cause found in the code: everything has the same visual weight (one line
 fields always open, a crowded top bar). Build order: BT-55, BT-56, BT-57, BT-58, BT-59, BT-60.
 Rule for all six: the bet table's column alignment must not change (owner, 2026-11-24).
 
-### BT-59 — Bets page: key hints for the selected row
-**In short:** When a row is selected, one thin line shows only the keys that work on that row, so the shortcuts are not hidden behind "?".
-
-- A single line (fixed place, so the table does not jump: reserve its height) listing the keys valid for the
-  selection, taken from the same conditions the key handler in `page.tsx` uses: e.g. a pending bet "W L V C · H J ·
-  T label · D description · X no brainer"; a dutch "1-9 toggle · Enter confirm · 0 none · V void · S shared leg";
-  an open shot "A add leg · I what if · B close"; a cash-out "W L woulda".
-- Each hint is also a button that does the same thing. The full "?" list stays.
-- With several rows selected the line is hidden (the bulk bar is there).
-- Tests: unit test for the hints per kind of row; e2e that the line changes with the selection.
-
 ### BT-60 — Top bar: scope and units move into one menu
 **In short:** The top bar keeps the logo, quick-add, Banked and the page links; the money scope switch and the units toggle move into one small settings menu.
 
