@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-26
+- BT-66 — Analytics: click a row to see its bets (v0.68.0)
+  Clicking a breakdown row (or a dutch table row, or a One leg away bet) opens the Bets page filtered to exactly those bets, with a chip saying why.
 - BT-65 — Analytics: small samples greyed out (v0.67.0)
   A breakdown row with fewer than 10 settled bets is shown faded, without its green / red, with a small-sample mark by its count and on hover.
 - BT-64 — Analytics: breakdowns by no brainer and by label (v0.66.0)

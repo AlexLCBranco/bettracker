@@ -105,6 +105,19 @@ function finish(r: Row): Row {
   };
 }
 
+/** BT-66: each dutch's row in the "By number of splits" and "By combined odds" tables, by dutchId. */
+export function dutchGroupKeys(bets: Bet[]): Map<string, { splits: { key: string; label: string }; odds: { key: string; label: string } }> {
+  const out = new Map<string, { splits: { key: string; label: string }; odds: { key: string; label: string } }>();
+  for (const row of groupRows(bets)) {
+    if (row.kind !== 'dutch') continue;
+    const n = row.bets.length;
+    const sk = n >= 4 ? '4+' : String(n);
+    const ok = oddsRange(dutchCombinedOdds(row.bets));
+    out.set(row.dutchId, { splits: { key: sk, label: `${sk} splits` }, odds: { key: ok, label: ok } });
+  }
+  return out;
+}
+
 export function dutchStats(bets: Bet[]): DutchStats {
   const chains = chainsOf(bets);
   const dutches: Dutch[] = [];

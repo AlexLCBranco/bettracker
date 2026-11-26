@@ -23,6 +23,7 @@ import { isDescriptionOpen, rowHasDescription } from '@/lib/descriptions';
 import { filterBets, NO_FILTERS, type Filters } from '@/lib/filters';
 import { filterChips, withoutChip, type FilterChip } from '@/lib/filterChips';
 import { keyHints } from '@/lib/keyHints';
+import { applyGroups, GROUP_LABEL, groupHref, matchGroup, parseGroups, withoutGroup, withoutGroups } from '@/lib/groupFilter';
 import { daysWithGame } from '@/lib/gamesInvolved';
 import type { GamesControl } from '@/components/BetTable';
 import { formatMoney } from '@/lib/money';
@@ -86,9 +87,20 @@ function Bets() {
   const router = useRouter();
   const tabParam = params.get('tab');
   const tab: Tab = parseTab(tabParam);
-  const setTab = (t: Tab) => router.replace(t === 'all' ? '/' : `/?tab=${t}`, { scroll: false });
+  // BT-66: the Analytics group filters stay in the address when the tab changes
+  const groups = useMemo(() => parseGroups(params), [params]);
+  const setTab = (t: Tab) => {
+    const q = new URLSearchParams(groupHref(groups).slice(2));
+    if (t !== 'all') q.set('tab', t);
+    const qs = q.toString();
+    router.replace(qs ? `/?${qs}` : '/', { scroll: false });
+  };
 
-  const [f, setF] = useState<Filters>(NO_FILTERS);
+  // BT-66: a result in the address (/?result=won) starts the Result filter
+  const [f, setF] = useState<Filters>(() => {
+    const res = params.get('result');
+    return { ...NO_FILTERS, result: (RESULTS as readonly string[]).includes(res ?? '') ? (res as Filters['result']) : '' };
+  });
   const [fromText, setFromText] = useState('');
   const [toText, setToText] = useState('');
   const set = <K extends keyof Filters>(k: K, v: Filters[K]) => setF((x) => ({ ...x, [k]: v }));
@@ -104,7 +116,10 @@ function Bets() {
     setFromText('');
     setToText('');
   };
-  const filtered = useMemo(() => filterBets(scoped, { ...f, money: '', ...range }), [scoped, f, range]);
+  // BT-66: the Analytics group filters select within the period, as the Analytics row counted
+  const inPeriod = useMemo(() => filterBets(scoped, { ...NO_FILTERS, ...range }), [scoped, range]);
+  const filtered = useMemo(() => filterBets(applyGroups(inPeriod, groups), { ...f, money: '', from: '', to: '' }), [inPeriod, groups, f]);
+  const groupChips = useMemo(() => groups.map((g) => ({ kind: g.kind, label: `${GROUP_LABEL[g.kind]}: ${matchGroup(inPeriod, g).label || g.key.replace(/^\u0000/, '')}` })), [groups, inPeriod]);
   // BT-50: a game picked from a day's games shows only the bets that include it (Esc or × clears it)
   const [gameFilter, setGameFilter] = useState<{ key: string; game: string } | null>(null);
   const [gameDays, setGameDays] = useState<ReadonlySet<string>>(new Set());
@@ -129,6 +144,7 @@ function Bets() {
     else setF((x) => withoutChip(x, k));
   };
   const clearAll = () => {
+    if (groups.length) router.replace(withoutGroups(new URLSearchParams(params.toString())), { scroll: false });
     setF(NO_FILTERS);
     setFromText('');
     setToText('');
@@ -425,9 +441,9 @@ function Bets() {
           button={
             <>
               Filters
-              {chips.length > 0 && (
+              {chips.length + groupChips.length > 0 && (
                 <span className="ml-1.5 rounded-full bg-emerald-500/25 px-1.5 text-xs font-semibold text-emerald-200" data-testid="filters-count">
-                  {chips.length}
+                  {chips.length + groupChips.length}
                 </span>
               )}
             </>
@@ -491,7 +507,21 @@ function Bets() {
             </button>
           </span>
         ))}
-        {(chips.length > 0 || f.text) && (
+        {/* BT-66: the filters an Analytics row opened with */}
+        {groupChips.map((c) => (
+          <span key={c.kind} className="inline-flex items-center gap-1 rounded-full border border-emerald-700/60 bg-emerald-950/40 py-0.5 pl-2.5 pr-1 text-xs text-emerald-100" data-testid="filter-chip" data-group={c.kind}>
+            {c.label}
+            <button
+              className="rounded-full px-1 text-zinc-400 hover:bg-zinc-700 hover:text-white"
+              aria-label={`Clear ${c.label}`}
+              title="Clear this filter"
+              onClick={() => router.replace(withoutGroup(new URLSearchParams(params.toString()), c.kind), { scroll: false })}
+            >
+              ×
+            </button>
+          </span>
+        ))}
+        {(chips.length > 0 || groupChips.length > 0 || f.text) && (
           <button className="text-xs text-zinc-400 hover:text-white" onClick={clearAll}>
             Clear
           </button>

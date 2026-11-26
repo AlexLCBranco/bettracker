@@ -25,6 +25,8 @@ import { periodRange, previousRange } from '@/lib/period';
 import { todayISO } from '@/lib/dates';
 import { PeriodSwitch, usePeriod } from '@/components/Period';
 import { vsText } from '@/lib/headline';
+import { groupHref, type GroupKind } from '@/lib/groupFilter';
+import Link from 'next/link';
 
 const COLUMNS: { key: SortKey; label: string; title?: string }[] = [
   { key: 'bets', label: 'Bets' },
@@ -187,7 +189,7 @@ function Analytics() {
                   </thead>
                   <tbody>
                     {sorted.map((r) => (
-                      <BreakdownRow key={r.key} r={r} maxAbsProfit={maxAbsProfit} scope={scope} fmt={fmt} units={!!unitBets} />
+                      <BreakdownRow key={r.key} r={r} maxAbsProfit={maxAbsProfit} scope={scope} fmt={fmt} units={!!unitBets} open={() => router.push(groupHref([{ kind: dim, key: r.key }]))} />
                     ))}
                   </tbody>
                 </table>
@@ -266,8 +268,8 @@ function Analytics() {
                       </tbody>
                     </table>
                   </div>
-                  <DutchTable label="By number of splits" rows={dutches.bySplits} scope={scope} fmt={fmt} units={!!unitBets} />
-                  <DutchTable label="By combined odds" rows={dutches.byOdds} scope={scope} fmt={fmt} units={!!unitBets} />
+                  <DutchTable label="By number of splits" rows={dutches.bySplits} scope={scope} fmt={fmt} units={!!unitBets} kind="dutchSplits" />
+                  <DutchTable label="By combined odds" rows={dutches.byOdds} scope={scope} fmt={fmt} units={!!unitBets} kind="dutchOdds" />
                 </div>
               </div>
             )}
@@ -333,7 +335,9 @@ function Analytics() {
                       {combos.oneLegAway.map(({ bet, leg }) => (
                         <li key={bet.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2">
                           <span className="tabular-nums text-zinc-500">{formatDate(bet.gameDate || bet.placedDate)}</span>
-                          <span className="text-zinc-200">{bet.betText || `${bet.legs.length} legs`}</span>
+                          <Link href={groupHref([{ kind: 'bet', key: bet.id }])} className="text-zinc-200 hover:underline" data-testid="one-leg-away-link">
+                            {bet.betText || `${bet.legs.length} legs`}
+                          </Link>
                           <span className="text-zinc-500">
                             @{formatOdds(bet.odds)} · {fmt(bet.stake, false, bet.money)}
                           </span>
@@ -413,13 +417,31 @@ function SmallMark() {
   );
 }
 
-function BreakdownRow({ r, maxAbsProfit, scope, fmt, units }: { r: Row; maxAbsProfit: number; scope: MoneyScope; fmt(n: number): string; units: boolean }) {
+function BreakdownRow({ r, maxAbsProfit, scope, fmt, units, open }: { r: Row; maxAbsProfit: number; scope: MoneyScope; fmt(n: number): string; units: boolean; open?(): void }) {
   const width = maxAbsProfit > 0 ? (Math.abs(r.profit) / maxAbsProfit) * 100 : 0;
   // BT-65: a small sample keeps its numbers but loses its colours, and says so on hover and by the count
   const small = isSmallSample(r);
   return (
-    <tr className={`border-b border-zinc-900 ${small ? 'opacity-60' : ''}`} data-testid="analytics-row" data-sub={r.parent ? 'true' : undefined} data-small={small ? 'true' : undefined} title={small ? SMALL_TITLE : undefined}>
-      <td className={`py-2 pr-3 ${r.parent ? 'pl-6 text-zinc-400' : 'text-zinc-100'}`}>{r.parent ? `↳ ${r.label}` : r.label}</td>
+    <tr
+      className={`border-b border-zinc-900 ${small ? 'opacity-60' : ''} ${open ? 'cursor-pointer hover:bg-zinc-900' : ''}`}
+      // BT-66: a click opens the Bets page filtered to this row's bets (the label is also a button, for the keyboard)
+      onClick={open}
+      data-testid="analytics-row"
+      data-sub={r.parent ? 'true' : undefined}
+      data-small={small ? 'true' : undefined}
+      title={small ? SMALL_TITLE : open ? 'Show these bets' : undefined}
+    >
+      <td className={`py-2 pr-3 ${r.parent ? 'pl-6 text-zinc-400' : 'text-zinc-100'}`}>
+        {open ? (
+          <button className="text-left hover:underline" onClick={(e) => (e.stopPropagation(), open())} aria-label={`Show the bets: ${r.label}`} data-testid="row-open">
+            {r.parent ? `↳ ${r.label}` : r.label}
+          </button>
+        ) : r.parent ? (
+          `↳ ${r.label}`
+        ) : (
+          r.label
+        )}
+      </td>
       <td className="px-3 py-2 text-right tabular-nums" data-testid="cell-bets">
         {r.bets}
         {r.pending > 0 && <span className="ml-1 text-xs text-zinc-500" title={`${r.pending} pending`}>({r.pending}p)</span>}
@@ -443,7 +465,8 @@ function BreakdownRow({ r, maxAbsProfit, scope, fmt, units }: { r: Row; maxAbsPr
 }
 
 /** BT-41: a dutch breakdown, same columns as the page's breakdown table (a dutch as one bet). */
-function DutchTable({ label, rows, scope, fmt, units }: { label: string; rows: Row[]; scope: MoneyScope; fmt(n: number): string; units: boolean }) {
+function DutchTable({ label, rows, scope, fmt, units, kind }: { label: string; rows: Row[]; scope: MoneyScope; fmt(n: number): string; units: boolean; kind: GroupKind }) {
+  const router = useRouter();
   const maxAbsProfit = Math.max(...rows.map((r) => Math.abs(r.profit)), 0);
   return (
     <div>
@@ -462,7 +485,7 @@ function DutchTable({ label, rows, scope, fmt, units }: { label: string; rows: R
         </thead>
         <tbody>
           {rows.map((r) => (
-            <BreakdownRow key={r.key} r={r} maxAbsProfit={maxAbsProfit} scope={scope} fmt={fmt} units={units} />
+            <BreakdownRow key={r.key} r={r} maxAbsProfit={maxAbsProfit} scope={scope} fmt={fmt} units={units} open={() => router.push(groupHref([{ kind, key: r.key }]))} />
           ))}
         </tbody>
       </table>

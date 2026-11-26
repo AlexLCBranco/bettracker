@@ -234,6 +234,24 @@ export function breakdown(bets: Bet[], d: Dimension): Row[] {
   return rows.sort((x, y) => last(x) - last(y) || y.bets - x.bets || x.label.localeCompare(y.label));
 }
 
+/**
+ * BT-66: the grouping function a breakdown uses, for the Bets page to select exactly a row's bets (one function for
+ * both pages). The function takes collapsed bets (see collapseRollovers); `bets` are the raw bets, for dutch and
+ * chain lookups.
+ */
+export function groupKeyFn(bets: Bet[], d: Dimension): (b: Bet) => { key: string; label: string } {
+  if (d === 'odds') return (b) => (oddsBand(b.odds).key === TOP.name ? { key: shotSub(b.odds).key, label: shotSub(b.odds).label } : oddsBand(b.odds));
+  const g = groupsOf(bets);
+  return (b) => groupOf(b, d, g);
+}
+
+/** BT-66: does a collapsed bet belong to a row's key? A Shot sub-row key ("Shot:2.00–2.99") is inside the Shot row. */
+export function inGroup(fn: (b: Bet) => { key: string }, d: Dimension, key: string, b: Bet): boolean {
+  if (d !== 'odds') return fn(b).key === key;
+  const sub = fn(b).key;
+  return key.includes(':') ? sub === key : oddsBand(b.odds).key === key;
+}
+
 export type SortKey = 'natural' | 'bets' | 'wagered' | 'profit' | 'roi' | 'winRate';
 
 /** Rows sorted by a column (missing ROI / win rate last); sub-rows stay under their parent, in their own order. */

@@ -38,19 +38,6 @@ period, and no way from a number to the bets behind it. Build order: BT-67, BT-6
 (the tabs first, so the other items land in their final place). Every rule in CLAUDE.md on what counts as one bet,
 on bonus money and on PP batches staying out of Analytics still holds.
 
-### BT-66 — Analytics: click a row to see its bets
-**In short:** Clicking a breakdown row opens the Bets page already filtered to exactly those bets.
-
-- The Bets page keeps its filters in component state today (`useState<Filters>` in `src/app/(app)/page.tsx`), so
-  this needs the filters readable from the address: `/?sport=…&book=…&type=…&situation=…&result=…`, plus new
-  filters for what Analytics groups by and Bets cannot filter yet: market, odds band (BT-61), no brainer and label
-  (BT-64). The period (BT-56 / BT-63) and money scope carry over as they are.
-- Each new filter shows as a removable chip (BT-57), so he sees why the list is short and clears it in one click.
-- The count on the Bets page must equal the row's "Bets" figure: one grouping function used by both pages.
-- "Not set" and "Mixed" rows are clickable too. Dutch tables and "One leg away" rows open their bets the same way.
-- Tests: unit tests that each Analytics group and its Bets filter select the same bets; e2e for one row per
-  breakdown (click, land on Bets, same count, chip shown).
-
 ### BT-68 — Analytics: Dutches down to four headline tiles
 **In short:** The Dutches tab shows four numbers first and keeps the rest one click away.
 
