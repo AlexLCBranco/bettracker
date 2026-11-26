@@ -1,6 +1,6 @@
 'use client';
 
-import { useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { MoneyScope } from '@/lib/money';
 import { isMoneyScope, MONEY_SCOPE_LABEL, MONEY_SCOPES } from '@/lib/scope';
 import { MONEY, type Money } from '@/lib/types';
@@ -109,6 +109,71 @@ export function UnitsToggle({ on, onChange }: { on: boolean; onChange(on: boolea
           {u ? 'u' : '$'}
         </button>
       ))}
+    </div>
+  );
+}
+
+/**
+ * BT-60: the top bar's one menu for the money scope and the units view. Its label always shows the current scope, and
+ * "u" while units are on, so the state is never hidden. A pick closes it. U still toggles units from anywhere.
+ */
+export function ViewMenu({ scope, onScope, units, onUnits }: { scope: MoneyScope; onScope(s: MoneyScope): void; units: boolean; onUnits(on: boolean): void }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => !box.current?.contains(e.target as Node) && setOpen(false);
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('mousedown', away);
+    document.addEventListener('keydown', esc);
+    return () => {
+      document.removeEventListener('mousedown', away);
+      document.removeEventListener('keydown', esc);
+    };
+  }, [open]);
+  const tint = scope === 'hypothetical' ? 'border-violet-500/60 text-violet-200' : scope === 'bonus' ? 'border-amber-500/60 text-amber-200' : 'border-zinc-700 text-zinc-100';
+  return (
+    <div ref={box} className="relative">
+      <button
+        className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs hover:border-zinc-500 ${tint}`}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        title="Money shown and units (U toggles units)"
+        onClick={() => setOpen((o) => !o)}
+        data-testid="view-menu"
+      >
+        <span data-testid="view-menu-scope">{MONEY_SCOPE_LABEL[scope]}</span>
+        {units && (
+          <span className="rounded bg-zinc-700 px-1 font-semibold text-white" data-testid="view-menu-units">
+            u
+          </span>
+        )}
+        <span className="text-zinc-500">▾</span>
+      </button>
+      {open && (
+        <div role="dialog" aria-label="Money and units" className="absolute right-0 top-full z-40 mt-1 w-max space-y-3 whitespace-nowrap rounded-md border border-zinc-700 bg-zinc-900 p-3 shadow-xl" data-testid="view-menu-panel">
+          <div>
+            <p className="mb-1 text-[11px] text-zinc-500">Money shown</p>
+            <MoneyScopeSwitch
+              scope={scope}
+              onChange={(v) => {
+                onScope(v);
+                setOpen(false);
+              }}
+            />
+          </div>
+          <div>
+            <p className="mb-1 text-[11px] text-zinc-500">Amounts in</p>
+            <UnitsToggle
+              on={units}
+              onChange={(v) => {
+                onUnits(v);
+                setOpen(false);
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

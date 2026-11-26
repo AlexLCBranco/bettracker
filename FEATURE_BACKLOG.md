@@ -30,16 +30,6 @@ glance. Cause found in the code: everything has the same visual weight (one line
 fields always open, a crowded top bar). Build order: BT-55, BT-56, BT-57, BT-58, BT-59, BT-60.
 Rule for all six: the bet table's column alignment must not change (owner, 2026-11-24).
 
-### BT-60 — Top bar: scope and units move into one menu
-**In short:** The top bar keeps the logo, quick-add, Banked and the page links; the money scope switch and the units toggle move into one small settings menu.
-
-- New menu button in the top bar (`Shell.tsx`) holding the money scope switch (Real / Bonus / Hypothetical / All)
-  and the units toggle. The button's label shows the current scope and "u" when units are on, so the state is
-  never hidden. U still toggles units.
-- With BT-55 the bankroll is a tile on the Bets page; on the other pages the top bar still shows `BankrollBar`.
-- Export / import ("⋯") stays on the Bets page's filter row.
-- Tests: e2e for changing scope and units from the menu on two pages; update specs that click the old switch.
-
 ### BT-61 — Analytics: the Odds breakdown uses the shot bands
 **In short:** On Analytics, "Odds" groups bets by his own bands (mini, semi, Pepsi, shot) instead of the generic ranges, with shot split into finer rows.
 

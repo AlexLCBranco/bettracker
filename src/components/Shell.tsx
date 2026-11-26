@@ -12,7 +12,7 @@ import { BetFormModal } from './BetFormModal';
 import { BankrollBar, MoneyFormModal } from './Bankroll';
 import { BankedBar } from './Banked';
 import { DutchFormModal } from './DutchFormModal';
-import { MoneyScopeSwitch, UnitsToggle, useMoneyScope, useUnitsView } from './Money';
+import { useMoneyScope, useUnitsView, ViewMenu } from './Money';
 import { QuickAdd } from './QuickAdd';
 import { isUndoKey } from '@/lib/undo';
 import { CHANNEL, tabLock } from '@/lib/oneTab';
@@ -132,9 +132,8 @@ function Frame({ children }: { children: ReactNode }) {
           <div className="flex-1">
             <QuickAdd />
           </div>
-          {/* BT-26: one Real / Hypothetical / Both switch for every page */}
-          <MoneyScopeSwitch scope={scope} onChange={setScope} />
-          <UnitsToggle on={unitsView} onChange={setUnitsView} />
+          {/* BT-26: one money scope for every page; BT-60: it and the units view live in one menu */}
+          <ViewMenu scope={scope} onScope={setScope} units={unitsView} onUnits={setUnitsView} />
           {/* BT-33: what you have now, per money type; BT-55: a tile on the Bets page instead */}
           {path !== '/' && <BankrollBar />}
           {/* money won and banked, waiting for its next bet */}

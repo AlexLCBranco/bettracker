@@ -1,13 +1,13 @@
 // BT-54: a dutch as the next leg of an open rollover shot. Owner's case: H$ 100 @ 1.30 won and banked (H$ 130), the
 // whole 130 dutched across @ 2.00 and @ 2.20 from the shot's "+ Dutch leg" button.
-import { betsTagged, createBet, expect, saved, test } from './helpers';
+import { betsTagged, createBet, expect, saved, test, viewMenu } from './helpers';
 
 test('BT-54: + Dutch leg dutches the banked payout, the shot rolls on with what the dutch returned', async ({ page, request, tag }) => {
   const rolloverId = `ro-${tag}`;
   await createBet(request, { betText: `${tag} first`, stake: 100, odds: 1.3, result: 'won', rolloverId, banked: true, money: 'hypothetical' });
   await page.goto('/');
   // the Bets page shows real money by default: show H$
-  await page.getByRole('radio', { name: /Hypothetical/ }).check();
+  await (await viewMenu(page)).getByRole('radio', { name: /Hypothetical/ }).click();
   await page.getByLabel('Search bets').fill(tag);
   const shot = page.getByTestId('rollover-row');
   await expect(shot.getByTestId('result')).toHaveText('Open');

@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { betsTagged, createBet, expect, test } from './helpers';
+import { betsTagged, createBet, expect, test, viewMenu } from './helpers';
 
 const LIVE = !!process.env.E2E_BASE_URL;
 
@@ -975,19 +975,18 @@ test('BT-14: hypothetical money (H$): quick-add and full form, never in Real tot
 
   // Bets: Real (the default) never shows or counts H$; the top bar's switch picks Hypothetical or Both
   await page.getByLabel('Search bets').fill(tag);
-  const money = page.getByRole('banner').getByRole('radiogroup', { name: 'Money shown' });
   const net = page.getByTestId('stat-net-value');
-  await expect(money.getByRole('radio', { name: 'Real R$' })).toHaveAttribute('aria-checked', 'true');
+  await expect((await viewMenu(page)).getByRole('radio', { name: 'Real R$' })).toHaveAttribute('aria-checked', 'true');
   await expect(page.locator(`[data-bet-id="${hypo.id}"]`)).toHaveCount(0);
   await expect(net).toHaveText('+R$ 100,00');
   await expect(page.getByTestId('stat-wagered')).toContainText('1 of');
-  await money.getByRole('radio', { name: 'All' }).click();
+  await (await viewMenu(page)).getByRole('radio', { name: 'All' }).click();
   await expect(page.locator(`[data-bet-id="${hypo.id}"]`).getByRole('button', { name: 'Edit Stake' })).toHaveText('H$ 1.000,00');
   await expect(page.locator(`[data-bet-id="${hypo.id}"]`).getByTestId('profit')).toHaveText('+H$ 2.000,00');
   // BT-55: All shows real and hypothetical side by side, never summed
   await expect(page.getByTestId('stat-net-real-value')).toHaveText('+R$ 100,00');
   await expect(page.getByTestId('stat-net-hypothetical-value')).toHaveText('+H$ 2.000,00');
-  await money.getByRole('radio', { name: 'Hypothetical H$' }).click();
+  await (await viewMenu(page)).getByRole('radio', { name: 'Hypothetical H$' }).click();
   await expect(page.locator(`[data-bet-id="${real.id}"]`)).toHaveCount(0);
   await expect(page.locator('[data-money="hypothetical"]').filter({ hasText: tag })).toHaveCount(3);
   await expect(net).toHaveText('+H$ 2.000,00');
@@ -995,9 +994,9 @@ test('BT-14: hypothetical money (H$): quick-add and full form, never in Real tot
 
   // Analytics shares the switch (remembered)
   await page.goto('/analytics');
-  await expect(page.getByRole('radio', { name: 'Hypothetical H$' })).toHaveAttribute('aria-checked', 'true');
+  await expect((await viewMenu(page)).getByRole('radio', { name: 'Hypothetical H$' })).toHaveAttribute('aria-checked', 'true');
   await expect(page.getByTestId('cell-wagered').first()).toContainText('H$');
-  await page.getByRole('radio', { name: 'Real R$' }).click();
+  await (await viewMenu(page)).getByRole('radio', { name: 'Real R$' }).click();
   await expect(page.getByTestId('cell-wagered').first()).not.toContainText('H$');
 });
 
@@ -1023,7 +1022,7 @@ test('BT-17–22: combo rows with legs and counts, same styling on every row, ti
   expect(one.type).toBe('solo');
 
   await page.goto('/');
-  await page.getByRole('radiogroup', { name: 'Money shown' }).getByRole('radio', { name: 'All' }).click();
+  await (await viewMenu(page)).getByRole('radio', { name: 'All' }).click();
   await page.getByLabel('Search bets').fill(tag);
   const c = page.locator(`[data-bet-id="${combo.id}"]`);
   const s = page.locator(`[data-bet-id="${solo.id}"]`);
@@ -1123,7 +1122,7 @@ test('BT-23 / BT-26: bets grouped by day, one pill per row, the muted line, spli
   await createBet(request, { placedDate: '2000-01-04', gameDate: '2000-01-04', book, betText: `${tag} next day` });
 
   await page.goto('/');
-  await page.getByRole('banner').getByRole('radio', { name: 'All' }).click(); // the paper bet is H$
+  await (await viewMenu(page)).getByRole('radio', { name: 'All' }).click(); // the paper bet is H$
   await page.getByLabel('Search bets').fill(tag);
   const top = page.locator('[data-testid=bet-row]:not([data-nested]), [data-testid=dutch-row]');
   await expect(top).toHaveCount(7);
@@ -1418,16 +1417,15 @@ test('BT-26: one Bets page: stats strip, filters with ⋯ and ?, tabs, the money
   await createBet(request, { betText: `${tag} later`, placedDate: '2099-01-01', gameDate: '2099-01-01' });
   await page.goto('/');
   await page.getByLabel('Search bets').fill(tag);
-  const money = page.getByRole('banner').getByRole('radiogroup', { name: 'Money shown' });
-  await money.getByRole('radio', { name: 'Real R$' }).click();
+  await (await viewMenu(page)).getByRole('radio', { name: 'Real R$' }).click();
 
   // Real only: the H$ bet is not shown; the tiles follow the filters (BT-55: never the tab)
   await expect(page.getByTestId('bet-row')).toHaveCount(2);
   await expect(page.getByTestId('stat-net-value')).toHaveText('+R$ 100,00');
   await expect(page.getByTestId('stat-wagered')).toContainText('2 of');
-  await money.getByRole('radio', { name: 'All' }).click();
+  await (await viewMenu(page)).getByRole('radio', { name: 'All' }).click();
   await expect(page.getByTestId('bet-row')).toHaveCount(3);
-  await money.getByRole('radio', { name: 'Real R$' }).click();
+  await (await viewMenu(page)).getByRole('radio', { name: 'Real R$' }).click();
 
   // tabs: Upcoming, To settle (game date today or earlier: the 2099 bet is not due, so it is upcoming)
   await page.getByRole('tab', { name: /Upcoming/ }).click();
@@ -1451,7 +1449,7 @@ test('BT-26: one Bets page: stats strip, filters with ⋯ and ?, tabs, the money
   // Analytics: the chart, and the same money switch
   await page.getByRole('link', { name: 'Analytics' }).click();
   await expect(page.getByRole('heading', { name: 'Performance Over Time' })).toBeVisible();
-  await expect(page.getByRole('banner').getByRole('radio', { name: 'Real R$' })).toHaveAttribute('aria-checked', 'true');
+  await expect((await viewMenu(page)).getByRole('radio', { name: 'Real R$' })).toHaveAttribute('aria-checked', 'true');
 });
 
 test('BT-26: a split line selected with a click settles alone with W; ↓ moves on from its dutch', async ({ page, request, tag }) => {

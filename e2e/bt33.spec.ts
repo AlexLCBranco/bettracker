@@ -1,6 +1,6 @@
 // BT-33: insert real, bonus and hypothetical money; bets of each type move the balances; a bonus win pays winnings only.
 import type { Page } from '@playwright/test';
-import { createBet, expect, saved, test } from './helpers';
+import { createBet, expect, saved, test, viewMenu } from './helpers';
 
 /** The bankroll panel's line for this test's book, for one money type. */
 async function bookLine(page: Page, money: 'real' | 'bonus' | 'hypothetical', tag: string) {
@@ -43,7 +43,7 @@ test('BT-33: insert each type → bets of each type → balances move → a bonu
   await createBet(request, { betText: `${tag} paper`, book: tag, placedDate: '2000-01-02', gameDate: '2000-01-02', stake: 50, odds: 2, money: 'hypothetical' });
   await page.goto('/');
   await page.getByLabel('Search bets').fill(tag);
-  await page.getByRole('banner').getByRole('radio', { name: 'All' }).click();
+  await (await viewMenu(page)).getByRole('radio', { name: 'All' }).click();
   // bonus stake shown as B$
   await expect(page.locator(`[data-bet-id="${bonus.id}"]`).getByTestId('stake')).toHaveText(/B\$\s10,00/);
 

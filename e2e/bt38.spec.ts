@@ -1,7 +1,7 @@
 // BT-38: units. Set a unit size on the Bankroll page, quick-add a stake in units, toggle U and read the row and the
 // totals in units; nothing in the table moves between money view and units view. The unit settings are global, so
 // each test puts back exactly what was there (the live site's own settings included).
-import { betsTagged, createBet, expect, saved, test } from './helpers';
+import { betsTagged, createBet, expect, saved, test, viewMenu } from './helpers';
 import type { APIRequestContext, Locator, Page } from '@playwright/test';
 import type { UnitSettings } from '../src/lib/units';
 
@@ -67,7 +67,7 @@ test('BT-38: unit size → quick-add "H$1,5u" → U shows units, nothing moves; 
   const money = await layout(row);
 
   await page.keyboard.press('u');
-  await expect(page.getByRole('radio', { name: 'Units' })).toHaveAttribute('aria-checked', 'true');
+  await expect((await viewMenu(page)).getByRole('radio', { name: 'Units' })).toHaveAttribute('aria-checked', 'true');
   await expect(row.getByTestId('stake')).toHaveText('1,5u');
   await expect(row.getByTestId('profit')).toHaveText('+1,5u');
   // the strip shows only this bet (search): counted in units; ROI unchanged
@@ -79,7 +79,7 @@ test('BT-38: unit size → quick-add "H$1,5u" → U shows units, nothing moves; 
 
   // remembered across a reload; U again goes back to money
   await page.reload();
-  await expect(page.getByRole('radio', { name: 'Units' })).toHaveAttribute('aria-checked', 'true');
+  await expect((await viewMenu(page)).getByRole('radio', { name: 'Units' })).toHaveAttribute('aria-checked', 'true');
   await page.locator('body').click({ position: { x: 1, y: 300 } });
   await page.keyboard.press('u');
   await page.getByLabel('Search bets').fill(tag);

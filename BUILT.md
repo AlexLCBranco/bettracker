@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-26
+- BT-60 — Top bar: money scope and units in one menu (v0.61.0)
+  The money scope switch and the units toggle moved into one small menu whose label shows the current scope and a "u" when units are on.
 - BT-59 — Bets page: key hints for the selected row (v0.60.0)
   Selecting a row shows a thin line with only the keys that work on it; each hint is also a button that does the same thing.
 - BT-58 — Bets table: day headers with a record, and weekly subtotals (v0.59.0)

@@ -86,3 +86,10 @@ export const test = base.extend<{ tag: string }>({
 });
 
 export { expect };
+
+/** BT-60: the money scope and units switches live in the top bar's menu: opens it when closed, returns its panel. */
+export async function viewMenu(page: Page) {
+  const panel = page.getByTestId('view-menu-panel');
+  if (!(await panel.isVisible())) await page.getByTestId('view-menu').click();
+  return panel;
+}
