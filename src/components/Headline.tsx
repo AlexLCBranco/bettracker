@@ -132,7 +132,7 @@ export function Headline({ groups, betCount, totalCount, toSettle, openSettle, u
       <Tile label="Open" testId="stat-pending" className="flex-1">
         <div className="mt-1 flex gap-6">
           {groups.map((g) => (
-            <span key={g.money} className="text-2xl font-bold tabular-nums leading-none text-zinc-100" data-testid={many ? `stat-open-${g.money}` : 'stat-open-amount'} title="Stake in pending bets">
+            <span key={g.money} className="text-2xl font-bold tabular-nums leading-none text-zinc-100" data-testid={many ? `stat-open-${g.money}` : 'stat-open-amount'} title="Stake riding on pending bets (a shot at what it has grown to)">
               {fmtOf(g)(g.summary.pendingAmount)}
             </span>
           ))}

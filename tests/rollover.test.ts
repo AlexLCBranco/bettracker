@@ -117,12 +117,23 @@ describe('a chain is ONE bet in counts and one money item', () => {
     expect(s.roi).toBeCloseTo(42 / 150, 10);
   });
 
-  it('open shot: pending (count and first stake), its banked payout not counted as profit', () => {
+  it('Open counts a playing shot at what is riding now: its won mini rolled into the pending semi', () => {
+    // R$ 100 on a mini @ 1.30 won → R$ 130 on a semi @ 1.40 pending; plus a plain R$ 50 pending bet
+    const c = chain('r1', [{ odds: 1.3 }, { odds: 1.4, result: 'pending' }]);
+    expect(c[1]!.stake).toBe(130);
+    const s = summarize([...c, bet({ stake: 50, result: 'pending' })]);
+    expect(s.pendingCount).toBe(2);
+    expect(s.pendingAmount).toBe(180);
+    expect(s.totalWagered).toBe(150);
+  });
+
+  it('open shot: pending (count, and the payout banked riding in Open), its banked payout not counted as profit', () => {
     const c = chain('r1', [{ odds: 1.6, banked: true }]);
     const s = summarize(c);
     expect(s.betCount).toBe(1);
     expect(s.pendingCount).toBe(1);
-    expect(s.pendingAmount).toBe(100);
+    expect(s.pendingAmount).toBe(160);
+    expect(s.totalWagered).toBe(100);
     expect(s.netProfit).toBe(0);
     expect(s.wins).toBe(0);
     expect(s.winRate).toBeNull();
@@ -238,7 +249,7 @@ describe("a dutch split's win banked for a rollover", () => {
     expect(countBets([A, B])).toEqual({ count: 1, pending: 1, wins: 0, losses: 0 });
     const s = summarize([A, B]);
     expect(s.totalWagered).toBe(100);
-    expect(s.pendingAmount).toBe(50);
+    expect(s.pendingAmount).toBe(100);
     expect(s.netProfit).toBe(-50);
     expect(chainSummary([A]).banked).toBe(100);
   });

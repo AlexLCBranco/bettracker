@@ -103,7 +103,7 @@ describe('counting and Analytics', () => {
   const all = [...won, ...lost, ...open, bet({ stake: 20, result: 'won' })];
   it('one bet each in counts and win rate: won when closed above the first stake, lost when a rung loses, pending while open', () => {
     expect(countBets(all)).toMatchObject({ count: 4, pending: 1, wins: 2, losses: 1 });
-    expect(summarize(all)).toMatchObject({ totalWagered: 180, netProfit: 300 - 50 + 20, pendingAmount: 10 });
+    expect(summarize(all)).toMatchObject({ totalWagered: 180, netProfit: 300 - 50 + 20, pendingAmount: 30 });
   });
   it('the Ladder group: started, average rungs, best, goals reached, net profit', () => {
     const r = ladderReport(all);

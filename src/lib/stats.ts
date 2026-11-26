@@ -1,6 +1,6 @@
 import { countBets } from './dutch';
 import { bonusSpentOf, profit, realStake } from './money';
-import { collapseRollovers } from './rollover';
+import { chainSummary, chainsOf, collapseRollovers } from './rollover';
 import type { Bet } from './types';
 
 export interface Summary {
@@ -15,6 +15,7 @@ export interface Summary {
   wins: number;
   losses: number;
   pendingCount: number;
+  /** What is riding on pending bets now (see ridingAmount): a shot at what it has grown to. */
   pendingAmount: number;
   settledStake: number;
   /** BT-33: bonus put on settled bets (a void's stake went back), the real money they won, and won / spent. */
@@ -27,11 +28,26 @@ export interface Summary {
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+/**
+ * What is riding on pending bets now (the Open tile): a plain bet its stake; a shot or ladder still playing the stakes
+ * of its pending bets (the payouts its won legs rolled on), an open one the payout banked for its next bet. Unlike
+ * wagered, a shot counts here at what it has grown to, not its first stake.
+ */
+export function ridingAmount(bets: Bet[]): number {
+  let total = 0;
+  for (const b of bets) if (!b.rolloverId && b.result === 'pending') total += realStake(b);
+  for (const chain of chainsOf(bets).values()) {
+    const s = chainSummary(chain, bets);
+    if (s.outcome === 'pending') total += chain.filter((b) => b.result === 'pending').reduce((t, b) => t + realStake(b), 0);
+    else if (s.outcome === 'open') total += realStake({ ...s.bets[0]!, stake: s.banked });
+  }
+  return round2(total);
+}
+
 export function summarize(bets: Bet[]): Summary {
   let netProfit = 0;
   let settledStake = 0;
   let totalWagered = 0;
-  let pendingAmount = 0;
   let bonusSpent = 0;
   let bonusWon = 0;
   let bonusPending = 0;
@@ -41,7 +57,6 @@ export function summarize(bets: Bet[]): Summary {
     const stake = realStake(b);
     totalWagered += stake;
     if (b.result === 'pending') {
-      pendingAmount += stake;
       if (b.money === 'bonus') bonusPending += b.stake;
       continue;
     }
@@ -62,7 +77,7 @@ export function summarize(bets: Bet[]): Summary {
     wins,
     losses,
     pendingCount,
-    pendingAmount: round2(pendingAmount),
+    pendingAmount: ridingAmount(bets),
     settledStake: round2(settledStake),
     bonusSpent: round2(bonusSpent),
     bonusWon: round2(bonusWon),

@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-26
+- Bets: the Open tile counts a shot at what it has grown to (v0.70.1)
+  A shot whose minis/semis/Pepsis won counts the stake now riding on its pending bet (or the payout banked for its next bet), not its first stake; wagered and ROI are unchanged.
 - Bets: the Net tile's record counts pending and other bets (v0.70.0)
   Next to 5W / 8L it now says how many are pending and how many settled as neither (void, cash-out, half won/lost), so the record adds up to the bet count.
 - BT-68 — Analytics: Dutches down to four headline tiles (v0.69.0)
