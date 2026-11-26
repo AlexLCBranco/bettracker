@@ -38,16 +38,6 @@ period, and no way from a number to the bets behind it. Build order: BT-67, BT-6
 (the tabs first, so the other items land in their final place). Every rule in CLAUDE.md on what counts as one bet,
 on bonus money and on PP batches staying out of Analytics still holds.
 
-### BT-65 — Analytics: small samples greyed out
-**In short:** A row with too few settled bets is shown faded with a "small sample" note, so a 2-bet +80% ROI does not read as a finding.
-
-- Threshold: fewer than 10 settled bets (won + lost; a dutch counts once). One constant, used by every breakdown
-  table on the page (main breakdown, dutch tables, leg record by market) and by BT-62's best / worst.
-- Faded rows keep their numbers, lose the green / red colour and the profit bar's colour, and show "small sample"
-  on hover and as a small mark by the count. Sorting is unchanged.
-- Threshold 10 confirmed by the owner (2026-11-26): keep it easy to change.
-- Tests: unit test at 9 and 10 settled; e2e that a small row carries the mark.
-
 ### BT-66 — Analytics: click a row to see its bets
 **In short:** Clicking a breakdown row opens the Bets page already filtered to exactly those bets.
 

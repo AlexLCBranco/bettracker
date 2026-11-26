@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useMemo, useState, type ReactNode } from 'react';
 import { useApp } from '@/components/AppProvider';
 import { ProfitText } from '@/components/BetTable';
-import { breakdown, comboReport, DIMENSION_LABEL, DIMENSIONS, sortRows, type Dimension, type Row, type SortKey } from '@/lib/analytics';
+import { breakdown, comboReport, DIMENSION_LABEL, DIMENSIONS, isSmallSample, SMALL_SAMPLE, sortRows, type Dimension, type Row, type SortKey } from '@/lib/analytics';
 import { formatDate } from '@/lib/dates';
 import { dutchHitReport } from '@/lib/hits';
 import { dutchStats } from '@/lib/dutchStats';
@@ -306,14 +306,21 @@ function Analytics() {
                         </tr>
                       </thead>
                       <tbody>
-                        {combos.legsByMarket.map((m) => (
-                          <tr key={m.key} className="border-b border-zinc-900">
-                            <td className="py-2 pr-3">{m.label}</td>
-                            <td className="px-3 py-2 text-right tabular-nums text-emerald-400">{m.won}</td>
-                            <td className="px-3 py-2 text-right tabular-nums text-red-400">{m.lost}</td>
+                        {combos.legsByMarket.map((m) => {
+                          // BT-65: the same small-sample rule, counting settled legs
+                          const small = isSmallSample({ wins: m.won, losses: m.lost });
+                          return (
+                          <tr key={m.key} className={`border-b border-zinc-900 ${small ? 'opacity-60' : ''}`} data-testid="leg-market-row" data-small={small ? 'true' : undefined} title={small ? SMALL_TITLE : undefined}>
+                            <td className="py-2 pr-3">
+                              {m.label}
+                              {small && <SmallMark />}
+                            </td>
+                            <td className={`px-3 py-2 text-right tabular-nums ${small ? 'text-zinc-400' : 'text-emerald-400'}`}>{m.won}</td>
+                            <td className={`px-3 py-2 text-right tabular-nums ${small ? 'text-zinc-400' : 'text-red-400'}`}>{m.lost}</td>
                             <td className="px-3 py-2 text-right tabular-nums">{formatPercent(m.winRate)}</td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -396,26 +403,39 @@ function Analytics() {
   );
 }
 
+/** BT-65: the hover text of a faded row. */
+const SMALL_TITLE = `Small sample: fewer than ${SMALL_SAMPLE} settled bets, too few to read as a finding`;
+
+function SmallMark() {
+  return (
+    // drawn by CSS, so the cell's text stays the number alone
+    <span className="ml-1 cursor-help text-[10px] text-amber-300/70 after:content-['◔']" title={SMALL_TITLE} aria-label="small sample" data-testid="small-sample" />
+  );
+}
+
 function BreakdownRow({ r, maxAbsProfit, scope, fmt, units }: { r: Row; maxAbsProfit: number; scope: MoneyScope; fmt(n: number): string; units: boolean }) {
   const width = maxAbsProfit > 0 ? (Math.abs(r.profit) / maxAbsProfit) * 100 : 0;
+  // BT-65: a small sample keeps its numbers but loses its colours, and says so on hover and by the count
+  const small = isSmallSample(r);
   return (
-    <tr className="border-b border-zinc-900" data-testid="analytics-row" data-sub={r.parent ? 'true' : undefined}>
+    <tr className={`border-b border-zinc-900 ${small ? 'opacity-60' : ''}`} data-testid="analytics-row" data-sub={r.parent ? 'true' : undefined} data-small={small ? 'true' : undefined} title={small ? SMALL_TITLE : undefined}>
       <td className={`py-2 pr-3 ${r.parent ? 'pl-6 text-zinc-400' : 'text-zinc-100'}`}>{r.parent ? `↳ ${r.label}` : r.label}</td>
       <td className="px-3 py-2 text-right tabular-nums" data-testid="cell-bets">
         {r.bets}
         {r.pending > 0 && <span className="ml-1 text-xs text-zinc-500" title={`${r.pending} pending`}>({r.pending}p)</span>}
+        {small && <SmallMark />}
       </td>
       <td className="px-3 py-2 text-right tabular-nums" data-testid="cell-wagered">{fmt(r.wagered)}</td>
       <td className="px-3 py-2 text-right tabular-nums" data-testid="cell-profit">
-        <ProfitText value={r.profit} money={scope} units={units ? r.profit : null} />
+        <ProfitText value={r.profit} money={scope} units={units ? r.profit : null} muted={small} />
       </td>
-      <td className={`px-3 py-2 text-right tabular-nums ${tone(r.roi)}`} data-testid="cell-roi">{formatPercent(r.roi, true)}</td>
+      <td className={`px-3 py-2 text-right tabular-nums ${small ? 'text-zinc-400' : tone(r.roi)}`} data-testid="cell-roi">{formatPercent(r.roi, true)}</td>
       <td className="px-3 py-2 text-right tabular-nums" data-testid="cell-winrate">
         {formatPercent(r.winRate)} <span className="text-xs text-zinc-500">{r.wins}W/{r.losses}L</span>
       </td>
       <td className="py-2 pl-3" aria-hidden>
         <div className="h-2 w-full rounded-full bg-zinc-900">
-          <div className={`h-2 rounded-full ${r.profit >= 0 ? 'bg-emerald-500/70' : 'bg-red-500/70'}`} style={{ width: `${width}%` }} />
+          <div className={`h-2 rounded-full ${small ? 'bg-zinc-600' : r.profit >= 0 ? 'bg-emerald-500/70' : 'bg-red-500/70'}`} style={{ width: `${width}%` }} />
         </div>
       </td>
     </tr>

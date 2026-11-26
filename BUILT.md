@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-26
+- BT-65 — Analytics: small samples greyed out (v0.67.0)
+  A breakdown row with fewer than 10 settled bets is shown faded, without its green / red, with a small-sample mark by its count and on hover.
 - BT-64 — Analytics: breakdowns by no brainer and by label (v0.66.0)
   Two new "break down by" choices: No brainer or Other, and one row per label (a dutch or shot with different labels shows as Mixed).
 - BT-63 — Analytics: period switch, with change against the previous period (v0.65.0)

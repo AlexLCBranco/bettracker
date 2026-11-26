@@ -48,11 +48,11 @@ const QUICK_RESULTS: { r: Result; key: string; cls: string }[] = [
  * BT-18: one size and weight on every row (bet, combination, dutch). BT-38: in the units view, `units` (or the value
  * over `unitSize`) shows as "+0,45u"; without either it stays money.
  */
-export function ProfitText({ value, pending, money = 'real', unitSize, units }: { value: number; pending?: boolean; money?: MoneyScope; unitSize?: number | null; units?: number | null }) {
+export function ProfitText({ value, pending, money = 'real', unitSize, units, muted }: { value: number; pending?: boolean; money?: MoneyScope; unitSize?: number | null; units?: number | null; muted?: boolean }) {
   const [view] = useUnitsView();
   if (pending) return <span className="text-zinc-500">-</span>;
   const u = view ? (units !== undefined ? units : toUnits(value, unitSize)) : null;
-  return <span className={`font-semibold ${value > 0 ? 'text-emerald-400' : value < 0 ? 'text-red-400' : 'text-zinc-400'}`}>{u != null ? formatUnits(u, true) : formatMoney(value, money, true)}</span>;
+  return <span className={`font-semibold ${muted ? 'text-zinc-400' : value > 0 ? 'text-emerald-400' : value < 0 ? 'text-red-400' : 'text-zinc-400'}`}>{u != null ? formatUnits(u, true) : formatMoney(value, money, true)}</span>;
 }
 
 /** BT-29: the odds tier as a small chip ("Semi"); "Banked Semi" on a banked bet or an open shot. None under 1.10. */
