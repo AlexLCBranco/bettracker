@@ -35,6 +35,9 @@ function Spark({ values }: { values: number[] }) {
   );
 }
 
+/** Bets that count toward neither the wins, the losses nor the pending. */
+const other = (s: HeadlineGroup['summary']) => s.betCount - s.wins - s.losses - s.pendingCount;
+
 /** One money group's Net: the big figure, the sparkline, then ROI, win rate, wagered and bonus as small text. */
 function NetGroup({ g, many }: { g: HeadlineGroup; many: boolean }) {
   const s = g.summary;
@@ -59,8 +62,14 @@ function NetGroup({ g, many }: { g: HeadlineGroup; many: boolean }) {
           <b className="font-semibold tabular-nums text-zinc-200" data-testid={many ? undefined : 'stat-winrate-value'}>
             {formatPercent(s.winRate)}
           </b>{' '}
-          <span className="text-zinc-500">
+          <span className="text-zinc-500" data-testid={many ? undefined : 'stat-record'}>
             {s.wins}W / {s.losses}L
+            {s.pendingCount > 0 && ` · ${s.pendingCount} pending`}
+            {other(s) > 0 && (
+              <span title="Settled as neither a win nor a loss: void, cash-out, half won or lost, or a dutch that broke even">
+                {` · ${other(s)} other`}
+              </span>
+            )}
           </span>
         </span>
         <span data-testid={many ? undefined : 'stat-wagered-line'}>

@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-26
+- Bets: the Net tile's record counts pending and other bets (v0.70.0)
+  Next to 5W / 8L it now says how many are pending and how many settled as neither (void, cash-out, half won/lost), so the record adds up to the bet count.
 - BT-68 — Analytics: Dutches down to four headline tiles (v0.69.0)
   The Dutches tab shows Net profit, ROI, Win rate and Splits hit first; a remembered More switch shows the other six tiles.
 - BT-66 — Analytics: click a row to see its bets (v0.68.0)

@@ -6,6 +6,7 @@ test('BT-55: the tiles hold the same values on every tab; All shows R$ and H$ si
   await createBet(request, { betText: `${tag} won`, stake: 100, odds: 2, result: 'won' });
   await createBet(request, { betText: `${tag} lost`, stake: 40, result: 'lost' });
   await createBet(request, { betText: `${tag} due`, stake: 30 });
+  await createBet(request, { betText: `${tag} void`, stake: 5, result: 'void' });
   await createBet(request, { betText: `${tag} later`, stake: 20, placedDate: '2099-01-01', gameDate: '2099-01-01' });
   await createBet(request, { betText: `${tag} paper`, stake: 10, odds: 3, result: 'won', money: 'hypothetical' });
   await page.goto('/');
@@ -23,8 +24,9 @@ test('BT-55: the tiles hold the same values on every tab; All shows R$ and H$ si
   await expect(page.getByTestId('stat-open-amount')).toHaveText('R$ 50,00');
   await expect(page.getByTestId('stat-pending-value')).toHaveText('2');
   await expect(page.getByTestId('stat-to-settle')).toHaveText('1 to settle');
-  await expect(page.getByTestId('stat-winrate')).toContainText('1W / 1L');
-  await expect(page.getByTestId('stat-wagered')).toHaveText(/^4 of \d+ bets$/);
+  // the record says where the rest went: pending and settled as neither win nor loss
+  await expect(page.getByTestId('stat-record')).toHaveText('1W / 1L · 2 pending · 1 other');
+  await expect(page.getByTestId('stat-wagered')).toHaveText(/^5 of \d+ bets$/);
   const onAll = await values();
   for (const tab of [/To settle/, /Upcoming/, /Banked/]) {
     await page.getByRole('tab', { name: tab }).click();
