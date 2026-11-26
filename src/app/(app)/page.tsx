@@ -29,7 +29,7 @@ import { byMoney } from '@/lib/scope';
 import { settleQueue, SETTLE_KEYS, sharedLegOf } from '@/lib/settle';
 import { formatPercent, summarize } from '@/lib/stats';
 import { RESULT_LABEL, RESULTS, type Bet } from '@/lib/types';
-import { isTab, moveKey, nextKey, rowKeys, tabBets, tabDays, TAB_LABEL, TAB_TITLE, TABS, type Tab } from '@/lib/view';
+import { parseTab, moveKey, nextKey, rowKeys, tabBets, tabDays, TAB_LABEL, TAB_TITLE, TABS, type Tab } from '@/lib/view';
 
 export default function BetsPage() {
   // the tab is in the URL (?tab=settle), read on the client
@@ -71,7 +71,7 @@ const HELP: [string, string][] = [
 const DUTCH_KEYS_HELP = 'A dutch settles with 1-9 to toggle the splits that won, then Enter; 0 (none won), V (void all) or S (shared leg lost).';
 
 /**
- * BT-26: the home page. Stats strip, one row of filters, All / Pending / To settle tabs and the bet table. Settling
+ * BT-26: the home page. Stats strip, one row of filters, All / To settle / Upcoming / Banked tabs and the bet table. Settling
  * works from the keyboard on the selected row in any tab, as fast as the old Settle queue: after a settle the next row
  * is selected.
  */
@@ -81,7 +81,7 @@ function Bets() {
   const params = useSearchParams();
   const router = useRouter();
   const tabParam = params.get('tab');
-  const tab: Tab = isTab(tabParam) ? tabParam : 'all';
+  const tab: Tab = parseTab(tabParam);
   const setTab = (t: Tab) => router.replace(t === 'all' ? '/' : `/?tab=${t}`, { scroll: false });
 
   const [f, setF] = useState<Filters>(NO_FILTERS);
@@ -113,7 +113,7 @@ function Bets() {
   }, [filtered, tab, today, gameFilter]);
   const shown = useMemo(() => tabBets(days), [days]);
   const keys = useMemo(() => rowKeys(days), [days]);
-  const counts = useMemo(() => ({ pending: rowKeys(tabDays(filtered, 'pending', today, false)).length, banked: rowKeys(tabDays(filtered, 'banked', today)).length, settle: settleQueue(filtered, today).length }), [filtered, today]);
+  const counts = useMemo(() => ({ upcoming: rowKeys(tabDays(filtered, 'upcoming', today, false)).length, banked: rowKeys(tabDays(filtered, 'banked', today)).length, settle: settleQueue(filtered, today).length }), [filtered, today]);
   // BT-38: in the units view the strip counts units, when every bet shown has a unit size and one money type
   const [unitsView] = useUnitsView();
   const unitBets = useMemo(() => (unitsView ? asUnitBets(shown) : null), [unitsView, shown]);
@@ -492,7 +492,7 @@ function Bets() {
             title={TAB_TITLE[t]}
           >
             {TAB_LABEL[t]}
-            {t === 'pending' && counts.pending > 0 && <span className="ml-1.5 text-xs text-zinc-500">{counts.pending}</span>}
+            {t === 'upcoming' && counts.upcoming > 0 && <span className="ml-1.5 text-xs text-zinc-500" data-testid="upcoming-count">{counts.upcoming}</span>}
             {t === 'banked' && counts.banked > 0 && (
               <span className="ml-1.5 rounded-full bg-sky-500/20 px-1.5 py-0.5 text-xs font-semibold text-sky-200" data-testid="banked-tab-count">
                 {counts.banked}
@@ -540,7 +540,7 @@ function Bets() {
             annotating={annotating}
             annotate={setAnnotating}
             rollover={rollover}
-            empty={tab === 'settle' ? 'Nothing to settle.' : tab === 'pending' ? 'No pending bets.' : tab === 'banked' ? 'Nothing banked: Bank a won or cashed-out bet to roll its payout on.' : all.length ? 'No bets match these filters.' : undefined}
+            empty={tab === 'settle' ? 'Nothing to settle.' : tab === 'upcoming' ? 'Nothing upcoming.' : tab === 'banked' ? 'Nothing banked: Bank a won or cashed-out bet to roll its payout on.' : all.length ? 'No bets match these filters.' : undefined}
           />
         ) : (
           <p className="py-10 text-center text-sm text-zinc-500">Loading…</p>

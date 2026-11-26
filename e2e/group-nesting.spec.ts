@@ -29,9 +29,9 @@ test("a shot's bets sit on its rail, a dutch leg's splits one level deeper", asy
   expect(await padLeft(rows[1]!)).toBeGreaterThan(await padLeft(rows[0]!));
 });
 
-test('a cash-out leaves the Pending tab once its woulda is set', async ({ page, request, tag }) => {
+test('a cash-out leaves the To settle tab once its woulda is set', async ({ page, request, tag }) => {
   const b = await createBet(request, { betText: `${tag} cashed`, stake: 100, odds: 2, result: 'cash-out', cashout: 120 });
-  await page.goto('/?tab=pending');
+  await page.goto('/?tab=settle');
   await page.getByLabel('Search bets').fill(tag);
   const row = page.locator(`[data-bet-id="${b.id}"]`);
   await expect(row).toHaveCount(1);
@@ -40,5 +40,5 @@ test('a cash-out leaves the Pending tab once its woulda is set', async ({ page, 
   await expect(row).toHaveCount(0);
   await page.reload();
   await page.getByLabel('Search bets').fill(tag);
-  await expect(page.getByText('No pending bets.')).toBeVisible();
+  await expect(page.getByText('Nothing to settle.')).toBeVisible();
 });

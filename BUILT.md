@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-26
+- The Pending tab becomes Upcoming; To settle, Upcoming and Banked never repeat a bet (v0.55.0)
+  To settle holds what is due, Upcoming the games still to come (soonest first), Banked the money waiting for its next bet, so the three counts add up to everything open.
 - The Pending tab no longer repeats the Banked shots (v0.54.1)
   Pending lists bets with money in play, Banked the money waiting for its next bet, and hovering a tab says what it holds.
 - Combos get a chip like Solo, in fuchsia (v0.54.0)

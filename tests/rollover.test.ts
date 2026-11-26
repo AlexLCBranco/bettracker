@@ -161,11 +161,11 @@ describe('table rows', () => {
     expect(days[0]!.nets).toEqual([{ money: 'real', value: 92, units: null }]);
   });
 
-  it('the Pending tab shows a shot with a bet in play, not an open (banked) one; filters keep a chain whole', () => {
+  it('Upcoming shows a shot with a bet in play, not an open (banked) one; filters keep a chain whole', () => {
     const open = chain('r1', [{ odds: 1.6, banked: true }]);
-    const inPlay = chain('r3', [{ odds: 1.6, banked: true }, { odds: 1.2, result: 'pending' }]);
+    const inPlay = chain('r3', [{ odds: 1.6, banked: true }, { odds: 1.2, result: 'pending', gameDate: '2026-11-30' }]);
     const closed = chain('r2', [{ odds: 1.6 }, { odds: 1.2 }]);
-    const rows = tabDays([...open, ...inPlay, ...closed], 'pending', '2026-11-23').flatMap((d) => d.rows);
+    const rows = tabDays([...open, ...inPlay, ...closed], 'upcoming', '2026-11-23').flatMap((d) => d.rows);
     expect(rows.map((r) => r.kind === 'rollover' && r.rolloverId)).toEqual(['r3']);
     // the open shot is on the Banked tab instead
     expect(tabDays(open, 'banked', '2026-11-23').flatMap((d) => d.rows)).toHaveLength(1);

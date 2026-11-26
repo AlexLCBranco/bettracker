@@ -1427,9 +1427,9 @@ test('BT-26: one Bets page: stats strip, filters with ⋯ and ?, tabs, the money
   await expect(page.getByTestId('bet-row')).toHaveCount(3);
   await money.getByRole('radio', { name: 'Real R$' }).click();
 
-  // tabs: Pending, To settle (game date today or earlier: the 2099 bet is not due)
-  await page.getByRole('tab', { name: /Pending/ }).click();
-  await expect(page).toHaveURL(/\?tab=pending$/);
+  // tabs: Upcoming, To settle (game date today or earlier: the 2099 bet is not due, so it is upcoming)
+  await page.getByRole('tab', { name: /Upcoming/ }).click();
+  await expect(page).toHaveURL(/\?tab=upcoming$/);
   await expect(page.getByTestId('bet-row')).toHaveCount(1);
   await expect(page.getByTestId('bet-row')).toContainText('later');
   await page.getByRole('tab', { name: /To settle/ }).click();

@@ -1,9 +1,10 @@
-// A cash-out entered with C never makes its bet vanish: on Pending and To settle it stays, showing the cash-out.
+// A cash-out entered with C never makes its bet vanish: on To settle and Upcoming it stays, showing the cash-out.
 import { betsTagged, createBet, expect, test } from './helpers';
 
-for (const tab of ['pending', 'settle'] as const) {
+for (const tab of ['upcoming', 'settle'] as const) {
   test(`cash-out with C on the ${tab} tab: the bet stays, also after a reload`, async ({ page, request, tag }) => {
-    const b = await createBet(request, { betText: `${tag} mitchell`, stake: 100, odds: 2 });
+    // an upcoming bet's game is after today
+    const b = await createBet(request, { betText: `${tag} mitchell`, stake: 100, odds: 2, ...(tab === 'upcoming' ? { gameDate: '2099-01-01' } : {}) });
     await page.goto(`/?tab=${tab}`);
     await page.getByLabel('Search bets').fill(tag);
     const row = page.locator(`[data-bet-id="${b.id}"]`);
