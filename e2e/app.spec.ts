@@ -1130,7 +1130,7 @@ test('BT-23 / BT-26: bets grouped by day, one pill per row, the muted line, spli
 
   // a header per day with its bets (a dutch once) and net per money
   await expect(page.getByTestId('day-label')).toHaveText(['Tue, 4 Jan 2000', 'Mon, 3 Jan 2000']);
-  await expect(page.getByTestId('day-totals')).toHaveText(['1 bet', '6 bets · +R$ 100,00 · -H$ 50,00']);
+  await expect(page.getByTestId('day-totals')).toHaveText(['1 bet · 1 pending', '6 bets · 2W 2L · 2 pending · +R$ 100,00 · -H$ 50,00']);
   await expect(page.getByTestId('day-net-hypothetical')).toHaveClass(/violet/);
 
   // one pill per row, no result tint (a dutch's row is a group header, the same shade whatever its result)

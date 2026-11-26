@@ -30,16 +30,6 @@ glance. Cause found in the code: everything has the same visual weight (one line
 fields always open, a crowded top bar). Build order: BT-55, BT-56, BT-57, BT-58, BT-59, BT-60.
 Rule for all six: the bet table's column alignment must not change (owner, 2026-11-24).
 
-### BT-58 — Bets table: day headers with a record, and weekly subtotals
-**In short:** Each day's header shows its result more loudly and its W-L record, and each week ends with a subtotal line.
-
-- Day header (`BetTable.tsx`, `day-totals`): net in a larger, bolder, coloured figure; add the day's record
-  ("3W 1L", pending count when any) before it. A dutch, rollover or ladder counts once, as in `summarize`.
-- After the last day of each week, one subtotal row: bets, record and net for that week, per money type. Week =
-  Monday to Sunday (owner, 2026-11-26). Only on the All tab.
-- No change to the bet rows' columns or heights.
-- Tests: unit tests for the day record and the week grouping; e2e that the header and subtotal show the numbers.
-
 ### BT-59 — Bets page: key hints for the selected row
 **In short:** When a row is selected, one thin line shows only the keys that work on that row, so the shortcuts are not hidden behind "?".
 

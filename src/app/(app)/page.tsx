@@ -554,6 +554,7 @@ function Bets() {
             whatIf={whatIf}
             games={games}
             days={days}
+            weekly={tab === 'all'}
             selected={selected}
             select={setPicked}
             settle={settle}

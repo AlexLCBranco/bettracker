@@ -30,7 +30,7 @@ import { linksForBets, siteMark, siteName, type GameLink } from '@/lib/gameLinks
 import { betTone, groupTone, resultTone, type Tone } from '@/lib/tone';
 import { TONE_BADGE, TONE_EDGE, TONE_INNER, TONE_RAIL, TONE_TEXT } from './tone';
 import { dayGames, type DayGame } from '@/lib/gamesInvolved';
-import { betResultLine, betsText, displayGame, dutchResultLine, legGames, legMarkets, type DayGroup } from '@/lib/table';
+import { betResultLine, betsText, displayGame, dutchResultLine, legGames, legMarkets, recordText, weekTotals, type DayGroup, type DayNet } from '@/lib/table';
 import type { Settler } from './useSettle';
 import { losingLegs, sharedLabel } from '@/lib/actuals';
 import { normalize } from '@/lib/autocomplete';
@@ -232,6 +232,8 @@ interface TableProps {
   /** BT-50: the days showing their games instead of their bets, and what a click on a game does. */
   games?: GamesControl;
   empty?: string;
+  /** BT-58: a subtotal row after each week (the All tab). */
+  weekly?: boolean;
 }
 
 export interface GamesControl {
@@ -246,7 +248,7 @@ export interface GamesControl {
  * two lines: the bet text (wraps, never cut) and a muted line with game, sport, market, book and tags. A dutch is a
  * summary row with one such block per split under it. A click selects a row (keyboard settling), a double click edits.
  */
-export function BetTable({ days, selected, select, settle, annotating, annotate, rollover, multi = NO_KEYS, desc = NO_DESC, whatIf = NO_WHATIF, games = NO_GAMES, empty = 'No bets yet. Type one in the quick-add line above.' }: TableProps) {
+export function BetTable({ days, selected, select, settle, annotating, annotate, rollover, multi = NO_KEYS, desc = NO_DESC, whatIf = NO_WHATIF, games = NO_GAMES, empty = 'No bets yet. Type one in the quick-add line above.', weekly = false }: TableProps) {
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [unitsView] = useUnitsView();
   const { names, gameLinks } = useApp();
@@ -261,6 +263,9 @@ export function BetTable({ days, selected, select, settle, annotating, annotate,
   if (!days.length) return <p className="py-10 text-center text-sm text-zinc-500">{empty}</p>;
   const th = 'sticky top-14 z-[2] bg-zinc-950 px-2 py-2 text-[11px] font-medium text-zinc-500 shadow-[inset_0_-1px_0_rgb(39_39_42)]';
   const row = { open, toggle, selected, multi, desc, whatIf, select, settle, annotating, annotate, rollover };
+  const weeks = weekly ? weekTotals(days) : null;
+  const netText = (n: DayNet) => (unitsView && n.units != null ? formatUnits(n.units, true) : formatMoney(n.value, n.money, true));
+  const netTone = (n: DayNet) => (n.money === 'hypothetical' ? HYPO : n.value > 0 ? 'text-emerald-400' : n.value < 0 ? 'text-red-400' : 'text-zinc-400');
 
   return (
     <div data-testid="bet-table-scroll">
@@ -288,7 +293,7 @@ export function BetTable({ days, selected, select, settle, annotating, annotate,
           </tr>
         </thead>
         <tbody>
-          {days.map((d) => (
+          {days.map((d, di) => (
             <Fragment key={`${d.date}-${rowKey(d.rows[0]!)}`}>
               <tr className="border-b border-zinc-800 bg-zinc-900/70" data-testid="day-header" data-date={d.date}>
                 <td colSpan={COLS} className="px-2 py-1.5">
@@ -300,13 +305,22 @@ export function BetTable({ days, selected, select, settle, annotating, annotate,
                       <DayLinks date={d.date} />
                       <GamesToggle on={games.days.has(d.date)} date={d.date} onClick={() => games.toggle(d.date)} />
                     </span>
-                    <span className="tabular-nums text-zinc-400" data-testid="day-totals">
+                    {/* BT-58: the day's record before its net; the net larger and bolder */}
+                    <span className="flex items-baseline gap-1.5 tabular-nums text-zinc-400" data-testid="day-totals">
                       {betsText(d.count)}
+                      {recordText(d.record) && (
+                        <>
+                          {' · '}
+                          <span className="text-zinc-300" data-testid="day-record">
+                            {recordText(d.record)}
+                          </span>
+                        </>
+                      )}
                       {d.nets.map((n) => (
                         <Fragment key={n.money}>
                           {' · '}
-                          <span className={`font-semibold ${n.money === 'hypothetical' ? HYPO : n.value > 0 ? 'text-emerald-400' : n.value < 0 ? 'text-red-400' : 'text-zinc-400'}`} data-testid={`day-net-${n.money}`}>
-                            {unitsView && n.units != null ? formatUnits(n.units, true) : formatMoney(n.value, n.money, true)}
+                          <span className={`text-sm font-bold ${netTone(n)}`} data-testid={`day-net-${n.money}`}>
+                            {netText(n)}
                           </span>
                         </Fragment>
                       ))}
@@ -335,6 +349,32 @@ export function BetTable({ days, selected, select, settle, annotating, annotate,
                   {desc.isOpen(rowKey(r), rowBets(r)) && <DescriptionRow rowKey={rowKey(r)} bets={rowBets(r)} cols={COLS} control={desc} />}
                 </Fragment>
               ))}
+              {weeks?.has(di) && (() => {
+                const w = weeks.get(di)!;
+                return (
+                  <tr className="border-b border-zinc-800 bg-zinc-950" data-testid="week-subtotal" data-week={w.from}>
+                    <td colSpan={COLS} className="px-2 py-1.5">
+                      <div className="flex items-center justify-between text-xs text-zinc-400">
+                        <span className="font-medium text-zinc-300">
+                          Week {formatDayMonth(w.from)} – {formatDayMonth(w.to)}
+                        </span>
+                        <span className="flex items-baseline gap-1.5 tabular-nums" data-testid="week-totals">
+                          {betsText(w.count)}
+                          {recordText(w.record) && <>{' · '}<span className="text-zinc-300">{recordText(w.record)}</span></>}
+                          {w.nets.map((n) => (
+                            <Fragment key={n.money}>
+                              {' · '}
+                              <span className={`text-sm font-bold ${netTone(n)}`} data-testid={`week-net-${n.money}`}>
+                                {netText(n)}
+                              </span>
+                            </Fragment>
+                          ))}
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })()}
             </Fragment>
           ))}
         </tbody>

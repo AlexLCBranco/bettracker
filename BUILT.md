@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-26
+- BT-58 — Bets table: day headers with a record, and weekly subtotals (v0.59.0)
+  Each day's header shows its W-L record and a bolder net, and on the All tab each week (Monday to Sunday) ends with a subtotal line.
 - BT-57 — Bets filters behind one Filters button, active ones as chips (v0.58.0)
   Only Search stays on screen; the other filters open from Filters, and each one in use shows as a chip with × to clear it.
 - BT-56 — Period switch on the Bets page: Today / 7d / 30d / Month / All (v0.57.0)
