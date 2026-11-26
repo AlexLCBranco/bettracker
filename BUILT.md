@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-26
+- BT-56 — Period switch on the Bets page: Today / 7d / 30d / Month / All (v0.57.0)
+  One click picks the period the headline tiles and the table show; typed From / To dates show it as Custom, and the choice is remembered.
 - BT-55 — Big headline tiles on the Bets page (v0.56.0)
   Net (with a small profit curve), Bankroll and Open sit at the top in large figures, and they stay the same whichever tab is open.
 - A gap between top-level bets on the Bets list (v0.55.1)

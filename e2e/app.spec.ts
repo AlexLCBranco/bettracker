@@ -1023,7 +1023,7 @@ test('BT-17–22: combo rows with legs and counts, same styling on every row, ti
   expect(one.type).toBe('solo');
 
   await page.goto('/');
-  await page.getByRole('radio', { name: 'All' }).click();
+  await page.getByRole('radiogroup', { name: 'Money shown' }).getByRole('radio', { name: 'All' }).click();
   await page.getByLabel('Search bets').fill(tag);
   const c = page.locator(`[data-bet-id="${combo.id}"]`);
   const s = page.locator(`[data-bet-id="${solo.id}"]`);

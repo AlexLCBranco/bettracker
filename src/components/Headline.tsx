@@ -12,10 +12,13 @@ import { BankrollBar } from './Bankroll';
 const tone = (n: number) => (n > 0 ? 'text-emerald-400' : n < 0 ? 'text-red-400' : 'text-zinc-100');
 const fmtOf = (g: HeadlineGroup) => (n: number, signed = false) => (g.units ? formatUnits(n, signed) : formatMoney(n, g.money, signed));
 
-export function Tile({ label, children, testId, className = '' }: { label: string; children: ReactNode; testId: string; className?: string }) {
+export function Tile({ label, children, testId, className = '', right }: { label: string; children: ReactNode; testId: string; className?: string; right?: ReactNode }) {
   return (
     <section className={`rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-3 ${className}`} data-testid={testId}>
-      <h2 className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">{label}</h2>
+      <div className="flex items-start justify-between gap-3">
+        <h2 className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">{label}</h2>
+        {right}
+      </div>
       {children}
     </section>
   );
@@ -86,11 +89,11 @@ export interface HeadlineProps {
   toSettle: number;
   openSettle(): void;
   unitsView: boolean;
-  /** Right of the tiles (BT-56's period switch). */
-  aside?: ReactNode;
+  /** In the Net tile's corner: BT-56's period switch. */
+  period?: ReactNode;
 }
 
-export function Headline({ groups, betCount, totalCount, toSettle, openSettle, unitsView, aside }: HeadlineProps) {
+export function Headline({ groups, betCount, totalCount, toSettle, openSettle, unitsView, period }: HeadlineProps) {
   const many = groups.length > 1;
   const allUnits = groups.every((g) => g.units);
   const pending = groups.reduce((n, g) => n + g.summary.pendingCount, 0);
@@ -101,7 +104,7 @@ export function Headline({ groups, betCount, totalCount, toSettle, openSettle, u
       data-units={allUnits ? 'true' : undefined}
       title={unitsView && !allUnits ? 'Shown in money: some of these bets have no unit size, or money types are mixed' : undefined}
     >
-      <Tile label="Net" testId="stat-net" className="min-w-[22rem] flex-[2]">
+      <Tile label="Net" testId="stat-net" className="min-w-[22rem] flex-[2]" right={period}>
         <div className={`mt-1 flex ${many ? 'gap-8' : ''}`}>
           {groups.map((g) => (
             <NetGroup key={g.money} g={g} many={many} />
@@ -131,7 +134,6 @@ export function Headline({ groups, betCount, totalCount, toSettle, openSettle, u
           </button>
         </p>
       </Tile>
-      {aside}
     </div>
   );
 }

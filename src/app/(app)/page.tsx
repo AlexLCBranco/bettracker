@@ -27,6 +27,8 @@ import { formatMoney } from '@/lib/money';
 import { byMoney } from '@/lib/scope';
 import { settleQueue, SETTLE_KEYS, sharedLegOf } from '@/lib/settle';
 import { headline } from '@/lib/headline';
+import { periodRange, type Period } from '@/lib/period';
+import { PeriodSwitch, usePeriod } from '@/components/Period';
 import { Headline } from '@/components/Headline';
 import { RESULT_LABEL, RESULTS, type Bet } from '@/lib/types';
 import { parseTab, moveKey, nextKey, rowKeys, tabBets, tabDays, TAB_LABEL, TAB_TITLE, TABS, type Tab } from '@/lib/view';
@@ -92,7 +94,16 @@ function Bets() {
 
   const today = todayISO();
   const scoped = useMemo(() => byMoney(all, scope), [all, scope]);
-  const filtered = useMemo(() => filterBets(scoped, { ...f, money: '', from: parseDateInput(fromText) ?? '', to: parseDateInput(toText) ?? '' }), [scoped, f, fromText, toText]);
+  // BT-56: the period picks the dates; typed From / To dates override it (the switch shows Custom)
+  const [period, setPeriod] = usePeriod();
+  const custom = !!(fromText.trim() || toText.trim());
+  const range = useMemo(() => (custom ? { from: parseDateInput(fromText) ?? '', to: parseDateInput(toText) ?? '' } : periodRange(period, today)), [custom, fromText, toText, period, today]);
+  const pickPeriod = (p: Period) => {
+    setPeriod(p);
+    setFromText('');
+    setToText('');
+  };
+  const filtered = useMemo(() => filterBets(scoped, { ...f, money: '', ...range }), [scoped, f, range]);
   // BT-50: a game picked from a day's games shows only the bets that include it (Esc or × clears it)
   const [gameFilter, setGameFilter] = useState<{ key: string; game: string } | null>(null);
   const [gameDays, setGameDays] = useState<ReadonlySet<string>>(new Set());
@@ -384,7 +395,7 @@ function Bets() {
   return (
     <div className="space-y-3">
       <h1 className="sr-only">Bets</h1>
-      <Headline groups={head} betCount={headCount} totalCount={totalCount} toSettle={counts.settle} openSettle={() => setTab('settle')} unitsView={unitsView} />
+      <Headline groups={head} betCount={headCount} totalCount={totalCount} toSettle={counts.settle} openSettle={() => setTab('settle')} unitsView={unitsView} period={<PeriodSwitch value={custom ? 'custom' : period} onChange={pickPeriod} />} />
 
       <div className="flex items-end gap-2" data-testid="filters">
         <F label="From" w="w-28">

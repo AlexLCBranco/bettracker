@@ -30,16 +30,6 @@ glance. Cause found in the code: everything has the same visual weight (one line
 fields always open, a crowded top bar). Build order: BT-55, BT-56, BT-57, BT-58, BT-59, BT-60.
 Rule for all six: the bet table's column alignment must not change (owner, 2026-11-24).
 
-### BT-56 — Bets page: period switch (Today / 7d / 30d / Month / All)
-**In short:** One click picks the period the headline tiles and the table show, instead of typing From and To dates.
-
-- A segmented switch next to the tiles: Today, 7d, 30d, Month (this calendar month), All. It drives the BT-55 tiles
-  and the table. Default: All (owner, 2026-11-26), and
-  remember the last choice (localStorage, like the money scope).
-- "Today" and day boundaries follow the app's day (ends at 5:00, BT-43, `src/lib/dates.ts`).
-- The From / To fields move into the Filters panel (BT-57) as "Custom"; typing there shows the switch as Custom.
-- Tests: unit tests for each period's date range around the 5:00 boundary and month ends; e2e for the switch.
-
 ### BT-57 — Bets page: filters behind one button, active ones as chips
 **In short:** Only Search stays visible; the other seven filters open from a "Filters" button, and any filter in use shows as a small removable chip.
 
