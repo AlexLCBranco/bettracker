@@ -101,4 +101,14 @@ describe('a cash-out never vanishes from the Pending / To settle tabs', () => {
     const b = bet({ dutchId: 'd1', result: 'lost', updatedAt: now });
     expect(tabBets(tabDays([a, b], 'settle', TODAY)).map((x) => x.id).sort()).toEqual([a.id, b.id].sort());
   });
+  it('leaves both tabs once its woulda won / lost is set', () => {
+    const done = bet({ result: 'cash-out', cashout: 111, stake: 100, updatedAt: now, wouldHave: 'lost' });
+    expect(tabBets(tabDays([done, open], 'pending', TODAY)).map((x) => x.id)).toEqual([open.id]);
+    expect(tabBets(tabDays([done, open], 'settle', TODAY)).map((x) => x.id)).toEqual([open.id]);
+  });
+  it('a settled shot whose cash-out has its woulda set leaves Pending', () => {
+    const b1 = bet({ rolloverId: 'r1', result: 'won', updatedAt: now });
+    const b2 = bet({ rolloverId: 'r1', result: 'cash-out', cashout: 185, updatedAt: now, wouldHave: 'lost' });
+    expect(tabBets(tabDays([b1, b2], 'pending', TODAY))).toEqual([]);
+  });
 });

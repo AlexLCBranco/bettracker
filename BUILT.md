@@ -2,6 +2,10 @@
 
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
+## 2026-11-26
+- Shots and dutches read as one block; a cash-out leaves Pending once its woulda is set (v0.49.0)
+  A rollover's or dutch's row is a shaded header with its tone rail running down every bet under it (each bet's own result as a thin inner edge), a dutch leg's splits inside a shot are bracketed one level deeper, and a cash-out with W / L woulda set leaves the Pending and To settle tabs.
+
 ## 2026-11-25
 - Cash-outs never vanish from the Pending and To settle tabs (v0.48.1)
   A bet cashed out today stays on the tab it was settled from, showing its cash-out amount (and the W / L "woulda" buttons), also after a reload; the tab counts still count only pending bets.

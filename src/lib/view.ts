@@ -25,9 +25,10 @@ const due = (b: Bet) => b.gameDate || b.placedDate;
 
 /**
  * A bet cashed out today (by its last save, in the app's day): it stays on the Pending and To settle tabs, so a
- * cash-out never makes its row vanish from where it was settled (W / L "woulda" can still be set there).
+ * cash-out never makes its row vanish from where it was settled (W / L "woulda" can still be set there). Once its
+ * woulda won / lost is set there is nothing left to do on it, and it leaves.
  */
-export const cashedOutToday = (b: Bet, today: string) => b.result === 'cash-out' && !!b.updatedAt && !Number.isNaN(Date.parse(b.updatedAt)) && todayISO(new Date(b.updatedAt)) === today;
+export const cashedOutToday = (b: Bet, today: string) => b.result === 'cash-out' && !b.wouldHave && !!b.updatedAt && !Number.isNaN(Date.parse(b.updatedAt)) && todayISO(new Date(b.updatedAt)) === today;
 const keptRow = (r: BetRow, today: string) => rowBets(r).some((b) => cashedOutToday(b, today));
 
 /**

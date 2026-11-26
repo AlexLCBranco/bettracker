@@ -1038,7 +1038,9 @@ test('BT-17–22: combo rows with legs and counts, same styling on every row, ti
   for (const row of [c, s, dutch]) await expect(row.getByTestId('profit').locator('span')).toHaveClass(/font-semibold/);
   await expect(c.getByRole('button', { name: 'Edit Stake' })).toHaveCSS('color', await dutch.getByTestId('dutch-stake').locator('span').evaluate((e) => getComputedStyle(e).color));
   const bg = (l: typeof c) => l.evaluate((e) => getComputedStyle(e).backgroundColor);
-  expect(await bg(s)).toBe(await bg(dutch));
+  // the same tint on every bet row whatever its type; a dutch's own row is a shaded group header
+  expect(await bg(s)).toBe(await bg(c));
+  expect(await bg(dutch)).not.toBe(await bg(s));
   for (const row of [c, s]) await expect(row.getByRole('button', { name: 'Mark Won' })).toHaveCount(0);
   await expect(page.locator(`[data-bet-id="${one.id}"]`).getByRole('button', { name: 'Mark Won' })).toBeVisible();
 
@@ -1115,12 +1117,16 @@ test('BT-23 / BT-26: bets grouped by day, one pill per row, the muted line, spli
   await expect(page.getByTestId('day-totals')).toHaveText(['1 bet', '6 bets · +R$ 100,00 · -H$ 50,00']);
   await expect(page.getByTestId('day-net-hypothetical')).toHaveClass(/violet/);
 
-  // one pill per row, no row tint
+  // one pill per row, no result tint (a dutch's row is a group header, the same shade whatever its result)
   await page.mouse.move(0, 0);
+  const heads = new Set<string>();
   for (const row of await top.all()) {
     await expect(row.getByTestId('result')).toHaveCount(1);
-    expect(await row.evaluate((e) => getComputedStyle(e).backgroundColor)).toBe('rgba(0, 0, 0, 0)');
+    const bg = await row.evaluate((e) => getComputedStyle(e).backgroundColor);
+    if ((await row.getAttribute('data-testid')) === 'dutch-row') heads.add(bg);
+    else expect(bg).toBe('rgba(0, 0, 0, 0)');
   }
+  expect(heads.size).toBe(1);
   const bet = (text: string) => page.getByTestId('bet-row').filter({ hasText: `${tag} ${text}` });
   const dutch = page.locator(`[data-dutch-id="${d}"]`);
 

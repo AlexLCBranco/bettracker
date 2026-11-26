@@ -28,7 +28,7 @@ import { GameTarget } from './GameEditor';
 import { isNoBrainer, NB_TINT, NoBrainerButton, NoBrainerChip, useToggleNoBrainer } from './NoBrainer';
 import { linksForBets, siteMark, siteName, type GameLink } from '@/lib/gameLinks';
 import { betTone, groupTone, resultTone, type Tone } from '@/lib/tone';
-import { TONE_BADGE, TONE_EDGE, TONE_TEXT } from './tone';
+import { TONE_BADGE, TONE_EDGE, TONE_INNER, TONE_RAIL, TONE_TEXT } from './tone';
 import { dayGames, type DayGame } from '@/lib/gamesInvolved';
 import { betResultLine, betsText, displayGame, dutchResultLine, legGames, legMarkets, type DayGroup } from '@/lib/table';
 import type { Settler } from './useSettle';
@@ -68,6 +68,10 @@ function TierChip({ odds, banked }: { odds: number; banked?: boolean }) {
 
 /** BT-26: rows as tall as they need; the selected row (keyboard settling) is tinted. */
 const ROW = 'group scroll-mt-28 border-b border-zinc-900 hover:bg-zinc-900/50 data-[selected]:bg-emerald-500/[0.07] data-[multi]:bg-sky-500/[0.12] data-[multi]:hover:bg-sky-500/[0.16]';
+/** A dutch's or rollover's own row: a header over the bets under it, set apart from the rows above. */
+const GROUP_HEAD = 'bg-zinc-900/60 border-t border-t-zinc-700';
+/** The last row of a group closes it. */
+const GROUP_END = 'border-b-zinc-700';
 const COLS = 7;
 /** The muted second line of the Bet cell: one line, cut with "…" (full text on hover). */
 const SUB = 'text-[11px] leading-5 text-zinc-500';
@@ -103,8 +107,8 @@ function Chevron({ expanded, noun, onClick }: { expanded: boolean; noun: string;
 function Connector({ last }: { last: boolean }) {
   return (
     <>
-      <span aria-hidden data-testid="connector" className={`absolute left-[15px] top-0 border-l border-zinc-700 ${last ? 'h-4' : 'h-full'}`} />
-      <span aria-hidden className="absolute left-[15px] top-4 w-2.5 border-t border-zinc-700" />
+      <span aria-hidden data-testid="connector" className={`absolute left-[15px] top-0 border-l border-zinc-500 ${last ? 'h-4' : 'h-full'}`} />
+      <span aria-hidden className="absolute left-[15px] top-4 w-[17px] border-t border-zinc-500" />
     </>
   );
 }
@@ -470,8 +474,8 @@ function DutchGroup({ bets, dutchId, open, toggle, selected, multi, desc, select
   };
   return (
     <>
-      <tr className={ROW} data-testid="dutch-row" data-dutch-id={dutchId} data-key={key} data-selected={isSel || undefined} data-multi={multi.has(key) || undefined} data-tone={tone} data-money={money} onClick={() => select(key)}>
-        <td className={`${TONE_EDGE[tone]}`} />
+      <tr className={`${ROW} ${GROUP_HEAD}`} data-testid="dutch-row" data-dutch-id={dutchId} data-key={key} data-selected={isSel || undefined} data-multi={multi.has(key) || undefined} data-tone={tone} data-money={money} onClick={() => select(key)}>
+        <td className={TONE_RAIL[tone]} />
         <td className={`${CELL} ${nb ? NB_TINT : ''}`} data-no-brainer={nb || undefined}>
           <div className={`${TEXT} flex items-center gap-1.5`} data-testid="bet-text" title={names}>
             <span data-testid="type">Dutch ×{bets.length}</span>
@@ -557,6 +561,7 @@ function DutchGroup({ bets, dutchId, open, toggle, selected, multi, desc, select
           desc={desc}
           rollover={rollover}
           split={{
+            groupTone: tone,
             group: bets,
             sharedLabel: label,
             index: i,
@@ -596,7 +601,7 @@ function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, multi, d
   const last = bets.at(-1)!;
   // BT-54: a dutch placed as a leg is one leg; its splits are settled on their own rows
   const legs = chainLegs(bets);
-  const legOf = new Map(legs.flatMap((l, i) => l.map((b) => [b.id, { n: i + 1, dutch: l.length > 1 }] as const)));
+  const legOf = new Map(legs.flatMap((l, i) => l.map((b, j) => [b.id, { n: i + 1, dutch: l.length > 1, firstInLeg: j === 0, lastInLeg: j === l.length - 1 }] as const)));
   const pendingBet = bets.find((b) => b.result === 'pending' && !legOf.get(b.id)!.dutch);
   const names = bets.map((b) => tidyText(b.betText || betLabel(b), nameCasing)).join(' → ');
   const books = [...new Set(bets.map((b) => b.book).filter(Boolean))];
@@ -614,8 +619,8 @@ function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, multi, d
   const router = useRouter();
   return (
     <>
-      <tr className={ROW} data-testid="rollover-row" data-rollover-id={rolloverId} data-key={key} data-selected={isSel || undefined} data-multi={multi.has(key) || undefined} data-tone={tone} data-money={money} data-outcome={s.outcome} onClick={() => select(key)}>
-        <td className={TONE_EDGE[tone]} />
+      <tr className={`${ROW} ${GROUP_HEAD}`} data-testid="rollover-row" data-rollover-id={rolloverId} data-key={key} data-selected={isSel || undefined} data-multi={multi.has(key) || undefined} data-tone={tone} data-money={money} data-outcome={s.outcome} onClick={() => select(key)}>
+        <td className={TONE_RAIL[tone]} />
         <td className={CELL}>
           <div className={`${TEXT} flex items-center gap-1.5`} data-testid="bet-text" title={names}>
             {ladder ? (
@@ -844,7 +849,7 @@ function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, multi, d
           multi={multi}
           desc={desc}
           rollover={rollover}
-          link={{ index: i, leg: legOf.get(b.id)!, last: i === bets.length - 1 && !open.has(b.id), chainKey: key, chain: bets, ladder, current: ladder && (b.result === 'pending' || (isOpen && i === bets.length - 1)) }}
+          link={{ groupTone: tone, index: i, leg: legOf.get(b.id)!, last: i === bets.length - 1 && !open.has(b.id), chainKey: key, chain: bets, ladder, current: ladder && (b.result === 'pending' || (isOpen && i === bets.length - 1)) }}
         />
       ))}
       {/* BT-49: the "what if" box opens under the shot, never widening a column */}
@@ -874,7 +879,9 @@ function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, multi, d
 interface ChainLink {
   index: number;
   /** BT-54: the leg it is in (a dutch leg's splits share one), shown "Bet 2 · dutch". */
-  leg: { n: number; dutch: boolean };
+  leg: { n: number; dutch: boolean; firstInLeg: boolean; lastInLeg: boolean };
+  /** The shot's tone: its rail runs down the left of every bet under it. */
+  groupTone: Tone;
   last: boolean;
   chainKey: string;
   chain: Bet[];
@@ -884,6 +891,8 @@ interface ChainLink {
 }
 
 interface Split {
+  /** The dutch's tone: its rail runs down the left of every split. */
+  groupTone: Tone;
   index: number;
   last: boolean;
   /** The dutch's key: the split is shown selected with it. */
@@ -914,6 +923,9 @@ function BetRow({ b, open, toggle, selected, multi, desc, select, settle, split,
   const tone = betTone(b);
   const key = `bet:${b.id}`;
   const indent = nested || !!link;
+  // a split or a shot's bet: under its group's row, on the group's rail
+  const child = indent;
+  const subDutch = !!link?.leg.dutch;
   const isSel = selected === key || (nested && selected === split.dutchKey) || (!!link && selected === link.chainKey);
   const inMulti = multi.has(key) || (nested && multi.has(split.dutchKey)) || (!!link && multi.has(link.chainKey));
   // BT-29: Bank on a won or positive cash-out bet or dutch split (in a shot only its last bet, once closed)
@@ -947,8 +959,8 @@ function BetRow({ b, open, toggle, selected, multi, desc, select, settle, split,
   };
   return (
     <>
-      <tr className={ROW} data-testid="bet-row" data-bet-id={b.id} data-key={key} data-nested={nested || undefined} data-split-of={nested ? split.dutchKey.slice(6) : undefined} data-selected={isSel || undefined} data-multi={inMulti || undefined} data-tone={tone} data-money={b.money} onClick={() => select(key)}>
-        <td className={`relative px-1 align-top ${TONE_EDGE[tone]}`}>
+      <tr className={`${ROW} ${child && (split?.last ?? link!.last) ? GROUP_END : ''}`} data-testid="bet-row" data-bet-id={b.id} data-child={child || undefined} data-key={key} data-nested={nested || undefined} data-split-of={nested ? split.dutchKey.slice(6) : undefined} data-selected={isSel || undefined} data-multi={inMulti || undefined} data-tone={tone} data-money={b.money} onClick={() => select(key)}>
+        <td className={`relative px-1 align-top ${child ? TONE_RAIL[(split ?? link)!.groupTone] : TONE_EDGE[tone]}`}>
           {nested && <Connector last={split.last} />}
           {link && <Connector last={link.last} />}
           {combo && (
@@ -957,7 +969,14 @@ function BetRow({ b, open, toggle, selected, multi, desc, select, settle, split,
             </span>
           )}
         </td>
-        <td className={`${CELL} ${indent ? 'pl-5' : ''} ${b.noBrainer && !nested ? NB_TINT : ''}`} data-no-brainer={(b.noBrainer && !nested) || undefined}>
+        <td className={`${CELL} ${child ? `relative ${TONE_INNER[tone]} ${subDutch ? 'pl-8' : 'pl-3'}` : ''} ${b.noBrainer && !nested ? NB_TINT : ''}`} data-no-brainer={(b.noBrainer && !nested) || undefined}>
+          {/* BT-54: a dutch leg's splits in a shot: a second bracket joins them */}
+          {subDutch && (
+            <>
+              <span aria-hidden data-testid="sub-connector" className={`absolute left-3 border-l border-zinc-500 ${link!.leg.firstInLeg ? 'top-4' : 'top-0'} ${link!.leg.lastInLeg ? 'h-0' : 'bottom-0'}`} />
+              <span aria-hidden className="absolute left-3 top-4 w-3.5 border-t border-zinc-500" />
+            </>
+          )}
           <div className="flex items-start gap-1.5">
             {link && (
               <span className={`mt-px shrink-0 text-[10px] leading-4 ${link.current ? 'rounded bg-indigo-500/20 px-1 font-semibold text-indigo-200' : 'text-zinc-500'}`} data-testid="chain-label" data-current={link.current || undefined}>

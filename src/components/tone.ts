@@ -18,6 +18,21 @@ export const TONE_EDGE: Record<Tone, string> = {
   pending: 'border-l-[3px] border-l-zinc-800',
 };
 
+/**
+ * A dutch's or rollover's rail: the group's tone down the left of its row and every row under it, so the bets that
+ * belong together read as one block (a pending group's rail still shows).
+ */
+export const TONE_RAIL: Record<Tone, string> = { ...TONE_EDGE, pending: 'border-l-[3px] border-l-zinc-600' };
+
+/** A bet's own tone inside a group: a thin edge where its indented cell starts (the outer edge is the group's). */
+export const TONE_INNER: Record<Tone, string> = {
+  win: 'border-l-2 border-l-emerald-500/70',
+  loss: 'border-l-2 border-l-red-500/70',
+  partial: 'border-l-2 border-l-amber-400/70',
+  neutral: 'border-l-2 border-l-zinc-500/70',
+  pending: 'border-l-2 border-l-zinc-700',
+};
+
 
 /** Text colour per tone (signs, profits, leg names). */
 export const TONE_TEXT: Record<Tone, string> = {
