@@ -38,18 +38,6 @@ period, and no way from a number to the bets behind it. Build order: BT-67, BT-6
 (the tabs first, so the other items land in their final place). Every rule in CLAUDE.md on what counts as one bet,
 on bonus money and on PP batches staying out of Analytics still holds.
 
-### BT-63 — Analytics: period switch, with change against the previous period
-**In short:** The same Today / 7d / 30d / Month / All switch as the Bets page, and the headline numbers show how they moved against the period before.
-
-- Reuse the BT-56 switch and its date ranges (one shared helper and one remembered choice for both pages). It
-  applies to the whole Analytics page: chart, headline, every breakdown and section.
-- Under each BT-62 headline number, a small "vs previous" figure: the same-length period right before (7d: the 7
-  days before; Month: the previous calendar month). Not shown on All, or when the previous period has no settled
-  bets.
-- If BT-56 is not built yet, build the shared switch here.
-- Tests: unit tests for the previous-period ranges (month lengths, the 5:00 day boundary of BT-43); e2e that
-  changing the period changes the tables.
-
 ### BT-64 — Analytics: breakdowns by no brainer and by label
 **In short:** Two new "break down by" choices: no brainer or not, and each label he has put on bets.
 

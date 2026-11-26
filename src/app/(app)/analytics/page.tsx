@@ -20,6 +20,11 @@ import { AnalyticsHeadline, type AnalyticsGroup } from '@/components/Headline';
 import { moneyGroups } from '@/lib/headline';
 import { bestWorst } from '@/lib/bestWorst';
 import { summarize } from '@/lib/stats';
+import { filterBets, NO_FILTERS } from '@/lib/filters';
+import { periodRange, previousRange } from '@/lib/period';
+import { todayISO } from '@/lib/dates';
+import { PeriodSwitch, usePeriod } from '@/components/Period';
+import { vsText } from '@/lib/headline';
 
 const COLUMNS: { key: SortKey; label: string; title?: string }[] = [
   { key: 'bets', label: 'Bets' },
@@ -54,7 +59,13 @@ function Analytics() {
   const setTab = (x: Tab) => router.replace(x === 'overview' ? '/analytics' : `/analytics?tab=${x}`, { scroll: false });
   // BT-14: real and hypothetical money never mix unless "Both" is picked
   const [scope] = useMoneyScope();
-  const money = useMemo(() => byMoney(all, scope), [all, scope]);
+  const scoped = useMemo(() => byMoney(all, scope), [all, scope]);
+  // BT-63: the period (shared with the Bets page and remembered) applies to the whole page
+  const [period, setPeriod] = usePeriod();
+  const today = todayISO();
+  const money = useMemo(() => filterBets(scoped, { ...NO_FILTERS, ...periodRange(period, today) }), [scoped, period, today]);
+  const prevRange = previousRange(period, today);
+  const previous = useMemo(() => (prevRange ? filterBets(scoped, { ...NO_FILTERS, ...prevRange }) : null), [scoped, prevRange?.from, prevRange?.to]); // eslint-disable-line react-hooks/exhaustive-deps
   // BT-38: the units view counts every amount in units (ROI and win rate do not change), when all bets have a unit size
   const [unitsView] = useUnitsView();
   const unitBets = useMemo(() => (unitsView ? asUnitBets(money) : null), [unitsView, money]);
@@ -79,9 +90,13 @@ function Analytics() {
       moneyGroups(money, scope).map((g) => {
         const u = unitsView ? asUnitBets(g.bets) : null;
         const counted = u ?? g.bets;
-        return { money: g.money, units: !!u, summary: summarize(counted), ...bestWorst(counted) };
+        // BT-63: the same money type over the previous period, counted the same way (none without settled bets)
+        const prevBets = previous ? moneyGroups(previous, scope).find((p) => p.money === g.money)?.bets ?? [] : [];
+        const prevUnits = unitsView ? asUnitBets(prevBets) : null;
+        const comparable = prevBets.some((b) => b.result !== 'pending') && !!prevUnits === !!u;
+        return { money: g.money, units: !!u, summary: summarize(counted), ...bestWorst(counted), previous: comparable ? summarize(prevUnits ?? prevBets) : null };
       }),
-    [money, scope, unitsView],
+    [money, previous, scope, unitsView],
   );
 
   if (!loaded) return <p className="py-10 text-center text-sm text-zinc-500">Loading…</p>;
@@ -93,6 +108,8 @@ function Analytics() {
           <h1 className="text-2xl font-bold">Analytics</h1>
           <p className="text-sm text-zinc-400">Where your profit comes from. Profit, ROI and win rate count settled bets only.</p>
         </div>
+        {/* BT-63: the same period switch as the Bets page, for the whole page */}
+        <PeriodSwitch value={period} onChange={setPeriod} />
       </div>
 
       <div role="tablist" aria-label="Sections" className="flex items-center gap-1 border-b border-zinc-800">
@@ -111,7 +128,17 @@ function Analytics() {
 
       {tab === 'overview' && (
         <>
-          <AnalyticsHeadline groups={head} />
+          <AnalyticsHeadline
+            groups={head}
+            vs={(g, k) => {
+              const v = vsText(g, k);
+              return v && (
+                <p className={`mt-1 text-[11px] tabular-nums ${v.tone}`} data-testid={`an-${k === 'winRate' ? 'winrate' : k}-vs`} title={v.title}>
+                  {v.text}
+                </p>
+              );
+            }}
+          />
           {/* BT-26: moved here from the dashboard */}
           <section className="card p-5">
             <h2 className="mb-3 font-semibold">Performance Over Time</h2>

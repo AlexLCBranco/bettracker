@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { headline, moneyGroups, sparkPath } from '@/lib/headline';
+import { headline, moneyGroups, sparkPath, vsText } from '@/lib/headline';
 import { filterBets, NO_FILTERS } from '@/lib/filters';
 import { tabBets, tabDays } from '@/lib/view';
 import { byMoney } from '@/lib/scope';
@@ -55,5 +55,20 @@ describe('BT-55 headline', () => {
     expect(headline(real(), 'real', false)[0]!.curve).toEqual([100, 50]);
     expect(sparkPath([], 10, 10)).toBe('');
     expect(sparkPath([10, -10], 20, 20)).toBe('M0.0,10.0 L10.0,0.0 L20.0,20.0');
+  });
+});
+
+describe('BT-63 vs previous', () => {
+  const s = (over: Partial<ReturnType<typeof headline>[number]['summary']>) => ({ ...headline([], 'real', false)[0]!.summary, ...over });
+  it('money, points and counts against the previous period', () => {
+    const g = { money: 'real' as const, units: false, summary: s({ netProfit: 120, roi: 0.25, winRate: 0.6, betCount: 7 }), previous: s({ netProfit: 100, roi: 0.3, winRate: 0.6, betCount: 4 }) };
+    expect(vsText(g, 'net')).toMatchObject({ text: '▲ +R$ 20,00 vs previous', title: 'Previous period: R$ 100,00' });
+    expect(vsText(g, 'roi')).toMatchObject({ text: '▼ -5.0 pp vs previous', title: 'Previous period: 30.0%' });
+    expect(vsText(g, 'winRate')?.text).toBe('= 0.0 pp vs previous');
+    expect(vsText(g, 'bets')?.text).toBe('▲ +3 vs previous');
+  });
+  it('nothing to compare: none', () => {
+    expect(vsText({ money: 'real', units: false, summary: s({}), previous: null }, 'net')).toBeNull();
+    expect(vsText({ money: 'real', units: false, summary: s({ roi: null }), previous: s({ roi: 0.1 }) }, 'roi')).toBeNull();
   });
 });

@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-26
+- BT-63 — Analytics: period switch, with change against the previous period (v0.65.0)
+  Analytics has the same Today / 7d / 30d / Month / All switch as the Bets page (one remembered choice), and the headline numbers show how they moved against the period before.
 - BT-62 — Analytics: headline row (v0.64.0)
   The Overview tab opens with Net, ROI, Win rate and Bets (the same figures as the Bets page) and names the best and worst segment across sport, market, book, type and situation.
 - BT-67 — Analytics: sections as tabs (v0.63.0)
