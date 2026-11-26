@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-26
+- BT-55 — Big headline tiles on the Bets page (v0.56.0)
+  Net (with a small profit curve), Bankroll and Open sit at the top in large figures, and they stay the same whichever tab is open.
 - A gap between top-level bets on the Bets list (v0.55.1)
   Solos, dutches and shots are spaced apart; the bets inside a dutch or shot still sit together.
 - The Pending tab becomes Upcoming; To settle, Upcoming and Banked never repeat a bet (v0.55.0)

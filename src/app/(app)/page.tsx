@@ -12,7 +12,6 @@ import { BetTable } from '@/components/BetTable';
 import { DateField } from '@/components/BetFormModal';
 import { DataTransfer } from '@/components/DataTransfer';
 import { useMoneyScope, useUnitsView } from '@/components/Money';
-import { asUnitBets, formatUnits } from '@/lib/units';
 import { isTyping, isUndoKey } from '@/components/Shell';
 import { useSettle } from '@/components/useSettle';
 import { useRollover } from '@/components/useRollover';
@@ -27,7 +26,8 @@ import type { GamesControl } from '@/components/BetTable';
 import { formatMoney } from '@/lib/money';
 import { byMoney } from '@/lib/scope';
 import { settleQueue, SETTLE_KEYS, sharedLegOf } from '@/lib/settle';
-import { formatPercent, summarize } from '@/lib/stats';
+import { headline } from '@/lib/headline';
+import { Headline } from '@/components/Headline';
 import { RESULT_LABEL, RESULTS, type Bet } from '@/lib/types';
 import { parseTab, moveKey, nextKey, rowKeys, tabBets, tabDays, TAB_LABEL, TAB_TITLE, TABS, type Tab } from '@/lib/view';
 
@@ -71,7 +71,7 @@ const HELP: [string, string][] = [
 const DUTCH_KEYS_HELP = 'A dutch settles with 1-9 to toggle the splits that won, then Enter; 0 (none won), V (void all) or S (shared leg lost).';
 
 /**
- * BT-26: the home page. Stats strip, one row of filters, All / To settle / Upcoming / Banked tabs and the bet table. Settling
+ * BT-26: the home page. Headline tiles (BT-55), one row of filters, All / To settle / Upcoming / Banked tabs and the bet table. Settling
  * works from the keyboard on the selected row in any tab, as fast as the old Settle queue: after a settle the next row
  * is selected.
  */
@@ -114,10 +114,11 @@ function Bets() {
   const shown = useMemo(() => tabBets(days), [days]);
   const keys = useMemo(() => rowKeys(days), [days]);
   const counts = useMemo(() => ({ upcoming: rowKeys(tabDays(filtered, 'upcoming', today, false)).length, banked: rowKeys(tabDays(filtered, 'banked', today)).length, settle: settleQueue(filtered, today).length }), [filtered, today]);
-  // BT-38: in the units view the strip counts units, when every bet shown has a unit size and one money type
+  // BT-55: the headline tiles count the period and the filters (the game filter too), never the tab
   const [unitsView] = useUnitsView();
-  const unitBets = useMemo(() => (unitsView ? asUnitBets(shown) : null), [unitsView, shown]);
-  const s = summarize(unitBets ?? shown);
+  const headBets = useMemo(() => (gameFilter ? tabBets(daysWithGame(tabDays(filtered, 'all', today), gameFilter.key)) : filtered), [filtered, gameFilter, today]);
+  const head = useMemo(() => headline(headBets, scope, unitsView), [headBets, scope, unitsView]);
+  const headCount = countBets(headBets).count;
   const totalCount = countBets(scoped).count;
 
   // selection: a row key, or a dutch split's "bet:<id>"; the To settle tab starts on its first row, like the old queue
@@ -380,37 +381,10 @@ function Bets() {
     if (selected) document.querySelector(`[data-key="${selected}"]`)?.scrollIntoView({ block: 'nearest' });
   }, [selected]);
 
-  const fmt = (n: number, signed = false) => (unitBets ? formatUnits(n, signed) : formatMoney(n, scope, signed));
-  const tone = (n: number) => (n > 0 ? 'text-emerald-400' : n < 0 ? 'text-red-400' : 'text-zinc-200');
-
   return (
     <div className="space-y-3">
       <h1 className="sr-only">Bets</h1>
-      <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1 rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 text-xs text-zinc-400" data-testid="stats" data-units={unitBets ? 'true' : undefined} title={unitsView && !unitBets ? 'Shown in money: some of these bets have no unit size, or money types are mixed' : undefined}>
-        <Stat label="Net" testId="stat-net" value={<span className={tone(s.netProfit)}>{fmt(s.netProfit, true)}</span>} sub={`on ${fmt(s.settledStake)} settled`} />
-        <Stat label="ROI" testId="stat-roi" value={<span className={tone(s.roi ?? 0)}>{formatPercent(s.roi, true)}</span>} />
-        <Stat label="Wagered" testId="stat-wagered" value={fmt(s.totalWagered)} sub={`${s.betCount} of ${totalCount} ${totalCount === 1 ? 'bet' : 'bets'}`} />
-        <Stat label="Win rate" testId="stat-winrate" value={formatPercent(s.winRate)} sub={`${s.wins}W / ${s.losses}L`} />
-        {/* BT-33: bonus bets: the bonus spent and the real money it turned into */}
-        {(s.bonusSpent > 0 || s.bonusPending > 0) && (
-          <Stat
-            label="Bonus"
-            testId="stat-bonus"
-            value={<span className="text-amber-300">{formatMoney(s.bonusSpent, 'bonus')}</span>}
-            sub={`spent · won ${formatMoney(s.bonusWon, 'real')} · converted ${formatPercent(s.bonusConverted)}${s.bonusPending > 0 ? ` · ${formatMoney(s.bonusPending, 'bonus')} pending` : ''}`}
-          />
-        )}
-        <Stat
-          label="Pending"
-          testId="stat-pending"
-          value={
-            <button className="hover:underline" onClick={() => setTab('settle')} title="Open the To settle tab">
-              {s.pendingCount}
-            </button>
-          }
-          sub={fmt(s.pendingAmount)}
-        />
-      </div>
+      <Headline groups={head} betCount={headCount} totalCount={totalCount} toSettle={counts.settle} openSettle={() => setTab('settle')} unitsView={unitsView} />
 
       <div className="flex items-end gap-2" data-testid="filters">
         <F label="From" w="w-28">
@@ -549,18 +523,6 @@ function Bets() {
       {marquee && <div aria-hidden className="pointer-events-none fixed z-40 rounded-sm border border-sky-400/70 bg-sky-400/10" style={marquee} data-testid="marquee" />}
       {multiActive && <BulkBar rows={multiRows} clear={() => setMulti(new Set())} fmt={(n, signed) => formatMoney(n, scope, signed)} />}
       {multiActive && <div aria-hidden className="h-16" />}
-    </div>
-  );
-}
-
-function Stat({ label, value, sub, testId }: { label: string; value: ReactNode; sub?: string; testId: string }) {
-  return (
-    <div className="flex items-baseline gap-1.5" data-testid={testId}>
-      <span>{label}</span>
-      <span className="text-sm font-semibold tabular-nums text-zinc-100" data-testid={`${testId}-value`}>
-        {value}
-      </span>
-      {sub && <span className="text-zinc-500">{sub}</span>}
     </div>
   );
 }

@@ -30,24 +30,6 @@ glance. Cause found in the code: everything has the same visual weight (one line
 fields always open, a crowded top bar). Build order: BT-55, BT-56, BT-57, BT-58, BT-59, BT-60.
 Rule for all six: the bet table's column alignment must not change (owner, 2026-11-24).
 
-### BT-55 — Bets page: big headline tiles instead of the stats strip
-**In short:** The thin line of small stats becomes a few big tiles that say how he is doing, and they no longer change when he switches tab.
-
-- Replace the `data-testid="stats"` strip in `src/app/(app)/page.tsx` with a row of tiles (big number, small label,
-  small sub line), in this order: **Net** for the chosen period (BT-56; green / red, with a small sparkline of
-  cumulative profit over that period, same numbers as `ProfitChart`), **Bankroll** (what `BankrollBar` shows now,
-  per money type; click or M inserts money; `BankrollBar` leaves the top bar), **Open** (pending stake, with the
-  to-settle count as a button that opens the To settle tab).
-- ROI, win rate (with W / L), wagered and the bonus numbers become small secondary text under the Net tile, not
-  tiles of their own. The bonus text is short labels, not a sentence.
-- The tiles count the chosen period and the filters, never the tab: on To settle / Upcoming / Banked they show the
-  same numbers as on All. (Today `summarize(shown)` follows the tab, so Net and ROI go blank there.)
-- Money scope "All": never one summed "R$+H$" headline. Show real and hypothetical side by side in the Net tile,
-  like the day headers already do (`d.nets`).
-- Units view (BT-38) keeps working in the tiles, with the same fallback to money as today.
-- Tests: unit tests for the period + filter summary being independent of the tab and for the split by money type;
-  e2e that the tiles hold the same values on every tab, and update the specs that read `stat-*` test ids.
-
 ### BT-56 — Bets page: period switch (Today / 7d / 30d / Month / All)
 **In short:** One click picks the period the headline tiles and the table show, instead of typing From and To dates.
 

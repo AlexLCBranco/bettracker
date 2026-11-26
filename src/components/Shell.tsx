@@ -135,8 +135,8 @@ function Frame({ children }: { children: ReactNode }) {
           {/* BT-26: one Real / Hypothetical / Both switch for every page */}
           <MoneyScopeSwitch scope={scope} onChange={setScope} />
           <UnitsToggle on={unitsView} onChange={setUnitsView} />
-          {/* BT-33: what you have now, per money type */}
-          <BankrollBar />
+          {/* BT-33: what you have now, per money type; BT-55: a tile on the Bets page instead */}
+          {path !== '/' && <BankrollBar />}
           {/* money won and banked, waiting for its next bet */}
           <BankedBar />
           <nav className="flex items-center gap-4 text-sm">

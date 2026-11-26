@@ -984,7 +984,9 @@ test('BT-14: hypothetical money (H$): quick-add and full form, never in Real tot
   await money.getByRole('radio', { name: 'All' }).click();
   await expect(page.locator(`[data-bet-id="${hypo.id}"]`).getByRole('button', { name: 'Edit Stake' })).toHaveText('H$ 1.000,00');
   await expect(page.locator(`[data-bet-id="${hypo.id}"]`).getByTestId('profit')).toHaveText('+H$ 2.000,00');
-  await expect(net).toHaveText('+R$+H$ 2.100,00');
+  // BT-55: All shows real and hypothetical side by side, never summed
+  await expect(page.getByTestId('stat-net-real-value')).toHaveText('+R$ 100,00');
+  await expect(page.getByTestId('stat-net-hypothetical-value')).toHaveText('+H$ 2.000,00');
   await money.getByRole('radio', { name: 'Hypothetical H$' }).click();
   await expect(page.locator(`[data-bet-id="${real.id}"]`)).toHaveCount(0);
   await expect(page.locator('[data-money="hypothetical"]').filter({ hasText: tag })).toHaveCount(3);
@@ -1419,7 +1421,7 @@ test('BT-26: one Bets page: stats strip, filters with ⋯ and ?, tabs, the money
   const money = page.getByRole('banner').getByRole('radiogroup', { name: 'Money shown' });
   await money.getByRole('radio', { name: 'Real R$' }).click();
 
-  // Real only: the H$ bet is not shown; the strip follows filters and tab
+  // Real only: the H$ bet is not shown; the tiles follow the filters (BT-55: never the tab)
   await expect(page.getByTestId('bet-row')).toHaveCount(2);
   await expect(page.getByTestId('stat-net-value')).toHaveText('+R$ 100,00');
   await expect(page.getByTestId('stat-wagered')).toContainText('2 of');

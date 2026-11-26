@@ -16,8 +16,11 @@ import { MONEY_TEXT } from './moneyStyle';
 
 const LAST_TYPE = 'bettracker:insert-money-type';
 
-/** The three figures in the top bar: R$, Bonus, H$, each across books, with the amount in pending bets under it. */
-export function BankrollBar() {
+/**
+ * The three figures in the top bar: R$, Bonus, H$, each across books, with the amount in pending bets under it. BT-55:
+ * `tile` draws them larger, inside the Bets page's Bankroll tile.
+ */
+export function BankrollBar({ tile = false }: { tile?: boolean }) {
   const { bankroll, loaded, openMoney } = useApp();
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
@@ -36,7 +39,7 @@ export function BankrollBar() {
   return (
     <div ref={box} className="relative">
       <button
-        className="flex items-center gap-3 rounded-md border border-zinc-800 px-2 py-0.5 text-left hover:border-zinc-600"
+        className={tile ? 'flex items-start gap-5 rounded-md text-left hover:bg-zinc-900' : 'flex items-center gap-3 rounded-md border border-zinc-800 px-2 py-0.5 text-left hover:border-zinc-600'}
         aria-label="Bankroll"
         aria-expanded={open}
         title="Bankroll: what you have now, per money type (click for books)"
@@ -44,11 +47,11 @@ export function BankrollBar() {
         data-testid="bankroll"
       >
         {MONEY.map((m) => (
-          <Figure key={m} t={bankroll[m]} />
+          <Figure key={m} t={bankroll[m]} big={tile} />
         ))}
       </button>
       {open && (
-        <div role="dialog" aria-label="Bankroll by book" className="absolute right-0 top-full z-40 mt-1 w-[460px] rounded-md border border-zinc-700 bg-zinc-900 p-3 text-xs shadow-xl" data-testid="bankroll-panel">
+        <div role="dialog" aria-label="Bankroll by book" className={`absolute ${tile ? 'left-0' : 'right-0'} top-full z-40 mt-1 w-[460px] rounded-md border border-zinc-700 bg-zinc-900 p-3 text-xs shadow-xl`} data-testid="bankroll-panel">
           <Breakdown />
           <div className="mt-3 flex items-center justify-between border-t border-zinc-800 pt-2">
             <Link href="/bankroll" className="text-zinc-400 hover:text-white" onClick={() => setOpen(false)}>
@@ -73,11 +76,11 @@ export function BankrollBar() {
 
 const SHORT: Record<Money, string> = { real: 'R$', bonus: 'Bonus', hypothetical: 'H$' };
 
-function Figure({ t }: { t: TypeBalance }) {
+function Figure({ t, big = false }: { t: TypeBalance; big?: boolean }) {
   return (
     <span className="flex flex-col leading-tight" data-testid={`bankroll-${t.money}`}>
       <span className="text-[10px] text-zinc-500">{SHORT[t.money]}</span>
-      <span className={`whitespace-nowrap text-xs font-semibold tabular-nums ${t.total == null ? 'text-zinc-500' : MONEY_TEXT[t.money] || (t.total < 0 ? 'text-red-400' : 'text-zinc-100')}`} data-testid={`bankroll-${t.money}-total`}>
+      <span className={`whitespace-nowrap ${big ? 'text-2xl font-bold' : 'text-xs font-semibold'} tabular-nums ${t.total == null ? 'text-zinc-500' : MONEY_TEXT[t.money] || (t.total < 0 ? 'text-red-400' : 'text-zinc-100')}`} data-testid={`bankroll-${t.money}-total`}>
         {t.total == null ? '-' : formatMoney(t.total, t.money)}
       </span>
       {t.pending > 0 && (
