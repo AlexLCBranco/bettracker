@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-26
+- The Pending tab no longer repeats the Banked shots (v0.54.1)
+  Pending lists bets with money in play, Banked the money waiting for its next bet, and hovering a tab says what it holds.
 - Combos get a chip like Solo, in fuchsia (v0.54.0)
   A stand-alone combo starts its row with a "Combo ×n" chip styled like the Solo one; double click it to change the type.
 - Only one window in use at a time, like WhatsApp Web (v0.53.0)

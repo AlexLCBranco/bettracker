@@ -29,7 +29,7 @@ import { byMoney } from '@/lib/scope';
 import { settleQueue, SETTLE_KEYS, sharedLegOf } from '@/lib/settle';
 import { formatPercent, summarize } from '@/lib/stats';
 import { RESULT_LABEL, RESULTS, type Bet } from '@/lib/types';
-import { isTab, moveKey, nextKey, rowKeys, tabBets, tabDays, TAB_LABEL, TABS, type Tab } from '@/lib/view';
+import { isTab, moveKey, nextKey, rowKeys, tabBets, tabDays, TAB_LABEL, TAB_TITLE, TABS, type Tab } from '@/lib/view';
 
 export default function BetsPage() {
   // the tab is in the URL (?tab=settle), read on the client
@@ -489,6 +489,7 @@ function Bets() {
             aria-selected={tab === t}
             className={`-mb-px border-b-2 px-3 py-1.5 text-sm ${tab === t ? 'border-emerald-500 font-semibold text-white' : 'border-transparent text-zinc-400 hover:text-white'}`}
             onClick={() => setTab(t)}
+            title={TAB_TITLE[t]}
           >
             {TAB_LABEL[t]}
             {t === 'pending' && counts.pending > 0 && <span className="ml-1.5 text-xs text-zinc-500">{counts.pending}</span>}

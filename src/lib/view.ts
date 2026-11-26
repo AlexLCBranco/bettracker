@@ -2,7 +2,7 @@
 
 import { todayISO } from './dates';
 import { groupRows, rowBets, rowKey, type BetRow } from './dutch';
-import { chainSummary, chainPending } from './rollover';
+import { chainSummary } from './rollover';
 import { settleQueue } from './settle';
 import { dayGroups, type DayGroup } from './table';
 import type { Bet } from './types';
@@ -10,13 +10,23 @@ import type { Bet } from './types';
 export const TABS = ['all', 'pending', 'banked', 'settle'] as const;
 export type Tab = (typeof TABS)[number];
 export const TAB_LABEL: Record<Tab, string> = { all: 'All', pending: 'Pending', banked: 'Banked', settle: 'To settle' };
-export const isTab = (v: unknown): v is Tab => TABS.includes(v as Tab);
+/** Each tab's hover text: what it holds and how it relates to the others. */
+export const TAB_TITLE: Record<Tab, string> = {
+  all: 'Every bet',
+  pending: 'Bets with money in play, due or not (banked shots are on the Banked tab)',
+  banked: 'Money won and banked, waiting for its next bet',
+  settle: 'Pending bets whose game date is today or earlier: ready to settle now',
+};
+export const isTab =(v: unknown): v is Tab => TABS.includes(v as Tab);
 
 /** A row's selection key (see dutch.ts). A dutch's split lines and a rollover's bets are selected as "bet:<id>". */
 export { rowKey };
 
-/** Shown on the Pending tab: a bet still pending, or a rollover shot that is still open (BT-29). */
-const isPendingRow = (r: BetRow) => (r.kind === 'rollover' ? chainPending(chainSummary(r.bets).outcome) : (r.kind === 'bet' ? [r.bet] : r.bets).some((b) => b.result === 'pending'));
+/**
+ * Shown on the Pending tab: a bet still pending, or a rollover shot with a bet in play. An open shot (banked, no bet
+ * in play yet) is on the Banked tab only, so the two tabs never count the same row.
+ */
+const isPendingRow = (r: BetRow) => (r.kind === 'rollover' ? chainSummary(r.bets).outcome === 'pending' : (r.kind === 'bet' ? [r.bet] : r.bets).some((b) => b.result === 'pending'));
 
 /** Shown on the Banked tab: an open shot or ladder (money won and banked, waiting for its next bet). */
 export const isBankedRow = (r: BetRow) => r.kind === 'rollover' && chainSummary(r.bets).outcome === 'open';
