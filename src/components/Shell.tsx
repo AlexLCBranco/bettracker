@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useMemo, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { todayISO } from '@/lib/dates';
 import { countBets } from '@/lib/dutch';
 import { settleQueue } from '@/lib/settle';
@@ -15,12 +15,51 @@ import { DutchFormModal } from './DutchFormModal';
 import { MoneyScopeSwitch, UnitsToggle, useMoneyScope, useUnitsView } from './Money';
 import { QuickAdd } from './QuickAdd';
 import { isUndoKey } from '@/lib/undo';
+import { CHANNEL, tabLock } from '@/lib/oneTab';
 
 export function Shell({ children }: { children: ReactNode }) {
+  const { active, takeOver } = useOneTab();
+  // another tab took over: the app unmounts here (no reloads, shortcuts or saves) and loads afresh on "Use here"
+  if (!active) return <OtherTab onUseHere={takeOver} />;
   return (
     <AppProvider>
       <Frame>{children}</Frame>
     </AppProvider>
+  );
+}
+
+/** One open tab at a time (src/lib/oneTab.ts): false once a newer tab of the site claims it. */
+function useOneTab() {
+  const [active, setActive] = useState(true);
+  const lock = useRef<ReturnType<typeof tabLock> | null>(null);
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return;
+    const bus = new BroadcastChannel(CHANNEL);
+    const l = tabLock(bus, crypto.randomUUID(), setActive);
+    lock.current = l;
+    return () => {
+      l.stop();
+      bus.close();
+    };
+  }, []);
+  return { active, takeOver: () => lock.current?.useHere() };
+}
+
+function OtherTab({ onUseHere }: { onUseHere: () => void }) {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-zinc-950 p-6" data-testid="other-tab">
+      <div role="dialog" aria-labelledby="other-tab-title" className="max-w-md rounded-xl border border-zinc-800 bg-zinc-900 p-6 text-center shadow-xl">
+        <h1 id="other-tab-title" className="text-lg font-semibold text-zinc-100">
+          Bet tracker is open in another window
+        </h1>
+        <p className="mt-2 text-sm text-zinc-400">Click “Use here” to use it in this window instead. The other window will stop.</p>
+        <div className="mt-5 flex justify-center">
+          <button type="button" autoFocus onClick={onUseHere} className="rounded-md bg-emerald-600 px-5 py-2 text-sm font-medium text-white hover:bg-emerald-500">
+            Use here
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
