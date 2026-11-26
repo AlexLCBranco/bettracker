@@ -93,6 +93,13 @@ export interface Row {
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+/**
+ * BT-65: a row with fewer settled bets than this (won + lost, a dutch once) is a small sample: shown faded, never
+ * Best / Worst (BT-62). Proposed by Claude, confirmed by the owner (2026-11-26); one constant, easy to change.
+ */
+export const SMALL_SAMPLE = 10;
+export const isSmallSample = (r: Pick<Row, 'wins' | 'losses'>) => r.wins + r.losses < SMALL_SAMPLE;
+
 /** A bet's sport or market: its legs' single value, "Mixed" when they differ, "Not set" when none is entered. */
 function legValue(b: Bet, k: 'sport' | 'market'): { key: string; label: string } {
   const seen = new Map<string, string>();

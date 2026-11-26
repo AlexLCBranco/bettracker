@@ -8,6 +8,7 @@ import { formatMoney } from '@/lib/money';
 import { formatPercent } from '@/lib/stats';
 import { formatUnits } from '@/lib/units';
 import { BankrollBar } from './Bankroll';
+import { segmentText, type Segment } from '@/lib/bestWorst';
 
 const tone = (n: number) => (n > 0 ? 'text-emerald-400' : n < 0 ? 'text-red-400' : 'text-zinc-100');
 const fmtOf = (g: HeadlineGroup) => (n: number, signed = false) => (g.units ? formatUnits(n, signed) : formatMoney(n, g.money, signed));
@@ -134,6 +135,100 @@ export function Headline({ groups, betCount, totalCount, toSettle, openSettle, u
           </button>
         </p>
       </Tile>
+    </div>
+  );
+}
+
+/** BT-62: one money group's figures for the Analytics headline. */
+export interface AnalyticsGroup {
+  money: HeadlineGroup['money'];
+  units: boolean;
+  summary: HeadlineGroup['summary'];
+  best: Segment | null;
+  worst: Segment | null;
+  /** BT-63: the same figures over the previous period; null on All or when that period has no settled bets. */
+  previous?: HeadlineGroup['summary'] | null;
+}
+
+/** BT-62: Analytics' headline row: Net, ROI, Win rate, Bets, then the best and worst segment. */
+export function AnalyticsHeadline({ groups, vs }: { groups: AnalyticsGroup[]; vs?: (g: AnalyticsGroup, k: 'net' | 'roi' | 'winRate' | 'bets') => ReactNode }) {
+  const many = groups.length > 1;
+  const id = (base: string, g: AnalyticsGroup) => (many ? `${base}-${g.money}-value` : `${base}-value`);
+  const each = (render: (g: AnalyticsGroup, fmt: ReturnType<typeof fmtOf>) => ReactNode) => (
+    <div className={`mt-1 flex ${many ? 'gap-6' : ''}`}>
+      {groups.map((g) => (
+        <div key={g.money} className="min-w-0">
+          {render(g, fmtOf({ money: g.money, units: g.units, summary: g.summary, curve: [] }))}
+        </div>
+      ))}
+    </div>
+  );
+  const big = 'text-2xl font-bold tabular-nums leading-none';
+  return (
+    <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6" data-testid="analytics-headline">
+      <Tile label="Net" testId="an-net">
+        {each((g, fmt) => (
+          <>
+            <span className={`${big} ${tone(g.summary.netProfit)}`} data-testid={id('an-net', g)}>
+              {fmt(g.summary.netProfit, true)}
+            </span>
+            {vs?.(g, 'net')}
+          </>
+        ))}
+      </Tile>
+      <Tile label="ROI" testId="an-roi">
+        {each((g) => (
+          <>
+            <span className={`${big} ${tone(g.summary.roi ?? 0)}`} data-testid={id('an-roi', g)}>
+              {formatPercent(g.summary.roi, true)}
+            </span>
+            {vs?.(g, 'roi')}
+          </>
+        ))}
+      </Tile>
+      <Tile label="Win rate" testId="an-winrate">
+        {each((g) => (
+          <>
+            <span className={`${big} text-zinc-100`} data-testid={id('an-winrate', g)}>
+              {formatPercent(g.summary.winRate)}
+            </span>
+            <p className="mt-1 text-xs text-zinc-500">
+              {g.summary.wins}W / {g.summary.losses}L
+            </p>
+            {vs?.(g, 'winRate')}
+          </>
+        ))}
+      </Tile>
+      <Tile label="Bets" testId="an-bets">
+        {each((g) => (
+          <>
+            <span className={`${big} text-zinc-100`} data-testid={id('an-bets', g)}>
+              {g.summary.betCount}
+            </span>
+            {g.summary.pendingCount > 0 && <p className="mt-1 text-xs text-zinc-500">{g.summary.pendingCount} pending</p>}
+            {vs?.(g, 'bets')}
+          </>
+        ))}
+      </Tile>
+      {(['best', 'worst'] as const).map((k) => (
+        <Tile key={k} label={k === 'best' ? 'Best' : 'Worst'} testId={`an-${k}`}>
+          {each((g, fmt) => {
+            const s = g[k];
+            return s ? (
+              <div title={`The ${k} row of the sport, market, book, type and situation breakdowns (small samples left out)`}>
+                <p className="truncate text-sm font-semibold text-zinc-100" data-testid={id(`an-${k}`, g)}>
+                  {segmentText(s)}
+                </p>
+                <p className={`mt-0.5 text-lg font-bold tabular-nums ${tone(s.profit)}`}>{fmt(s.profit, true)}</p>
+              </div>
+            ) : (
+              <span className={`${big} text-zinc-500`} data-testid={id(`an-${k}`, g)} title="Needs two rows with 10 settled bets or more">
+                -
+              </span>
+            );
+          })}
+        </Tile>
+      ))}
     </div>
   );
 }

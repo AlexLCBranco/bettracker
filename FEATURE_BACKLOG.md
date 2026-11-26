@@ -38,17 +38,6 @@ period, and no way from a number to the bets behind it. Build order: BT-67, BT-6
 (the tabs first, so the other items land in their final place). Every rule in CLAUDE.md on what counts as one bet,
 on bonus money and on PP batches staying out of Analytics still holds.
 
-### BT-62 — Analytics: headline row
-**In short:** Analytics opens with the overall numbers (net, ROI, win rate, record) and names the best and worst segment.
-
-- First thing on the page (Overview tab, BT-67): big tiles for Net, ROI, Win rate (with W / L) and Bets, from
-  `summarize` (`src/lib/stats.ts`) over the scoped bets, so they match the Bets page for the same period.
-- Two more tiles, "Best" and "Worst": the row with the highest and the lowest profit across the sport, market,
-  book, type and situation breakdowns, shown as "<breakdown>: <label>  <profit>". Rows under the BT-65 sample
-  threshold and the "Not set" / "Mixed" rows never qualify. Fewer than two qualifying rows: "-".
-- Money scope "All": real and hypothetical side by side, never summed (as in BT-55). Units view keeps working.
-- Tests: unit tests for best / worst (ties, threshold, none qualifying); e2e that the tiles match the Bets page.
-
 ### BT-63 — Analytics: period switch, with change against the previous period
 **In short:** The same Today / 7d / 30d / Month / All switch as the Bets page, and the headline numbers show how they moved against the period before.
 

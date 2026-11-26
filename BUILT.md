@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-26
+- BT-62 — Analytics: headline row (v0.64.0)
+  The Overview tab opens with Net, ROI, Win rate and Bets (the same figures as the Bets page) and names the best and worst segment across sport, market, book, type and situation.
 - BT-67 — Analytics: sections as tabs (v0.63.0)
   Analytics is now tabs (Overview, Dutches, Combinations, Ladders, Cash-outs) kept in the address, and the ladders have their own tab instead of hiding in the Type breakdown.
 - BT-61 — Analytics: the Odds breakdown uses the shot bands (v0.62.0)

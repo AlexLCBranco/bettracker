@@ -16,6 +16,10 @@ import { asUnitBets, formatUnits } from '@/lib/units';
 import { ProfitChart } from '@/components/ProfitChart';
 import { formatPercent } from '@/lib/stats';
 import { cashoutVerdict } from '@/lib/woulda';
+import { AnalyticsHeadline, type AnalyticsGroup } from '@/components/Headline';
+import { moneyGroups } from '@/lib/headline';
+import { bestWorst } from '@/lib/bestWorst';
+import { summarize } from '@/lib/stats';
 
 const COLUMNS: { key: SortKey; label: string; title?: string }[] = [
   { key: 'bets', label: 'Bets' },
@@ -69,6 +73,16 @@ function Analytics() {
   const ladders = useMemo(() => ladderReport(bets), [bets]);
   const verdict = useMemo(() => cashoutVerdict(bets), [bets]);
   const profitScope: MoneyScope = scope === 'bonus' ? 'real' : scope;
+  // BT-62: the headline, per money type (scope All: side by side, never summed), in units when it can
+  const head = useMemo<AnalyticsGroup[]>(
+    () =>
+      moneyGroups(money, scope).map((g) => {
+        const u = unitsView ? asUnitBets(g.bets) : null;
+        const counted = u ?? g.bets;
+        return { money: g.money, units: !!u, summary: summarize(counted), ...bestWorst(counted) };
+      }),
+    [money, scope, unitsView],
+  );
 
   if (!loaded) return <p className="py-10 text-center text-sm text-zinc-500">Loading…</p>;
 
@@ -97,6 +111,7 @@ function Analytics() {
 
       {tab === 'overview' && (
         <>
+          <AnalyticsHeadline groups={head} />
           {/* BT-26: moved here from the dashboard */}
           <section className="card p-5">
             <h2 className="mb-3 font-semibold">Performance Over Time</h2>
