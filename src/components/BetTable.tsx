@@ -84,11 +84,23 @@ const CELL = 'px-2 py-1.5 align-top';
 const NUM = 'whitespace-nowrap px-2 py-1.5 text-right align-top tabular-nums';
 const ACTIONS = 'whitespace-nowrap px-2 py-1 text-right align-top';
 
-function LiveTag() {
+/** The LIVE tag: a click switches the row's bets (a dutch or shot: all of them) to pregame, as one undo step. */
+function LiveTag({ bets }: { bets: Bet[] }) {
+  const { update, undoGroup } = useApp();
   return (
-    <span className="rounded bg-red-500/15 px-1 py-px text-[10px] font-bold tracking-wide text-red-400" data-testid="live-tag">
+    <button
+      type="button"
+      className="rounded bg-red-500/15 px-1 py-px text-[10px] font-bold tracking-wide text-red-400 hover:bg-red-500/30 hover:text-red-200"
+      title="Live bet: click to switch to pregame"
+      aria-label="Switch to pregame"
+      data-testid="live-tag"
+      onClick={(e) => {
+        e.stopPropagation();
+        void undoGroup('Switched to pregame', undefined, () => Promise.all(bets.map((b) => update(b.id, { situation: 'pregame' }, {}).catch(() => undefined))));
+      }}
+    >
       LIVE
-    </span>
+    </button>
   );
 }
 
@@ -482,7 +494,7 @@ function DutchGroup({ bets, dutchId, open, toggle, selected, multi, desc, select
             {nb && <NoBrainerChip />}
             {label && <LabelChip label={label} />}
             <DescriptionMark rowKey={key} bets={bets} selected={isSel} control={desc} />
-            {live && <LiveTag />}
+            {live && <LiveTag bets={bets} />}
           </div>
           <SubLine
             parts={[
@@ -654,7 +666,7 @@ function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, multi, d
                 )}
               </>
             )}
-            {live && <LiveTag />}
+            {live && <LiveTag bets={raw} />}
             <DescriptionMark rowKey={key} bets={raw} selected={isSel} control={desc} />
           </div>
           <SubLine
@@ -1059,7 +1071,7 @@ function BetRow({ b, open, toggle, selected, multi, desc, select, settle, split,
                   </span>
                 ),
               },
-              b.situation === 'live' && !(nested && split.live) && { text: 'LIVE', node: <LiveTag /> },
+              b.situation === 'live' && !(nested && split.live) && { text: 'LIVE', node: <LiveTag bets={[b]} /> },
               resultLinePart(betResultLine(b)),
             ]}
           </SubLine>
