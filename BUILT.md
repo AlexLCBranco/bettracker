@@ -3,6 +3,7 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-26
+- The Solo tag is a cyan chip, set apart from the bet text (v0.50.1)
 - Solos are tagged "Solo", like dutches (v0.50.0)
   A stand-alone solo bet starts its row with "Solo", the way a dutch shows "Dutch ×n"; dutch splits and bets inside a shot keep their own labels.
 - Shots and dutches read as one block; a cash-out leaves Pending once its woulda is set (v0.49.0)

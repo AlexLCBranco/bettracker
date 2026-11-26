@@ -1033,6 +1033,7 @@ test('BT-17–22: combo rows with legs and counts, same styling on every row, ti
   await expect(c).toContainText('NBA');
   await expect(c.getByTestId('loss-line')).toHaveText('✗ Lakers W');
   await expect(page.locator(`[data-bet-id="${one.id}"]`).getByTestId('type')).toHaveText('Solo'); // a Solo is tagged like a Dutch
+  await expect(page.locator(`[data-bet-id="${one.id}"]`).getByTestId('type')).not.toHaveCSS('color', await page.locator(`[data-bet-id="${one.id}"]`).getByTestId('bet-text').locator('button').first().evaluate((e) => getComputedStyle(e).color)); // set apart from the bet text
   await expect(c.getByTestId('type')).toHaveText('Combo ×2');
   await expect(dutch.locator('[data-nested]').first().getByTestId('type')).toHaveCount(0); // a split keeps its Split n label
 
