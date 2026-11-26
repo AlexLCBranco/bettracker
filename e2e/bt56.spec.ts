@@ -33,7 +33,8 @@ test('BT-56: Today / All switch, Custom while dates are typed, remembered after 
   await expect(sw.getByRole('radio', { name: 'Month' })).toHaveAttribute('aria-checked', 'true');
   await expect(rows).toHaveCount(1);
 
-  // typed dates: Custom; picking a period clears them
+  // typed dates (in the Filters panel, BT-57): Custom; picking a period clears them
+  await page.getByRole('button', { name: 'Filters' }).click();
   await page.getByLabel('From date').fill('01/01/2000');
   await page.getByLabel('To date').fill('01/01/2000');
   await expect(sw.getByRole('radio', { name: 'Custom' })).toBeVisible();

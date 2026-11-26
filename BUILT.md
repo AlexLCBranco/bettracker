@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-26
+- BT-57 — Bets filters behind one Filters button, active ones as chips (v0.58.0)
+  Only Search stays on screen; the other filters open from Filters, and each one in use shows as a chip with × to clear it.
 - BT-56 — Period switch on the Bets page: Today / 7d / 30d / Month / All (v0.57.0)
   One click picks the period the headline tiles and the table show; typed From / To dates show it as Custom, and the choice is remembered.
 - BT-55 — Big headline tiles on the Bets page (v0.56.0)

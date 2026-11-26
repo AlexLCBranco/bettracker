@@ -30,16 +30,6 @@ glance. Cause found in the code: everything has the same visual weight (one line
 fields always open, a crowded top bar). Build order: BT-55, BT-56, BT-57, BT-58, BT-59, BT-60.
 Rule for all six: the bet table's column alignment must not change (owner, 2026-11-24).
 
-### BT-57 — Bets page: filters behind one button, active ones as chips
-**In short:** Only Search stays visible; the other seven filters open from a "Filters" button, and any filter in use shows as a small removable chip.
-
-- Visible row: Search, a "Filters" button (with a count when any is on), the "⋯" export menu.
-- The panel holds From / To, Book, Sport, Type, Situation, Result, unchanged in behaviour (same `Filters` state).
-- Each active filter shows as a chip ("Book: bet365 ×") beside the button; × clears that one; "Clear" clears all.
-  The BT-50 game filter becomes one of these chips.
-- Nothing is hidden silently: if a filter is on, its chip is always on screen.
-- Tests: e2e for opening the panel, setting and clearing each filter by chip; update specs that use `filters`.
-
 ### BT-58 — Bets table: day headers with a record, and weekly subtotals
 **In short:** Each day's header shows its result more loudly and its W-L record, and each week ends with a subtotal line.
 

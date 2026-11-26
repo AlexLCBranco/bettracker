@@ -21,6 +21,7 @@ import { chainDutchIds, countBets, rowBets, rowKey, rowKeyOf } from '@/lib/dutch
 import { useDescriptionsSwitch, type DescriptionControl } from '@/components/Description';
 import { isDescriptionOpen, rowHasDescription } from '@/lib/descriptions';
 import { filterBets, NO_FILTERS, type Filters } from '@/lib/filters';
+import { filterChips, withoutChip, type FilterChip } from '@/lib/filterChips';
 import { daysWithGame } from '@/lib/gamesInvolved';
 import type { GamesControl } from '@/components/BetTable';
 import { formatMoney } from '@/lib/money';
@@ -90,7 +91,6 @@ function Bets() {
   const [fromText, setFromText] = useState('');
   const [toText, setToText] = useState('');
   const set = <K extends keyof Filters>(k: K, v: Filters[K]) => setF((x) => ({ ...x, [k]: v }));
-  const active = JSON.stringify(f) !== JSON.stringify(NO_FILTERS) || fromText || toText;
 
   const today = todayISO();
   const scoped = useMemo(() => byMoney(all, scope), [all, scope]);
@@ -118,6 +118,21 @@ function Bets() {
     }),
     [gameDays],
   );
+  // BT-57: the filters in use, as chips
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const chips = filterChips(f, { from: fromText, to: toText }, gameFilter?.game ?? null);
+  const clearChip = (k: FilterChip['key']) => {
+    if (k === 'game') setGameFilter(null);
+    else if (k === 'from') setFromText('');
+    else if (k === 'to') setToText('');
+    else setF((x) => withoutChip(x, k));
+  };
+  const clearAll = () => {
+    setF(NO_FILTERS);
+    setFromText('');
+    setToText('');
+    setGameFilter(null);
+  };
   const days = useMemo(() => {
     const d = tabDays(filtered, tab, today);
     return gameFilter ? daysWithGame(d, gameFilter.key) : d;
@@ -397,61 +412,90 @@ function Bets() {
       <h1 className="sr-only">Bets</h1>
       <Headline groups={head} betCount={headCount} totalCount={totalCount} toSettle={counts.settle} openSettle={() => setTab('settle')} unitsView={unitsView} period={<PeriodSwitch value={custom ? 'custom' : period} onChange={pickPeriod} />} />
 
-      <div className="flex items-end gap-2" data-testid="filters">
-        <F label="From" w="w-28">
-          <DateField value={fromText} onChange={setFromText} aria-label="From date" />
-        </F>
-        <F label="To" w="w-28">
-          <DateField value={toText} onChange={setToText} aria-label="To date" />
-        </F>
-        <F label="Book" w="min-w-0 flex-1">
-          <Autocomplete value={f.book} onChange={(v) => set('book', v)} getSuggestions={(q) => suggestFor('book', q)} aria-label="Filter book" />
-        </F>
-        <F label="Sport" w="min-w-0 flex-1">
-          <Autocomplete value={f.sport} onChange={(v) => set('sport', v)} getSuggestions={(q) => suggestFor('sport', q)} aria-label="Filter sport" />
-        </F>
-        <F label="Type" w="w-32">
-          <select className="field" value={f.type} onChange={(e) => set('type', e.target.value as Filters['type'])} aria-label="Filter type">
-            <option value="">All</option>
-            <option value="solo">Solo</option>
-            <option value="combination">Combination</option>
-            <option value="dutch">Dutch</option>
-          </select>
-        </F>
-        <F label="Situation" w="w-28">
-          <select className="field" value={f.situation} onChange={(e) => set('situation', e.target.value as Filters['situation'])} aria-label="Filter situation">
-            <option value="">All</option>
-            <option value="pregame">Pregame</option>
-            <option value="live">Live</option>
-          </select>
-        </F>
-        <F label="Result" w="w-28">
-          <select className="field" value={f.result} onChange={(e) => set('result', e.target.value as Filters['result'])} aria-label="Filter result">
-            <option value="">All</option>
-            {RESULTS.map((r) => (
-              <option key={r} value={r}>
-                {RESULT_LABEL[r]}
-              </option>
-            ))}
-          </select>
-        </F>
-        <F label="Search" w="min-w-0 flex-[1.5]">
-          <input className="field" value={f.text} onChange={(e) => set('text', e.target.value)} placeholder="bet, game, selection" aria-label="Search bets" />
-        </F>
-        <button
-          className="btn"
-          disabled={!active}
-          onClick={() => {
-            setF(NO_FILTERS);
-            setFromText('');
-            setToText('');
-          }}
+      {/* BT-57: Search stays visible; the other filters open from one button, and each one in use is a chip */}
+      <div className="flex flex-wrap items-center gap-2" data-testid="filters">
+        <input className="field w-80" value={f.text} onChange={(e) => set('text', e.target.value)} placeholder="Search: bet, game, selection" aria-label="Search bets" />
+        <Popover
+          label="Filters"
+          align="left"
+          button={
+            <>
+              Filters
+              {chips.length > 0 && (
+                <span className="ml-1.5 rounded-full bg-emerald-500/25 px-1.5 text-xs font-semibold text-emerald-200" data-testid="filters-count">
+                  {chips.length}
+                </span>
+              )}
+            </>
+          }
+          open={filtersOpen}
+          onOpen={setFiltersOpen}
         >
-          Clear
-        </button>
-        <Popover label="Export and import" icon="⋯">
-          <DataTransfer vertical />
+          <div className="grid w-[36rem] grid-cols-2 gap-x-3 gap-y-2" data-testid="filters-panel">
+            <div className="col-span-2 flex gap-3">
+              <F label="From" w="flex-1">
+                <DateField value={fromText} onChange={setFromText} aria-label="From date" />
+              </F>
+              <F label="To" w="flex-1">
+                <DateField value={toText} onChange={setToText} aria-label="To date" />
+              </F>
+            </div>
+            <F label="Book" w="min-w-0">
+              <Autocomplete value={f.book} onChange={(v) => set('book', v)} getSuggestions={(q) => suggestFor('book', q)} aria-label="Filter book" />
+            </F>
+            <F label="Sport" w="min-w-0">
+              <Autocomplete value={f.sport} onChange={(v) => set('sport', v)} getSuggestions={(q) => suggestFor('sport', q)} aria-label="Filter sport" />
+            </F>
+            <F label="Type" w="min-w-0">
+              <select className="field" value={f.type} onChange={(e) => set('type', e.target.value as Filters['type'])} aria-label="Filter type">
+                <option value="">All</option>
+                <option value="solo">Solo</option>
+                <option value="combination">Combination</option>
+                <option value="dutch">Dutch</option>
+              </select>
+            </F>
+            <F label="Situation" w="min-w-0">
+              <select className="field" value={f.situation} onChange={(e) => set('situation', e.target.value as Filters['situation'])} aria-label="Filter situation">
+                <option value="">All</option>
+                <option value="pregame">Pregame</option>
+                <option value="live">Live</option>
+              </select>
+            </F>
+            <F label="Result" w="min-w-0">
+              <select className="field" value={f.result} onChange={(e) => set('result', e.target.value as Filters['result'])} aria-label="Filter result">
+                <option value="">All</option>
+                {RESULTS.map((r) => (
+                  <option key={r} value={r}>
+                    {RESULT_LABEL[r]}
+                  </option>
+                ))}
+              </select>
+            </F>
+          </div>
         </Popover>
+        {chips.map((c) => (
+          <span key={c.key} className="inline-flex items-center gap-1 rounded-full border border-zinc-700 bg-zinc-900 py-0.5 pl-2.5 pr-1 text-xs text-zinc-200" data-testid={c.key === 'game' ? 'game-filter' : 'filter-chip'}>
+            {c.label}
+            <button
+              className="rounded-full px-1 text-zinc-400 hover:bg-zinc-700 hover:text-white"
+              aria-label={`Clear ${c.label}`}
+              title={c.key === 'game' ? 'Show every bet again (Esc)' : 'Clear this filter'}
+              onClick={() => clearChip(c.key)}
+              data-testid={c.key === 'game' ? 'game-filter-clear' : undefined}
+            >
+              ×
+            </button>
+          </span>
+        ))}
+        {(chips.length > 0 || f.text) && (
+          <button className="text-xs text-zinc-400 hover:text-white" onClick={clearAll}>
+            Clear
+          </button>
+        )}
+        <div className="ml-auto flex items-center gap-2">
+          <Popover label="Export and import" icon="⋯">
+            <DataTransfer vertical />
+          </Popover>
         <Popover label="Keyboard shortcuts" icon="?" open={help} onOpen={setHelp}>
           <dl className="grid w-72 grid-cols-[6rem_1fr] gap-x-3 gap-y-1 text-xs" data-testid="key-help">
             {HELP.map(([k, l]) => (
@@ -464,6 +508,7 @@ function Bets() {
             ))}
           </dl>
         </Popover>
+        </div>
       </div>
 
       <div role="tablist" aria-label="Show" className="flex items-center gap-1 border-b border-zinc-800">
@@ -501,16 +546,6 @@ function Bets() {
         )}
       </div>
 
-      {gameFilter && (
-        <div className="flex items-center gap-2 text-xs text-zinc-400" data-testid="game-filter">
-          <span>
-            Bets on <b className="text-zinc-100">{gameFilter.game}</b>
-          </span>
-          <button className="rounded px-1.5 py-0.5 text-zinc-400 hover:bg-zinc-800 hover:text-white" title="Show every bet again (Esc)" aria-label="Clear the game filter" onClick={() => setGameFilter(null)} data-testid="game-filter-clear">
-            ×
-          </button>
-        </div>
-      )}
       <section ref={tableBox} className="card px-2 pb-2" onClickCapture={onTableClick}>
         {loaded ? (
           <BetTable
@@ -548,7 +583,7 @@ function F({ label, w, children }: { label: string; w: string; children: ReactNo
 }
 
 /** A small button with a panel under it (the "⋯" export menu, the "?" keys). Stays mounted, so an import keeps its file box. */
-function Popover({ label, icon, children, open: controlled, onOpen }: { label: string; icon: string; children: ReactNode; open?: boolean; onOpen?(o: boolean): void }) {
+function Popover({ label, icon, button, align = 'right', children, open: controlled, onOpen }: { label: string; icon?: string; button?: ReactNode; align?: 'left' | 'right'; children: ReactNode; open?: boolean; onOpen?(o: boolean): void }) {
   const [own, setOwn] = useState(false);
   const open = controlled ?? own;
   const setOpen = onOpen ?? setOwn;
@@ -561,10 +596,10 @@ function Popover({ label, icon, children, open: controlled, onOpen }: { label: s
   }, [open, setOpen]);
   return (
     <div ref={box} className="relative">
-      <button className="btn w-9 justify-center" aria-label={label} title={label} aria-expanded={open} onClick={() => setOpen(!open)}>
-        {icon}
+      <button className={button ? 'btn' : 'btn w-9 justify-center'} aria-label={button ? undefined : label} title={label} aria-expanded={open} onClick={() => setOpen(!open)}>
+        {button ?? icon}
       </button>
-      <div role="dialog" aria-label={label} hidden={!open} className="absolute right-0 top-full z-40 mt-1 rounded-md border border-zinc-700 bg-zinc-900 p-3 shadow-xl">
+      <div role="dialog" aria-label={label} hidden={!open} className={`absolute ${align === 'left' ? 'left-0' : 'right-0'} top-full z-40 mt-1 rounded-md border border-zinc-700 bg-zinc-900 p-3 shadow-xl`}>
         {children}
       </div>
     </div>
