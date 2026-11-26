@@ -5,11 +5,7 @@ Item IDs are BT-1, BT-2, ... (never reused; BT is this repo's prefix, unique acr
 
 ## Ready
 
-**Build order when building everything in one go** (owner, 2026-11-26): BT-55 to BT-60, BT-61, then BT-67, BT-62,
-BT-63, BT-64, BT-65, BT-66, BT-68. One item at a time: finish it, tests green, version bump, moved to `BUILT.md`,
-committed and pushed before starting the next.
-
-The PP system (BT-30 to BT-32) is built; these words of the owner's stay in the UI.
+Nothing ready: everything planned is built (BT-55 to BT-68 shipped 2026-11-26).
 
 Words the owner uses (keep them in the UI):
 - **PP**: one combination ticket aiming at total odds of about 20, placed with bonus money. (What the letters stand
@@ -22,21 +18,6 @@ Words the owner uses (keep them in the UI):
 - Why it exists: research, not profit. Every opinion gets a spot, and the results show whether what he believes
   works in volume. Before, it was done in Excalidraw with AIs inventing the scheme per batch, the history lived only
   in the bookmaker's app and vanished, and both building and following 100 PPs was the part that broke.
-
-### Bets page redesign (BT-55 to BT-60)
-
-Agreed with the owner on 2026-11-26 (he approved all of it). His complaint: the Bets page is not easy to read in a
-glance. Cause found in the code: everything has the same visual weight (one line of `text-xs` stats, eight filter
-fields always open, a crowded top bar). Build order: BT-55, BT-56, BT-57, BT-58, BT-59, BT-60.
-Rule for all six: the bet table's column alignment must not change (owner, 2026-11-24).
-
-### Analytics redesign (BT-62 to BT-68)
-
-Agreed with the owner on 2026-11-26 ("put all of them in, I'll see how it looks live"), together with BT-61.
-Problem found in the code: `src/app/(app)/analytics/page.tsx` is a long scroll of sections with no headline, no
-period, and no way from a number to the bets behind it. Build order: BT-67, BT-62, BT-63, BT-64, BT-65, BT-66, BT-68
-(the tabs first, so the other items land in their final place). Every rule in CLAUDE.md on what counts as one bet,
-on bonus money and on PP batches staying out of Analytics still holds.
 
 ## Held (needs the owner's "go"; never built from "build the backlog")
 
