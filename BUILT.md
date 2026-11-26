@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-26
+- BT-61 — Analytics: the Odds breakdown uses the shot bands (v0.62.0)
+  Odds on Analytics now groups bets as Below mini, Mini, Semi, Pepsi and Shot, with Shot split into finer indented rows (1.80–1.99, 2.00–2.99, 3.00–4.99, 5.00+).
 - BT-60 — Top bar: money scope and units in one menu (v0.61.0)
   The money scope switch and the units toggle moved into one small menu whose label shows the current scope and a "u" when units are on.
 - BT-59 — Bets page: key hints for the selected row (v0.60.0)

@@ -4,7 +4,7 @@
 import { normalize } from './autocomplete';
 import { countBets } from './dutch';
 import { profit, realStake } from './money';
-import { collapseRollovers } from './rollover';
+import { collapseRollovers, TIERS, tierOf } from './rollover';
 import type { Bet, Leg, Result } from './types';
 
 export const DIMENSIONS = ['sport', 'book', 'market', 'odds', 'type', 'situation'] as const;
@@ -14,7 +14,7 @@ export const DIMENSION_LABEL: Record<Dimension, string> = {
   sport: 'Sport',
   book: 'Book',
   market: 'Market',
-  odds: 'Odds range',
+  odds: 'Odds',
   type: 'Type',
   situation: 'Situation',
 };
@@ -22,7 +22,10 @@ export const DIMENSION_LABEL: Record<Dimension, string> = {
 export const NOT_SET = 'Not set';
 export const MIXED = 'Mixed';
 
-/** Total-odds buckets, lowest first. `max` is exclusive. */
+/**
+ * Total-odds buckets, lowest first. `max` is exclusive. BT-61: the main breakdown uses the shot bands below instead;
+ * these stay for the dutch "By combined odds" table (BT-41).
+ */
 export const ODDS_RANGES = [
   { label: '1.01–1.49', max: 1.5 },
   { label: '1.50–1.99', max: 2 },
@@ -33,6 +36,40 @@ export const ODDS_RANGES = [
 
 export function oddsRange(odds: number): string {
   return ODDS_RANGES.find((r) => odds < r.max)!.label;
+}
+
+// BT-61: the Odds breakdown by the owner's bands (mini, semi, Pepsi, shot), taken from the rollover tiers (one source:
+// a rename or a new minimum there shows here), plus "Below mini". Shot is split into finer sub-rows.
+const odds2 = (n: number) => n.toFixed(2);
+const BELOW = 'Below mini';
+
+/** The bands lowest first, each with its label ("Semi 1.33–1.50"). */
+export const ODDS_BANDS: { key: string; label: string }[] = [
+  { key: BELOW, label: `${BELOW} under ${odds2(TIERS[0].min)}` },
+  ...TIERS.map((t, i) => {
+    const next = TIERS[i + 1];
+    return { key: t.name as string, label: `${t.name} ${odds2(t.min)}${next ? `–${odds2(next.min - 0.01)}` : '+'}` };
+  }),
+];
+
+/** The band odds fall in (judged at 2 decimals, as the tiers are). */
+export function oddsBand(odds: number): { key: string; label: string } {
+  const t = tierOf(odds) ?? BELOW;
+  return ODDS_BANDS.find((b) => b.key === t)!;
+}
+
+const TOP = TIERS[TIERS.length - 1]!;
+/** The top band (Shot) split finer, so a 1.85 and a 6.0 are not read as the same thing. */
+export const SHOT_SUBS = [TOP.min, 2, 3, 5].map((min, i, all) => {
+  const next = all[i + 1];
+  return { min, label: next ? `${odds2(min)}–${odds2(next - 0.01)}` : `${odds2(min)}+` };
+});
+
+export function shotSub(odds: number): { key: string; label: string } {
+  const o = Math.round(odds * 100) / 100;
+  let sub = SHOT_SUBS[0]!;
+  for (const x of SHOT_SUBS) if (o >= x.min) sub = x;
+  return { key: `${TOP.name}:${sub.label}`, label: sub.label };
 }
 
 export interface Row {
@@ -50,6 +87,8 @@ export interface Row {
   losses: number;
   /** wins / (wins + losses); null when there are none. */
   winRate: number | null;
+  /** BT-61: a sub-row (Shot's finer ranges): its parent row's key. Sub-rows sort with their parent. */
+  parent?: string;
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -76,10 +115,8 @@ function groupOf(b: Bet, d: Dimension): { key: string; label: string } {
       const v = b.book.trim();
       return v ? { key: normalize(v), label: v } : { key: '\u0000not-set', label: NOT_SET };
     }
-    case 'odds': {
-      const label = oddsRange(b.odds);
-      return { key: label, label };
-    }
+    case 'odds':
+      return oddsBand(b.odds);
     case 'type':
       if (b.dutchId) return { key: 'dutch', label: 'Dutch' };
       // BT-35: a ladder next to the rollover shots
@@ -91,16 +128,12 @@ function groupOf(b: Bet, d: Dimension): { key: string; label: string } {
   }
 }
 
-/**
- * One row per group. Bets are expected newest first (as the app holds them), so a group's label is its
- * most recent spelling. Rows are sorted by number of bets, then label; odds ranges keep their natural order.
- */
-export function breakdown(bets: Bet[], d: Dimension): Row[] {
+/** One row per group of (already collapsed) bets. */
+function aggregate(collapsed: Bet[], keyOf: (b: Bet) => { key: string; label: string }): Row[] {
   const rows = new Map<string, Row>();
   const members = new Map<string, Bet[]>();
-  // BT-29: a rollover shot is one bet, grouped by its first bet (book, situation) and its legs, at its total odds
-  for (const b of collapseRollovers(bets)) {
-    const g = groupOf(b, d);
+  for (const b of collapsed) {
+    const g = keyOf(b);
     let r = rows.get(g.key);
     if (!r) {
       r = { key: g.key, label: g.label, bets: 0, pending: 0, wagered: 0, settledStake: 0, profit: 0, roi: null, wins: 0, losses: 0, winRate: null };
@@ -114,7 +147,7 @@ export function breakdown(bets: Bet[], d: Dimension): Row[] {
     r.profit += profit(b);
   }
   // counts: a dutch is one bet within each row it has bets in (judged by those bets)
-  const out = [...rows.values()].map((r) => {
+  return [...rows.values()].map((r) => {
     const c = countBets(members.get(r.key)!);
     return {
       ...r,
@@ -129,11 +162,41 @@ export function breakdown(bets: Bet[], d: Dimension): Row[] {
       winRate: c.wins + c.losses > 0 ? c.wins / (c.wins + c.losses) : null,
     };
   });
+}
+
+/**
+ * One row per group. Bets are expected newest first (as the app holds them), so a group's label is its
+ * most recent spelling. Rows are sorted by number of bets, then label; odds bands keep their natural order, with
+ * Shot's sub-rows right after it.
+ */
+export function breakdown(bets: Bet[], d: Dimension): Row[] {
+  // BT-29: a rollover shot is one bet, grouped by its first bet (book, situation) and its legs, at its total odds
+  const collapsed = collapseRollovers(bets);
   if (d === 'odds') {
-    const order = ODDS_RANGES.map((r) => r.label as string);
-    return out.sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
+    const order = ODDS_BANDS.map((x) => x.key);
+    const subOrder = SHOT_SUBS.map((x) => `${TOP.name}:${x.label}`);
+    const out: Row[] = [];
+    for (const row of aggregate(collapsed, (b) => oddsBand(b.odds)).sort((x, y) => order.indexOf(x.key) - order.indexOf(y.key))) {
+      out.push(row);
+      if (row.key !== TOP.name) continue;
+      const subs = aggregate(
+        collapsed.filter((b) => oddsBand(b.odds).key === TOP.name),
+        (b) => shotSub(b.odds),
+      ).sort((x, y) => subOrder.indexOf(x.key) - subOrder.indexOf(y.key));
+      out.push(...subs.map((x) => ({ ...x, parent: row.key })));
+    }
+    return out;
   }
-  return out.sort((a, b) => b.bets - a.bets || a.label.localeCompare(b.label));
+  return aggregate(collapsed, (b) => groupOf(b, d)).sort((x, y) => y.bets - x.bets || x.label.localeCompare(y.label));
+}
+
+export type SortKey = 'natural' | 'bets' | 'wagered' | 'profit' | 'roi' | 'winRate';
+
+/** Rows sorted by a column (missing ROI / win rate last); sub-rows stay under their parent, in their own order. */
+export function sortRows(rows: Row[], sort: SortKey): Row[] {
+  if (sort === 'natural') return rows;
+  const top = rows.filter((r) => !r.parent).sort((x, y) => (y[sort] ?? -Infinity) - (x[sort] ?? -Infinity));
+  return top.flatMap((r) => [r, ...rows.filter((x) => x.parent === r.key)]);
 }
 
 const legLost = (r: Result) => r === 'lost' || r === 'half-lost';

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { breakdown, comboReport, MIXED, NOT_SET, oddsRange } from '@/lib/analytics';
+import { breakdown, comboReport, MIXED, NOT_SET, ODDS_BANDS, oddsBand, oddsRange, shotSub, sortRows } from '@/lib/analytics';
+import { TIERS } from '@/lib/rollover';
 import { bet, leg } from './helpers';
 
 describe('breakdown', () => {
@@ -35,12 +36,52 @@ describe('breakdown', () => {
     expect(rows.map((r) => [r.label, r.bets])).toEqual([[NOT_SET, 2], ['Basketball', 1], [MIXED, 1]]);
   });
 
-  it('odds ranges use the total odds, edges go up, and keep their natural order', () => {
+  it('the dutch table still uses the generic odds ranges, edges go up', () => {
     expect([1.01, 1.49, 1.5, 1.99, 2, 2.99, 3, 4.99, 5, 30].map(oddsRange)).toEqual([
       '1.01–1.49', '1.01–1.49', '1.50–1.99', '1.50–1.99', '2.00–2.99', '2.00–2.99', '3.00–4.99', '3.00–4.99', '5.00+', '5.00+',
     ]);
-    const rows = breakdown([bet({ odds: 6 }), bet({ odds: 6 }), bet({ odds: 1.3 })], 'odds');
-    expect(rows.map((r) => r.label)).toEqual(['1.01–1.49', '5.00+']);
+  });
+
+  it('BT-61: odds bands come from the shot tiers, boundaries go up', () => {
+    expect([1.09, 1.1, 1.32, 1.33, 1.5, 1.51, 1.79, 1.8, 1.99, 2, 5].map((o) => oddsBand(o).label)).toEqual([
+      'Below mini under 1.10',
+      'Mini 1.10–1.32',
+      'Mini 1.10–1.32',
+      'Semi 1.33–1.50',
+      'Semi 1.33–1.50',
+      'Pepsi 1.51–1.79',
+      'Pepsi 1.51–1.79',
+      'Shot 1.80+',
+      'Shot 1.80+',
+      'Shot 1.80+',
+      'Shot 1.80+',
+    ]);
+    expect([1.8, 1.99, 2, 2.99, 3, 4.99, 5, 30].map((o) => shotSub(o).label)).toEqual(['1.80–1.99', '1.80–1.99', '2.00–2.99', '2.00–2.99', '3.00–4.99', '3.00–4.99', '5.00+', '5.00+']);
+    // the band names are the tiers' (a rename there shows here)
+    expect(ODDS_BANDS.slice(1).map((b) => b.key)).toEqual(TIERS.map((t) => t.name));
+  });
+
+  it('BT-61: bands lowest first, Shot followed by its sub-rows, which add up to it; empty bands not shown', () => {
+    const rows = breakdown(
+      [bet({ odds: 6, result: 'won', stake: 10 }), bet({ odds: 1.85, result: 'lost', stake: 20 }), bet({ odds: 2.5 }), bet({ odds: 1.2, result: 'won' }), bet({ odds: 1.05 })],
+      'odds',
+    );
+    expect(rows.map((r) => [r.label, r.bets, r.parent ?? null])).toEqual([
+      ['Below mini under 1.10', 1, null],
+      ['Mini 1.10–1.32', 1, null],
+      ['Shot 1.80+', 3, null],
+      ['1.80–1.99', 1, 'Shot'],
+      ['2.00–2.99', 1, 'Shot'],
+      ['5.00+', 1, 'Shot'],
+    ]);
+    const shot = rows.find((r) => r.key === 'Shot')!;
+    const subs = rows.filter((r) => r.parent === 'Shot');
+    for (const k of ['bets', 'pending', 'wagered', 'profit', 'wins', 'losses'] as const) expect(subs.reduce((n, r) => n + r[k], 0)).toBeCloseTo(shot[k]);
+  });
+
+  it('BT-61: sorting by a column keeps sub-rows under their parent', () => {
+    const rows = breakdown([bet({ odds: 6, result: 'lost' }), bet({ odds: 1.85, result: 'won' }), bet({ odds: 1.2, result: 'won', stake: 500 })], 'odds');
+    expect(sortRows(rows, 'profit').map((r) => r.label)).toEqual(['Mini 1.10–1.32', 'Shot 1.80+', '1.80–1.99', '5.00+']);
   });
 
   it('half results, voids and cash-outs count in profit but not in W/L', () => {

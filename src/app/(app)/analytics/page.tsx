@@ -3,7 +3,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { useApp } from '@/components/AppProvider';
 import { ProfitText } from '@/components/BetTable';
-import { breakdown, comboReport, DIMENSION_LABEL, DIMENSIONS, type Dimension, type Row } from '@/lib/analytics';
+import { breakdown, comboReport, DIMENSION_LABEL, DIMENSIONS, sortRows, type Dimension, type Row, type SortKey } from '@/lib/analytics';
 import { formatDate } from '@/lib/dates';
 import { dutchHitReport } from '@/lib/hits';
 import { dutchStats } from '@/lib/dutchStats';
@@ -15,8 +15,6 @@ import { asUnitBets, formatUnits } from '@/lib/units';
 import { ProfitChart } from '@/components/ProfitChart';
 import { formatPercent } from '@/lib/stats';
 import { cashoutVerdict } from '@/lib/woulda';
-
-type SortKey = 'natural' | 'bets' | 'wagered' | 'profit' | 'roi' | 'winRate';
 
 const COLUMNS: { key: SortKey; label: string; title?: string }[] = [
   { key: 'bets', label: 'Bets' },
@@ -42,12 +40,9 @@ export default function AnalyticsPage() {
   const [sort, setSort] = useState<SortKey>('natural');
 
   const rows = useMemo(() => breakdown(bets, dim), [bets, dim]);
-  const sorted = useMemo(() => {
-    if (sort === 'natural') return rows;
-    // missing ROI / win rate ("-") always last
-    return [...rows].sort((a, b) => (b[sort] ?? -Infinity) - (a[sort] ?? -Infinity));
-  }, [rows, sort]);
-  const maxAbsProfit = Math.max(...rows.map((r) => Math.abs(r.profit)), 0);
+  // missing ROI / win rate ("-") always last; BT-61: Shot's sub-rows stay under it
+  const sorted = useMemo(() => sortRows(rows, sort), [rows, sort]);
+  const maxAbsProfit = Math.max(...rows.filter((r) => !r.parent).map((r) => Math.abs(r.profit)), 0);
   const combos = useMemo(() => comboReport(bets), [bets]);
   const hits = useMemo(() => dutchHitReport(bets), [bets]);
   const dutches = useMemo(() => dutchStats(bets), [bets]);
@@ -299,8 +294,8 @@ export default function AnalyticsPage() {
 function BreakdownRow({ r, maxAbsProfit, scope, fmt, units }: { r: Row; maxAbsProfit: number; scope: MoneyScope; fmt(n: number): string; units: boolean }) {
   const width = maxAbsProfit > 0 ? (Math.abs(r.profit) / maxAbsProfit) * 100 : 0;
   return (
-    <tr className="border-b border-zinc-900" data-testid="analytics-row">
-      <td className="py-2 pr-3 text-zinc-100">{r.label}</td>
+    <tr className="border-b border-zinc-900" data-testid="analytics-row" data-sub={r.parent ? 'true' : undefined}>
+      <td className={`py-2 pr-3 ${r.parent ? 'pl-6 text-zinc-400' : 'text-zinc-100'}`}>{r.parent ? `↳ ${r.label}` : r.label}</td>
       <td className="px-3 py-2 text-right tabular-nums" data-testid="cell-bets">
         {r.bets}
         {r.pending > 0 && <span className="ml-1 text-xs text-zinc-500" title={`${r.pending} pending`}>({r.pending}p)</span>}

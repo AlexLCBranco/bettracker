@@ -30,22 +30,6 @@ glance. Cause found in the code: everything has the same visual weight (one line
 fields always open, a crowded top bar). Build order: BT-55, BT-56, BT-57, BT-58, BT-59, BT-60.
 Rule for all six: the bet table's column alignment must not change (owner, 2026-11-24).
 
-### BT-61 — Analytics: the Odds breakdown uses the shot bands
-**In short:** On Analytics, "Odds" groups bets by his own bands (mini, semi, Pepsi, shot) instead of the generic ranges, with shot split into finer rows.
-
-Agreed with the owner on 2026-11-26: the bands replace the generic ranges (not a second breakdown beside them).
-- The `odds` dimension in `src/lib/analytics.ts` (`ODDS_RANGES`, `oddsRange`) takes its bands from the tiers
-  already defined in `src/lib/rollover.ts` (one source: do not copy the numbers; "Pepsi" is still a placeholder
-  name, so a rename there must show here).
-- Rows, lowest first: "Below mini" (under the mini minimum), Mini, Semi, Pepsi, Shot.
-- Shot (1.8 and up) is one row with its totals, plus indented sub-rows 1.80–1.99, 2.00–2.99, 3.00–4.99, 5.00+,
-  so a 1.85 and a 6.0 are not read as the same thing. Sub-rows sort with their parent, never on their own.
-- Each row label shows its range next to the name ("Semi 1.33–1.50"). Empty bands are not shown, as today.
-- Which odds a bet, dutch or rollover counts with stays exactly as the breakdown does it today.
-- The dutch "By combined odds" table (`dutchStats`, BT-41) is not part of this item: left as it is.
-- Tests: unit tests for the band of each boundary value (1.09, 1.1, 1.32, 1.33, 1.5, 1.51, 1.79, 1.8, 1.99, 2,
-  5) and for the shot row equalling the sum of its sub-rows; update the analytics specs that read odds labels.
-
 ### Analytics redesign (BT-62 to BT-68)
 
 Agreed with the owner on 2026-11-26 ("put all of them in, I'll see how it looks live"), together with BT-61.

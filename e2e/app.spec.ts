@@ -232,9 +232,11 @@ test('analytics: breakdown by sport and odds range, and the combination that los
   await expect(row.getByTestId('cell-winrate')).toContainText('50.0% 1W/1L');
   await expect(page.locator('main')).not.toContainText('NaN');
 
-  await page.getByRole('tab', { name: 'Odds range' }).click();
-  await expect(page.getByRole('table', { name: 'By odds range' })).toBeVisible();
-  await expect(page.getByTestId('analytics-row').filter({ hasText: '2.00–2.99' })).toHaveCount(1);
+  await page.getByRole('tab', { name: 'Odds', exact: true }).click();
+  await expect(page.getByRole('table', { name: 'By odds' })).toBeVisible();
+  // BT-61: the shot bands, Shot split finer (indented sub-rows)
+  await expect(page.getByTestId('analytics-row').filter({ hasText: 'Shot 1.80+' })).toHaveCount(1);
+  await expect(page.locator('[data-testid=analytics-row][data-sub]').filter({ hasText: '2.00–2.99' })).toHaveCount(1);
 
   const combos = page.getByTestId('combos');
   await expect(combos.getByRole('list', { name: 'One leg away' }).getByRole('listitem').filter({ hasText: `${tag} combo` })).toContainText(`lost: C vs D · ${tag} Mkt · Over 2.5`);
