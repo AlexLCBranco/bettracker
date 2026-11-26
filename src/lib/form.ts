@@ -50,6 +50,36 @@ export interface BetForm {
 
 export const emptyLeg = (sport = ''): LegForm => ({ sport, game: '', market: '', selection: '', odds: '', result: 'pending', actual: '' });
 
+/**
+ * A combination's total odds estimated from its legs: every leg's odds multiplied, to 2 decimals like a book shows.
+ * Null unless there are 2+ legs and every one has odds that read. The form prefills the total with it, marked
+ * "estimated", until the user types the book's real price over it (the price the bet is saved with).
+ */
+export function legsOdds(legs: Pick<LegForm, 'odds'>[]): number | null {
+  if (legs.length < 2) return null;
+  let p = 1;
+  for (const l of legs) {
+    const o = l.odds.trim() ? oddsFromText(l.odds) : null;
+    if (o == null) return null;
+    p *= o;
+  }
+  return Math.round(p * 100) / 100;
+}
+
+/** Whether the total odds box follows the legs: empty, or exactly the legs' estimate. */
+export const oddsFollowLegs = (f: Pick<BetForm, 'odds' | 'legs'>): boolean => {
+  if (!f.odds.trim()) return true;
+  const est = legsOdds(f.legs);
+  return est != null && oddsFromText(f.odds) === est;
+};
+
+/** The form with new legs; a total that follows the legs becomes their new estimate (blank when there is none). */
+export function withLegs(f: BetForm, legs: LegForm[]): BetForm {
+  if (f.type !== 'combination' || !oddsFollowLegs(f)) return { ...f, legs };
+  const est = legsOdds(legs);
+  return { ...f, legs, odds: est == null ? '' : String(est) };
+}
+
 export interface Defaults {
   book: string;
   sport: string;

@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { formatDate, parseDateInput } from '@/lib/dates';
-import { editPatch, emptyLeg, formFromBet, formToBet, newForm, nextForm, type BetForm, type LegForm } from '@/lib/form';
-import { formatMoney, MONEY_SYMBOL, oddsFromText, parseNumber, profitMoney, winReturn } from '@/lib/money';
+import { editPatch, emptyLeg, formFromBet, formToBet, legsOdds, newForm, nextForm, oddsFollowLegs, withLegs, type BetForm, type LegForm } from '@/lib/form';
+import { formatMoney, formatOdds, MONEY_SYMBOL, oddsFromText, parseNumber, profitMoney, winReturn } from '@/lib/money';
 import { MONEY_OPTION_LABEL, MONEY_TEXT } from './moneyStyle';
 import { BalanceHint } from './Bankroll';
 import { BET_TYPES, RESULT_LABEL, RESULTS, SITUATIONS, type Bet } from '@/lib/types';
@@ -50,7 +50,9 @@ function FormBody() {
   }, []);
 
   const set = <K extends keyof BetForm>(k: K, v: BetForm[K]) => setF((x) => ({ ...x, [k]: v }));
-  const setLeg = (i: number, patch: Partial<LegForm>) => setF((x) => ({ ...x, legs: x.legs.map((l, j) => (j === i ? { ...l, ...patch } : l)) }));
+  // a combination's total odds follow its legs (multiplied, "estimated") until the book's price is typed over them
+  const setLegs = (fn: (legs: LegForm[]) => LegForm[]) => setF((x) => withLegs(x, fn(x.legs)));
+  const setLeg = (i: number, patch: Partial<LegForm>) => setLegs((legs) => legs.map((l, j) => (j === i ? { ...l, ...patch } : l)));
 
   const save = async (another: boolean) => {
     if (saving) return;
@@ -103,6 +105,7 @@ function FormBody() {
   const stake = typed?.ok ? typed.amount : null;
   const unitHint = typed && (!typed.ok ? { ok: false, text: typed.error } : typed.units != null ? { ok: true, text: previewText(typed.units, typed.amount, typed.money, formatMoney) } : null);
   const odds = oddsFromText(f.odds);
+  const legsEstimate = f.type === 'combination' ? legsOdds(f.legs) : null;
   // BT-33: a bonus bet returns its winnings only
   const potential = stake && odds ? winReturn({ stake, odds, money: f.money }) : 0;
   // BT-22: a team in two games on the game date (this bet's games and every other bet's)
@@ -140,7 +143,19 @@ function FormBody() {
             </span>
           </L>
           <L label="Total odds *">
-            <OddsInput value={f.odds} onChange={(v) => set('odds', v)} placeholder="2.10, -114, 5/2" aria-label="Odds" />
+            <span className="relative flex flex-col">
+              <OddsInput value={f.odds} onChange={(v) => set('odds', v)} placeholder="2.10, -114, 5/2" aria-label="Odds" />
+              {legsEstimate != null &&
+                (oddsFollowLegs(f) ? (
+                  <span className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 rounded bg-zinc-900 px-1 text-[11px] text-amber-300" title="The legs' odds multiplied. Type the book's real price over it." data-testid="total-odds-estimated">
+                    estimated
+                  </span>
+                ) : (
+                  <button type="button" tabIndex={-1} className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded bg-zinc-900 px-1 text-[11px] text-zinc-400 hover:text-white" title="Use the legs' odds multiplied" onClick={() => set('odds', String(legsEstimate))} data-testid="total-odds-use-legs">
+                    legs {formatOdds(legsEstimate, 2)}
+                  </button>
+                ))}
+            </span>
             {rollover?.shot && <WhatIfPreview shot={rollover.shot} odds={f.odds} money={rollover.money} unitSize={rollover.shot.unitSize} />}
           </L>
           <L label="Result *">
@@ -270,7 +285,7 @@ function FormBody() {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium">Legs (optional)</span>
-              <button type="button" className="btn text-xs" onClick={() => set('legs', [...f.legs, emptyLeg(lastSport)])}>
+              <button type="button" className="btn text-xs" onClick={() => setLegs((legs) => [...legs, emptyLeg(lastSport)])}>
                 + Add leg
               </button>
             </div>
@@ -303,7 +318,7 @@ function FormBody() {
                 <L label="Actual">
                   <input className="field" value={l.actual} onChange={(e) => setLeg(i, { actual: e.target.value })} placeholder="11, 111-112" aria-label={`Leg ${i + 1} actual`} />
                 </L>
-                <button type="button" className="btn mb-0.5 text-xs" aria-label={`Remove leg ${i + 1}`} onClick={() => set('legs', f.legs.filter((_, j) => j !== i))}>
+                <button type="button" className="btn mb-0.5 text-xs" aria-label={`Remove leg ${i + 1}`} onClick={() => setLegs((legs) => legs.filter((_, j) => j !== i))}>
                   ✕
                 </button>
               </div>

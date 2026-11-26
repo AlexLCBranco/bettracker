@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-26
+- A combination's total odds fill in from its legs (v0.52.0)
+  The legs' odds multiplied show as the total, marked "estimated", until you type the book's price over it.
 - The LIVE tag switches a bet to pregame (v0.51.0)
   Clicking a row's LIVE tag makes that bet (or the whole dutch or shot) pregame; Ctrl+Z undoes it.
 - The Solo tag is a cyan chip, set apart from the bet text (v0.50.1)
