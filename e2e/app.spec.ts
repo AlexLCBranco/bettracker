@@ -238,6 +238,9 @@ test('analytics: breakdown by sport and odds range, and the combination that los
   await expect(page.getByTestId('analytics-row').filter({ hasText: 'Shot 1.80+' })).toHaveCount(1);
   await expect(page.locator('[data-testid=analytics-row][data-sub]').filter({ hasText: '2.00–2.99' })).toHaveCount(1);
 
+  // BT-67: combinations have their own tab
+  await page.getByRole('tab', { name: 'Combinations' }).click();
+  await expect(page).toHaveURL(/\/analytics\?tab=combinations$/);
   const combos = page.getByTestId('combos');
   await expect(combos.getByRole('list', { name: 'One leg away' }).getByRole('listitem').filter({ hasText: `${tag} combo` })).toContainText(`lost: C vs D · ${tag} Mkt · Over 2.5`);
   const legRow = combos.getByRole('table', { name: 'Leg record by market' }).getByRole('row').filter({ hasText: `${tag} Mkt` });
@@ -580,9 +583,8 @@ test('dutch hit count: the owner example settled three ways shows 0 of 2, 0 of 2
   await page.getByLabel('Search bets').fill(tag);
   await expect(row(3).getByTestId('result-sub')).toHaveText('2 of 2 splits hit');
 
-  // Analytics, type view: the hit tiles count these (plus any real dutches on the live site)
-  await page.goto('/analytics');
-  await page.getByRole('tab', { name: 'Type' }).click();
+  // Analytics, Dutches tab (BT-67): the hit tiles count these (plus any real dutches on the live site)
+  await page.goto('/analytics?tab=dutches');
   await expect(page.getByTestId('dutch-hits')).toBeVisible();
   for (const id of ['hits-all', 'hits-none', 'hits-shared']) expect(Number(await page.getByTestId(`${id}-value`).textContent())).toBeGreaterThanOrEqual(1);
 });

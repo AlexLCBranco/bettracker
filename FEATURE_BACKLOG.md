@@ -94,18 +94,6 @@ on bonus money and on PP batches staying out of Analytics still holds.
 - Tests: unit tests that each Analytics group and its Bets filter select the same bets; e2e for one row per
   breakdown (click, land on Bets, same count, chip shown).
 
-### BT-67 — Analytics: sections as tabs
-**In short:** Analytics becomes tabs (Overview, Dutches, Combinations, Ladders, Cash-outs) instead of one long page, and ladders stop being hidden.
-
-- Tabs under the page title, the chosen one in the address (`/analytics?tab=dutches`), like the Bets page tabs.
-- Overview: headline (BT-62), "Performance Over Time", the "break down by" table.
-- Dutches: today's Dutches section. Combinations: "which leg lost". Cash-outs: the cash-out verdict, with its
-  explanation as one line under the tile.
-- Ladders: the ladder tiles, which today only appear inside the breakdown when "Type" is picked
-  (`dim === 'type' && ladders.started > 0`). They move here and leave the breakdown.
-- A tab with nothing yet shows its empty text, it is not hidden. The period switch (BT-63) sits above the tabs.
-- Tests: e2e for each tab and its address; move the existing analytics specs to the right tab.
-
 ### BT-68 — Analytics: Dutches down to four headline tiles
 **In short:** The Dutches tab shows four numbers first and keeps the rest one click away.
 

@@ -4,7 +4,7 @@ import { createBet, expect, test } from './helpers';
 import type { Page } from '@playwright/test';
 
 async function tiles(page: Page) {
-  await page.goto('/analytics');
+  await page.goto('/analytics?tab=dutches');
   const block = page.getByTestId('dutches');
   await expect(block).toBeVisible();
   if (await block.getByTestId('dutches-empty').isVisible()) return { count: 0, hit: 0, splits: 0 };

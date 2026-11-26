@@ -10,7 +10,7 @@ const money = (t: string | null) => {
 };
 
 async function verdict(page: Page) {
-  await page.goto('/analytics');
+  await page.goto('/analytics?tab=cashouts');
   const tile = page.getByTestId('cashout-verdict-net');
   await expect(tile).toBeVisible();
   const sub = (await tile.locator('div').last().textContent()) ?? '';
