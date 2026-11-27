@@ -1,10 +1,10 @@
 // BT-31: the proposal maths and the generator's hard rules, with fixed seeds.
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_TIERS, type PPLeg, type PPTier } from '@/lib/pp';
-import { appearances, gameKey, generate, mmFor, mmGroups, shotPlan, typicalShotOdds, majorLevels, placeholderShares, placeLine, preview, propose, rng, roles, startingScheme, type PPScheme } from '@/lib/ppBuilder';
+import { appearances, gameKey, generate, mmFor, mmGroups, shotPlan, typicalShotOdds, majorLevels, placeLine, preview, propose, rng, roles, startingScheme, type PPScheme } from '@/lib/ppBuilder';
 
 const leg = (id: string, tier: string, odds: number, game = `${id} game`): PPLeg => ({ id, sport: '', game, market: '', selection: id, odds, tier, result: 'pending', actual: '', note: '' });
-const scheme = (over: Partial<PPScheme> = {}): PPScheme => ({ count: 20, target: 20, bandMin: 15, bandMax: 30, majorShares: [50], shotCount: 2, avoidPairs: false, seed: 7, ...over });
+const scheme = (over: Partial<PPScheme> = {}): PPScheme => ({ count: 20, target: 20, bandMin: 15, bandMax: 30, majorsPerPP: [1], shotCount: 2, avoidPairs: false, seed: 7, ...over });
 
 // the owner's shape: one major-major around 2, majors, PP shots
 const pool = [
@@ -25,58 +25,58 @@ describe('roles and starting scheme', () => {
     ]);
     expect(majorLevels(tiers)).toBe(2);
   });
-  it('placeholders: Majors 50% (lower levels less), PP shots on 2 PPs each', () => {
-    expect(placeholderShares(3)).toEqual([50, 40, 30]);
-    expect(startingScheme({ tiers: DEFAULT_TIERS, targetOdds: 20, scheme: null }, null)).toMatchObject({ majorShares: [50], shotCount: 2, target: 20, bandMin: 15, bandMax: 30, avoidPairs: false });
+  it('defaults: one Major per PP (owner, 2026-11-27), PP shots on 2 PPs each', () => {
+    expect(startingScheme({ tiers: DEFAULT_TIERS, targetOdds: 20, scheme: null }, null)).toMatchObject({ majorsPerPP: [1], shotCount: 2, target: 20, bandMin: 15, bandMax: 30, avoidPairs: false });
   });
   it('the last batch’s scheme is the start of the next one (fitted to its levels, its own target)', () => {
-    const last = { count: 30, majorShares: [60], shotCount: 3, bandMin: 12, bandMax: 40, target: 25 };
+    const last = { count: 30, majorsPerPP: [2], shotCount: 3, bandMin: 12, bandMax: 40, target: 25 };
     const tiers: PPTier[] = [...DEFAULT_TIERS.slice(0, 2), { id: 'm2', name: 'Major 2' }, DEFAULT_TIERS[2]!];
-    expect(startingScheme({ tiers, targetOdds: 18, scheme: null }, last)).toMatchObject({ count: 30, majorShares: [60, 60], shotCount: 3, bandMin: 12, bandMax: 40, target: 18 });
+    expect(startingScheme({ tiers, targetOdds: 18, scheme: null }, last)).toMatchObject({ count: 30, majorsPerPP: [2, 2], shotCount: 3, bandMin: 12, bandMax: 40, target: 18 });
   });
-  it('appearances per leg', () => {
-    const a = appearances(pool, DEFAULT_TIERS, scheme({ count: 20, majorShares: [45] }));
-    expect([a.get('mm'), a.get('m1'), a.get('s1')]).toEqual([20, 9, 2]);
+  it('a scheme from before (a % share per Major level) starts again at one Major per PP', () => {
+    expect(startingScheme({ tiers: DEFAULT_TIERS, targetOdds: 20, scheme: null }, { count: 20, majorShares: [50] }).majorsPerPP).toEqual([1]);
+  });
+  it('appearances per leg: a level’s places (PPs × per PP) shared evenly over its Majors', () => {
+    const a = appearances(pool, DEFAULT_TIERS, scheme({ count: 20 }));
+    // 20 places over 6 Majors: 4, 4, 3, 3, 3, 3
+    expect([a.get('mm'), a.get('m1'), a.get('m2'), a.get('m3'), a.get('s1')]).toEqual([20, 4, 4, 3, 2]);
+    expect(['m1', 'm2', 'm3', 'm4', 'm5', 'm6'].reduce((x, id) => x + a.get(id)!, 0)).toBe(20);
+    const two = appearances(pool, DEFAULT_TIERS, scheme({ count: 20, majorsPerPP: [2] }));
+    expect(['m1', 'm2', 'm3', 'm4', 'm5', 'm6'].reduce((x, id) => x + two.get(id)!, 0)).toBe(40);
   });
 });
 
 describe('proposal', () => {
-  it('about one PP shot per PP, and the Major share that puts the average PP on the target', () => {
+  const avg = (legs: PPLeg[]) => Math.exp(legs.reduce((a, l) => a + Math.log(l.odds), 0) / legs.length);
+  it('about one PP shot per PP, one Major per PP: what the average PP comes to', () => {
     const p = propose(batch, scheme());
-    expect(p.short).toBe(false);
     expect(p.scheme.count).toBe(20); // 2 × 10 shot legs
-    expect(p.average).toBeCloseTo(20, 0);
-    expect(p.scheme.majorShares[0]).toBeGreaterThan(0);
-    expect(p.scheme.majorShares[0]).toBeLessThan(100);
-    expect(p.message).toContain('20 PPs');
+    const majors = pool.filter((l) => l.tier === 'major');
+    const shots = pool.filter((l) => l.tier === 'shot');
+    expect(p.average).toBeCloseTo(2 * avg(majors) * avg(shots), 6);
+    expect(p.message).toContain('20 PPs (PP shots on 2 each: about 1.0 per PP), 1 Major per PP: the average PP is');
   });
-  it('keeps the ratio between Major levels', () => {
-    const tiers: PPTier[] = [...DEFAULT_TIERS.slice(0, 2), { id: 'm2', name: 'Major 2' }, DEFAULT_TIERS[2]!];
-    const legs = [...pool, leg('x1', 'm2', 1.5), leg('x2', 'm2', 1.5)];
-    const p = propose({ legs, tiers }, scheme({ majorShares: [50, 25] }));
-    expect(p.scheme.majorShares[1]! / p.scheme.majorShares[0]!).toBeCloseTo(0.5, 1);
-  });
-  it('says plainly when the pool cannot reach the target, with what is missing', () => {
+  it('says so when the average PP is under the band, and what to do', () => {
     const p = propose({ legs: [leg('mm', 'mm', 1.5), leg('m1', 'major', 1.3)], tiers: DEFAULT_TIERS }, scheme());
     expect(p.short).toBe(true);
-    expect(p.message).toMatch(/cannot reach 20\.00.*average PP is 1\.95.*missing about ×10\.26/);
+    expect(p.message).toMatch(/average PP is 1\.95, under the band from 15\. Add PP shots/);
   });
-  it('says so when the major-majors alone are over the target', () => {
+  it('says so when it is over the band', () => {
     const p = propose({ legs: [leg('mm', 'mm', 25), leg('m1', 'major', 1.5)], tiers: DEFAULT_TIERS }, scheme());
-    expect(p.message).toContain('no Majors are needed');
+    expect(p.message).toContain('37.50, over the band to 30');
   });
   it('an empty pool', () => expect(propose({ legs: [], tiers: DEFAULT_TIERS }, scheme()).short).toBe(true));
 });
 
 describe('generator hard rules (fixed seeds)', () => {
   for (const seed of [1, 2, 3, 42, 999]) {
-    it(`seed ${seed}: major-majors on every PP, a leg at most once per PP, no identical PPs, band respected`, () => {
-      const s = scheme({ seed, majorShares: [40] });
-      const g = generate(batch, s);
+    it(`seed ${seed}: major-majors on every PP, exactly one Major, a leg at most once, no identical PPs, band respected`, () => {
+      const g = generate(batch, scheme({ seed }));
       expect(g.tickets).toHaveLength(20 - g.dropped);
       const keys = new Set<string>();
       for (const t of g.tickets) {
         expect(t.legIds[0]).toBe('mm');
+        expect(t.legIds.filter((id) => id.startsWith('m') && id !== 'mm')).toHaveLength(1);
         expect(new Set(t.legIds).size).toBe(t.legIds.length);
         const key = [...t.legIds].sort().join(',');
         expect(keys.has(key)).toBe(false);
@@ -88,24 +88,38 @@ describe('generator hard rules (fixed seeds)', () => {
       expect(g.tickets.map((t) => t.number)).toEqual(g.tickets.map((_, i) => i + 1));
     });
   }
+  it('the Majors take turns evenly', () => {
+    const g = generate(batch, scheme({ seed: 4 }));
+    const on = ['m1', 'm2', 'm3', 'm4', 'm5', 'm6'].map((id) => g.tickets.filter((t) => t.legIds.includes(id)).length);
+    expect(on.reduce((a, b) => a + b, 0)).toBe(g.tickets.length);
+    expect(Math.max(...on) - Math.min(...on)).toBeLessThanOrEqual(1 + g.dropped);
+  });
+  it('two Majors per PP when asked, never two from the same game', () => {
+    const legs = [...pool.filter((l) => l.tier !== 'major'), leg('m1', 'major', 1.6, 'A'), leg('m2', 'major', 1.7, 'A'), leg('m3', 'major', 1.8, 'B'), leg('m4', 'major', 1.9, 'C')];
+    const g = generate({ legs, tiers: DEFAULT_TIERS }, scheme({ seed: 2, majorsPerPP: [2], bandMax: 40 }));
+    for (const t of g.tickets) {
+      const majors = t.legIds.filter((id) => /^m\d/.test(id));
+      expect(majors).toHaveLength(2);
+      expect(majors.includes('m1') && majors.includes('m2')).toBe(false);
+    }
+  });
   it('the same seed gives the same PPs; another seed others', () => {
     expect(generate(batch, scheme({ seed: 5 })).tickets).toEqual(generate(batch, scheme({ seed: 5 })).tickets);
     expect(generate(batch, scheme({ seed: 5 })).tickets).not.toEqual(generate(batch, scheme({ seed: 6 })).tickets);
   });
   it('every leg reaches its appearances where the numbers allow; the PP shots do', () => {
-    const g = generate(batch, scheme({ seed: 3, majorShares: [30] }));
-    const shots = g.shortfalls.filter((x) => x.legId.startsWith('s'));
-    expect(shots).toEqual([]);
+    const g = generate(batch, scheme({ seed: 3 }));
+    expect(g.shortfalls.filter((x) => x.legId.startsWith('s'))).toEqual([]);
   });
   it('reports the legs that fell short', () => {
-    // majors on 100% of PPs cannot fit under a band top of 30 with mm 2 and shots
-    const g = generate(batch, scheme({ seed: 3, majorShares: [100] }));
+    // every shot wanted on all 20 PPs cannot fit under a band top of 30
+    const g = generate(batch, scheme({ seed: 3, shotCount: 20 }));
     expect(g.shortfalls.length).toBeGreaterThan(0);
     for (const x of g.shortfalls) expect(x.got).toBeLessThan(x.wanted);
   });
   it('no two identical PPs: a tiny pool drops what it cannot make different', () => {
     const tiny = { legs: [leg('mm', 'mm', 2), leg('a', 'major', 8), leg('b', 'major', 9)], tiers: DEFAULT_TIERS };
-    const g = generate(tiny, scheme({ count: 10, majorShares: [100], shotCount: 0, seed: 1 }));
+    const g = generate(tiny, scheme({ count: 10, shotCount: 0, seed: 1 }));
     expect(g.tickets.length).toBe(2);
     expect(g.dropped).toBe(8);
   });
@@ -124,7 +138,7 @@ describe('generator hard rules (fixed seeds)', () => {
   ];
   for (const seed of [1, 2, 3, 9, 42]) {
     it(`seed ${seed}: never two legs from the same game on one PP, any tiers`, () => {
-      const g = generate({ legs: sameGameLegs, tiers: DEFAULT_TIERS }, scheme({ count: 12, majorShares: [60], bandMin: 8, bandMax: 40, seed }));
+      const g = generate({ legs: sameGameLegs, tiers: DEFAULT_TIERS }, scheme({ count: 12, bandMin: 8, bandMax: 40, seed }));
       expect(g.tickets.length).toBeGreaterThan(0);
       for (const t of g.tickets) {
         const games = t.legIds.map((id) => gameKey(sameGameLegs.find((l) => l.id === id)!));
@@ -133,7 +147,7 @@ describe('generator hard rules (fixed seeds)', () => {
     });
   }
   it('Major-majors from one game take turns: exactly one on every PP, split evenly', () => {
-    const g = generate({ legs: sameGameLegs, tiers: DEFAULT_TIERS }, scheme({ count: 12, majorShares: [60], bandMin: 8, bandMax: 40, seed: 4 }));
+    const g = generate({ legs: sameGameLegs, tiers: DEFAULT_TIERS }, scheme({ count: 12, bandMin: 8, bandMax: 40, seed: 4 }));
     const on = (id: string) => g.tickets.filter((t) => t.legIds.includes(id)).length;
     for (const t of g.tickets) {
       expect(t.legIds.filter((id) => id === 'mmA' || id === 'mmB')).toHaveLength(1);
@@ -155,10 +169,8 @@ describe('generator hard rules (fixed seeds)', () => {
     expect(mmGroups([leg('p', 'mm', 2, ''), leg('q', 'mm', 2, ' ')], DEFAULT_TIERS)).toHaveLength(2);
   });
   it('the proposal counts same-game Major-majors once, at their average', () => {
-    const one = propose({ legs: [leg('mm', 'mm', 4, 'A'), leg('m1', 'major', 1.5)], tiers: DEFAULT_TIERS }, scheme({ target: 3 }));
-    const turns = propose({ legs: [leg('mm', 'mm', 2, 'A'), leg('mm2', 'mm', 8, 'A'), leg('m1', 'major', 1.5)], tiers: DEFAULT_TIERS }, scheme({ target: 3 }));
-    expect(turns.message).toContain('already average 4.00');
-    expect(one.message).toContain('already average 4.00');
+    const turns = propose({ legs: [leg('mm', 'mm', 2, 'A'), leg('mm2', 'mm', 8, 'A'), leg('m1', 'major', 1.5)], tiers: DEFAULT_TIERS }, scheme());
+    expect(turns.average).toBeCloseTo(6, 6); // (2 and 8 at their average: 4) × 1.5
   });
   it('toggle: avoid repeating the same pair of legs (fewer repeated pairs than without it)', () => {
     const repeats = (avoidPairs: boolean) => {
@@ -206,20 +218,39 @@ describe('preview and place line', () => {
 // owner, 2026-11-27: "with 1 Major-major and 4 Majors, how many PP shots do I need?"
 describe('shot plan', () => {
   const pool = [leg('mm', 'mm', 2), ...[1, 2, 3, 4].map((i) => leg(`m${i}`, 'major', 1.7))];
-  it('his example: 1 MM at 2.00, 4 Majors at 1.70 on 50%, target 20, 20 PPs, shots at 3.00 on 2 PPs each', () => {
-    const p = shotPlan({ legs: pool, tiers: DEFAULT_TIERS }, scheme({ count: 20, target: 20, majorShares: [50], shotCount: 2 }), 3);
-    expect(p).toMatchObject({ hasShotTier: true, mm: 1, majors: 4, needed: 12, have: 0, missing: 12 });
-    expect(p.base).toBeCloseTo(5.78, 2); // 2 × 1.7^2
-    expect(p.perPP).toBeCloseTo(1.13, 2); // ln(20 / 5.78) / ln 3
+  it('his example: 1 MM at 2.00, 4 Majors at 1.70, one Major per PP, target 20, 20 PPs, shots at 3.00 on 2 PPs each', () => {
+    const p = shotPlan({ legs: pool, tiers: DEFAULT_TIERS }, scheme({ count: 20, target: 20, shotCount: 2 }), 3);
+    expect(p).toMatchObject({ hasShotTier: true, mm: 1, majors: 4, needed: 17, have: 0, missing: 17 });
+    expect(p.base).toBeCloseTo(3.4, 6); // 2 × 1.7: one Major per PP
+    expect(p.perPP).toBeCloseTo(Math.log(20 / 3.4) / Math.log(3), 6);
+  });
+  it('his batch of 2026-11-27: 3 Major-majors, 4 Majors, one Major per PP (not 26.83)', () => {
+    const legs = [
+      leg('blazers', 'mm', 1.33, 'Warriors@Blazers'),
+      leg('chelsea', 'mm', 1.23, 'Chelsea vs Forest'),
+      leg('palmeiras', 'mm', 1.2, 'Palmeiras vs Estudiantes'),
+      leg('maxeyPts', 'major', 3.3, '76ers@Pacers'),
+      leg('maxeyAst', 'major', 4.9, '76ers@Pacers'),
+      leg('scottiePts', 'major', 3, 'Nets vs Raptors'),
+      leg('scottieAst', 'major', 3.85, 'Nets vs Raptors'),
+    ];
+    const p = shotPlan({ legs, tiers: DEFAULT_TIERS }, scheme({ count: 20, target: 20, shotCount: 2 }), 3);
+    const base = 1.33 * 1.23 * 1.2 * Math.pow(3.3 * 4.9 * 3 * 3.85, 1 / 4);
+    expect(p.base).toBeCloseTo(base, 6); // ≈ 7.26
+    expect(p.base).toBeLessThan(8);
+    expect(p.needed).toBe(Math.ceil((20 * (Math.log(20 / base) / Math.log(3))) / 2)); // 10
+    // and the generator puts exactly one of the four on each PP
+    const g = generate({ legs: [...legs, ...[3, 3, 3, 3, 3, 3, 3, 3, 3, 3].map((o, i) => leg(`s${i}`, 'shot', o, `H${i}`))], tiers: DEFAULT_TIERS }, scheme({ count: 10, seed: 1 }));
+    for (const t of g.tickets) expect(t.legIds.filter((id) => id.startsWith('maxey') || id.startsWith('scottie'))).toHaveLength(1);
   });
   it('counts the shots already in the pool', () => {
     const legs = [...pool, leg('s1', 'shot', 3), leg('s2', 'shot', 3), leg('s3', 'shot', 3)];
-    expect(shotPlan({ legs, tiers: DEFAULT_TIERS }, scheme({ majorShares: [50] }), 3)).toMatchObject({ needed: 12, have: 3, missing: 9 });
-    expect(shotPlan({ legs, tiers: DEFAULT_TIERS }, scheme({ count: 4, majorShares: [50] }), 3)).toMatchObject({ needed: 3, have: 3, missing: 0 });
+    expect(shotPlan({ legs, tiers: DEFAULT_TIERS }, scheme(), 3)).toMatchObject({ needed: 17, have: 3, missing: 14 });
+    expect(shotPlan({ legs, tiers: DEFAULT_TIERS }, scheme({ count: 3 }), 3)).toMatchObject({ needed: 3, have: 3, missing: 0 });
   });
   it('none needed when the MMs and Majors already reach the target; none when shots are on 0 PPs', () => {
-    expect(shotPlan({ legs: pool, tiers: DEFAULT_TIERS }, scheme({ target: 5, majorShares: [50] }), 3)).toMatchObject({ perPP: 0, needed: 0 });
-    expect(shotPlan({ legs: pool, tiers: DEFAULT_TIERS }, scheme({ shotCount: 0, majorShares: [50] }), 3).needed).toBe(0);
+    expect(shotPlan({ legs: pool, tiers: DEFAULT_TIERS }, scheme({ target: 3 }), 3)).toMatchObject({ perPP: 0, needed: 0 });
+    expect(shotPlan({ legs: pool, tiers: DEFAULT_TIERS }, scheme({ shotCount: 0 }), 3).needed).toBe(0);
   });
   it('same-game Major-majors count once, at their average (they take turns)', () => {
     const turns = [leg('a', 'mm', 2, 'A'), leg('b', 'mm', 8, 'A')];

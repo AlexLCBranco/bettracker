@@ -17,13 +17,12 @@ test('BT-31: pool → scheme → generate → tick placed', async ({ page, reque
   // step 1: the pool by tier
   await expect(builder.getByRole('region', { name: 'Step 1: Pool' })).toContainText('1 Major-major');
   await expect(builder.getByRole('region', { name: 'Step 1: Pool' })).toContainText('4 Major');
-  // step 2: placeholders, then the proposal: about one PP shot per PP → 2 × 5 = 10 PPs
-  await expect(builder.getByLabel('Major: % of PPs')).toHaveValue('50');
+  // step 2: one Major per PP, then the proposal: about one PP shot per PP → 2 × 5 = 10 PPs
+  await expect(builder.getByLabel('Major: per PP')).toHaveValue('1');
   await expect(builder.getByLabel('PP shot: PPs each')).toHaveValue('2');
   await expect(builder.getByTestId('proposal')).toContainText('10 PPs');
   await builder.getByRole('button', { name: 'Use proposal' }).click();
   await expect(builder.getByLabel('Number of PPs')).toHaveValue('10');
-  await expect(builder.getByLabel('Major: % of PPs')).not.toHaveValue('50');
   // live preview
   // each PP its own stake: the longest gets the minimum (2,00), shorter ones more, so all pay the same
   await expect(builder.getByTestId('pv-stakes')).toHaveText(/^R\$\s2,00 – R\$\s\d+,\d\d \(same payout on every PP\)$/);

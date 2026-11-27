@@ -1,14 +1,14 @@
 // BT-31: the PP builder. Plain rules and arithmetic, no AI.
 //
 // Tier roles come from the batch's tier order: the first tier (Major-major) is on EVERY PP; the last (PP shot, when
-// there are 3+ tiers) is on a fixed number of PPs per leg; the tiers between are Major levels, each on a share of the
-// PPs (higher level, higher share). The owner gave no default numbers: Majors 50% (lower levels 10 points less each)
-// and PP shots on 2 PPs each are placeholders he will tune; the last batch's scheme is the start of the next one.
+// there are 3+ tiers) is on a fixed number of PPs per leg; the tiers between are Major levels. Owner, 2026-11-27: one
+// Major per PP ("Majors per PP", per level, 1 by default), the Majors taking turns evenly. PP shots on 2 PPs each is a
+// placeholder he will tune; the last batch's scheme is the start of the next one.
 //
 // Proposal (Claude's rules, not the owner's): about one PP shot per PP, so PPs = shot count × shot legs (without shot
-// legs: the scheme's count); the Major share is then solved so the AVERAGE PP (geometric: mean of log odds) lands on
-// the target. Generator: every PP starts with the Major-majors, then legs are drawn from Majors and PP shots weighted
-// by their remaining appearances until the PP is inside the odds band, as close to the target as the next leg allows.
+// legs: the scheme's count), and what the AVERAGE PP (geometric: mean of log odds) comes to. Generator: every PP starts
+// with the Major-majors, then exactly its Majors per level (weighted by their remaining appearances), then PP shots
+// until the PP is inside the odds band, as close to the target as the next leg allows.
 //
 // Hard rule (owner, 2026-11-27): two legs from the same game are never on the same PP, whatever their tiers.
 // Major-majors from one game take turns: each PP gets exactly one of them, spread evenly.
@@ -22,8 +22,8 @@ export interface PPScheme {
   target: number;
   bandMin: number;
   bandMax: number;
-  /** Share of PPs (0-100) for each Major level, highest level first. */
-  majorShares: number[];
+  /** Majors on each PP, for each Major level, highest level first (owner: 1). */
+  majorsPerPP: number[];
   /** PPs each PP-shot leg is on. */
   shotCount: number;
   /** Toggle, off by default until the owner says otherwise. (Same-game legs are never together: always on.) */
@@ -34,7 +34,7 @@ export interface PPScheme {
 
 export type Role = 'every' | 'share' | 'fixed';
 
-export const PLACEHOLDER_SHARE = 50;
+export const MAJORS_PER_PP = 1;
 export const PLACEHOLDER_SHOTS = 2;
 
 /** Each tier's role by its place in the order. */
@@ -50,23 +50,22 @@ export function roles(tiers: PPTier[]): Map<string, { role: Role; level: number 
 
 export const majorLevels = (tiers: PPTier[]) => [...roles(tiers).values()].filter((r) => r.role === 'share').length;
 
-/** Placeholder shares: 50%, 40%, 30% ... (never under 5%). */
-export const placeholderShares = (levels: number) => Array.from({ length: levels }, (_, i) => Math.max(5, PLACEHOLDER_SHARE - 10 * i));
 
-/** The scheme a batch starts from: its own, else the last batch's (fitted to this batch's levels), else placeholders. */
+/** The scheme a batch starts from: its own, else the last batch's (fitted to this batch's levels), else the defaults. */
 export function startingScheme(batch: Pick<PPBatch, 'tiers' | 'targetOdds' | 'scheme'>, previous: Record<string, unknown> | null): PPScheme {
   const levels = majorLevels(batch.tiers);
-  const base: PPScheme = { count: 20, target: batch.targetOdds, bandMin: 15, bandMax: 30, majorShares: placeholderShares(levels), shotCount: PLACEHOLDER_SHOTS, avoidPairs: false, seed: 1 };
+  const base: PPScheme = { count: 20, target: batch.targetOdds, bandMin: 15, bandMax: 30, majorsPerPP: Array.from({ length: levels }, () => MAJORS_PER_PP), shotCount: PLACEHOLDER_SHOTS, avoidPairs: false, seed: 1 };
   const from = (batch.scheme ?? previous) as Partial<PPScheme> | null;
   if (!from) return base;
   const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
-  const shares = Array.isArray(from.majorShares) ? from.majorShares.filter((x): x is number => typeof x === 'number') : [];
+  // schemes from before (a share of PPs per Major level) start again at one Major per PP
+  const per = Array.isArray(from.majorsPerPP) ? from.majorsPerPP.filter((x): x is number => typeof x === 'number' && x >= 0).map(Math.round) : [];
   return {
     count: Math.max(1, Math.round(num(from.count, base.count))),
     target: batch.scheme ? num(from.target, base.target) : batch.targetOdds,
     bandMin: num(from.bandMin, base.bandMin),
     bandMax: num(from.bandMax, base.bandMax),
-    majorShares: Array.from({ length: levels }, (_, i) => shares[i] ?? shares.at(-1) ?? base.majorShares[i]!),
+    majorsPerPP: Array.from({ length: levels }, (_, i) => per[i] ?? per.at(-1) ?? MAJORS_PER_PP),
     shotCount: Math.max(0, Math.round(num(from.shotCount, base.shotCount))),
     avoidPairs: from.avoidPairs === true,
     seed: Math.round(num(from.seed, 1)),
@@ -97,6 +96,18 @@ export function mmFor(groups: PPLeg[][], n: number): PPLeg[] {
   });
 }
 
+/** Majors per PP on a level (never negative). */
+export const perLevel = (s: Pick<PPScheme, 'majorsPerPP'>, level: number) => Math.max(0, Math.round(s.majorsPerPP[level] ?? MAJORS_PER_PP));
+
+/** The average (log) odds Majors add to a PP: per level, its Majors per PP × the level's average log odds. */
+function majorsLn(majors: PPLeg[], r: Map<string, { role: Role; level: number }>, s: PPScheme): number {
+  const levels = new Map<number, PPLeg[]>();
+  for (const l of majors) levels.set(r.get(l.tier)!.level, [...(levels.get(r.get(l.tier)!.level) ?? []), l]);
+  let total = 0;
+  for (const [k, ls] of levels) total += (Math.min(perLevel(s, k), ls.length) * ls.reduce((a, l) => a + Math.log(l.odds), 0)) / ls.length;
+  return total;
+}
+
 /** How many PPs each leg should be on. */
 export function appearances(legs: PPLeg[], tiers: PPTier[], s: PPScheme): Map<string, number> {
   const r = roles(tiers);
@@ -104,18 +115,26 @@ export function appearances(legs: PPLeg[], tiers: PPTier[], s: PPScheme): Map<st
   const mmTurns = new Map<string, number>();
   const groups = mmGroups(legs, tiers);
   for (let n = 0; n < s.count; n++) for (const l of mmFor(groups, n)) mmTurns.set(l.id, (mmTurns.get(l.id) ?? 0) + 1);
+  // a Major level's places (PPs × Majors per PP) shared out evenly over its legs, in pool order
+  const levelLegs = new Map<number, PPLeg[]>();
+  for (const l of legs) {
+    const role = r.get(l.tier);
+    if (role?.role === 'share') levelLegs.set(role.level, [...(levelLegs.get(role.level) ?? []), l]);
+  }
+  for (const [k, ls] of levelLegs) {
+    const places = s.count * Math.min(perLevel(s, k), ls.length);
+    ls.forEach((l, i) => m.set(l.id, Math.floor(places / ls.length) + (i < places % ls.length ? 1 : 0)));
+  }
   for (const l of legs) {
     const role = r.get(l.tier);
     if (!role) continue;
     if (role.role === 'every') m.set(l.id, mmTurns.get(l.id) ?? 0);
     else if (role.role === 'fixed') m.set(l.id, Math.min(s.count, s.shotCount));
-    else m.set(l.id, Math.min(s.count, Math.round(((s.majorShares[role.level] ?? 0) / 100) * s.count)));
   }
   return m;
 }
 
 const ln = Math.log;
-const round1 = (n: number) => Math.round(n * 10) / 10;
 
 export interface Proposal {
   scheme: PPScheme;
@@ -127,54 +146,25 @@ export interface Proposal {
   short: boolean;
 }
 
-/** Proposes the number of PPs and the Major shares from the pool (see the top of this file). */
+/** Proposes the number of PPs from the pool and says what the average PP comes to (see the top of this file). */
 export function propose(batch: Pick<PPBatch, 'legs' | 'tiers'>, s: PPScheme): Proposal {
   const r = roles(batch.tiers);
   const of = (role: Role) => batch.legs.filter((l) => r.get(l.tier)?.role === role);
-  const majors = of('share');
   const shots = of('fixed');
+  if (!batch.legs.length) return { scheme: s, average: 1, message: 'Add legs to the pool first.', short: true };
   // Major-majors of one game take turns: each game adds its legs' average (log) odds
   const L0 = mmGroups(batch.legs, batch.tiers).reduce((a, g) => a + g.reduce((x, l) => x + ln(l.odds), 0) / g.length, 0);
   const count = shots.length && s.shotCount > 0 ? s.shotCount * shots.length : s.count;
+  const shotsPerPP = count > 0 ? (Math.min(count, s.shotCount) * shots.length) / count : 0;
   const shotTerm = count > 0 ? (Math.min(count, s.shotCount) * shots.reduce((a, l) => a + ln(l.odds), 0)) / count : 0;
-  // the Major levels keep the ratio between their current shares (placeholder 50 : 40 : 30)
-  const levels = s.majorShares.length;
-  const first = s.majorShares[0] ?? 0;
-  const ratio = first > 0 ? s.majorShares.map((x) => x / first) : placeholderShares(levels).map((x) => x / PLACEHOLDER_SHARE);
-  const majorLn = Array.from({ length: levels }, (_, k) => majors.filter((l) => r.get(l.tier)!.level === k).reduce((a, l) => a + ln(l.odds), 0));
-  const perShare = majorLn.reduce((a, x, k) => a + ratio[k]! * x, 0);
-  const need = ln(s.target) - L0 - shotTerm;
-  const avgWith = (share: number) => Math.exp(L0 + shotTerm + share * perShare);
-  if (!batch.legs.length) return { scheme: s, average: 1, message: 'Add legs to the pool first.', short: true };
-  if (need <= 0) {
-    const avg = avgWith(0);
-    return {
-      scheme: { ...s, count, majorShares: s.majorShares.map(() => 0) },
-      average: avg,
-      message: `The Major-majors${shots.length ? ' and PP shots' : ''} alone already average ${avg.toFixed(2)}, at or over the target ${s.target.toFixed(2)}: no Majors are needed. Raise the target or take a Major-major out.`,
-      short: false,
-    };
-  }
-  const top = perShare > 0 ? need / perShare : Infinity;
-  if (!(top <= 1)) {
-    const best = avgWith(1);
-    const missing = Math.exp(need - Math.max(0, perShare));
-    return {
-      scheme: { ...s, count, majorShares: ratio.map((x) => Math.min(100, round1(100 * x))) },
-      average: best,
-      message: `The pool cannot reach ${s.target.toFixed(2)}: with every Major on every PP the average PP is ${best.toFixed(2)}. It is missing about ×${missing.toFixed(2)} of odds: add more Majors or longer-priced legs${shots.length ? ', or more PP shots' : ''}.`,
-      short: true,
-    };
-  }
-  const shares = ratio.map((x) => Math.min(100, Math.max(0, round1(100 * top * x))));
-  const scheme = { ...s, count, majorShares: shares };
-  const average = avgWith(top);
-  return {
-    scheme,
-    average,
-    message: `${count} PPs${shots.length ? ` (PP shots on ${s.shotCount} each: about one per PP)` : ''}, Majors ${shares.map((x) => `${x}%`).join(' / ')}: the average PP is ${average.toFixed(2)}.`,
-    short: false,
-  };
+  const average = Math.exp(L0 + majorsLn(of('share'), r, s) + shotTerm);
+  const levels = s.majorsPerPP.map((_, k) => perLevel(s, k));
+  const what = `${count} PPs${shots.length ? ` (PP shots on ${s.shotCount} each: about ${shotsPerPP.toFixed(1)} per PP)` : ''}${levels.length ? `, ${levels.join(' / ')} Major${levels.length === 1 && levels[0] === 1 ? '' : 's'} per PP` : ''}`;
+  if (average < s.bandMin)
+    return { scheme: { ...s, count }, average, message: `${what}: the average PP is ${average.toFixed(2)}, under the band from ${s.bandMin}. Add PP shots (the line above says how many) or longer-priced legs.`, short: true };
+  if (average > s.bandMax)
+    return { scheme: { ...s, count }, average, message: `${what}: the average PP is ${average.toFixed(2)}, over the band to ${s.bandMax}. Take legs out or raise the band.`, short: true };
+  return { scheme: { ...s, count }, average, message: `${what}: the average PP is ${average.toFixed(2)}.`, short: false };
 }
 
 /** A typical PP shot price when the pool has none yet. */
@@ -192,7 +182,7 @@ export interface ShotPlan {
   hasShotTier: boolean;
   mm: number;
   majors: number;
-  /** The average PP's odds before any shot (geometric): Major-majors (same-game ones at their average) and Majors at their shares. */
+  /** The average PP's odds before any shot (geometric): Major-majors (same-game ones at their average) and its Majors per PP. */
   base: number;
   /** PP shots each PP needs on average to land on the target; 0 when the base already reaches it. */
   perPP: number;
@@ -212,7 +202,7 @@ export function shotPlan(batch: Pick<PPBatch, 'legs' | 'tiers'>, s: PPScheme, sh
   const of = (role: Role) => batch.legs.filter((l) => r.get(l.tier)?.role === role);
   const majors = of('share');
   const L0 = mmGroups(batch.legs, batch.tiers).reduce((a, g) => a + g.reduce((x, l) => x + ln(l.odds), 0) / g.length, 0);
-  const majorLn = majors.reduce((a, l) => a + (Math.min(100, Math.max(0, s.majorShares[r.get(l.tier)!.level] ?? 0)) / 100) * ln(l.odds), 0);
+  const majorLn = majorsLn(majors, r, s);
   const base = Math.exp(L0 + majorLn);
   const gap = ln(s.target) - L0 - majorLn;
   const perPP = gap > 1e-9 && shotOdds > 1 ? gap / ln(shotOdds) : 0;
@@ -259,7 +249,12 @@ export function generate(batch: Pick<PPBatch, 'legs' | 'tiers'>, s: PPScheme, ma
   const rem = new Map(want);
   const mm = batch.legs.filter((l) => r.get(l.tier)?.role === 'every');
   const mmIds = new Set(mm.map((l) => l.id));
-  const pool = batch.legs.filter((l) => r.get(l.tier)?.role === 'share' || r.get(l.tier)?.role === 'fixed');
+  const shotPool = batch.legs.filter((l) => r.get(l.tier)?.role === 'fixed');
+  const majorLevelsLegs: PPLeg[][] = [];
+  for (const l of batch.legs) {
+    const role = r.get(l.tier);
+    if (role?.role === 'share') (majorLevelsLegs[role.level] ??= []).push(l);
+  }
   const rand = rng(s.seed);
   const made: string[][] = [];
   const seen = new Set<string>();
@@ -273,32 +268,53 @@ export function generate(batch: Pick<PPBatch, 'legs' | 'tiers'>, s: PPScheme, ma
     const ids = mine.map((l) => l.id);
     let odds = mine.reduce((p, l) => p * l.odds, 1);
     const games = new Set(mine.map(gameKey));
-    let cands = pool.filter((l) => (rem.get(l.id) ?? 0) > 0);
-    while (cands.length) {
-      cands = cands.filter((l) => !ids.includes(l.id) && odds * l.odds <= s.bandMax + 1e-9 && !games.has(gameKey(l)));
-      if (!cands.length) break;
-      // weighted by remaining appearances; repeated pairs made much less likely when asked
-      // (the major-majors are on every PP: their pairs cannot be avoided and do not count)
+    const free = (l: PPLeg) => !ids.includes(l.id) && !games.has(gameKey(l));
+    // weighted by remaining appearances (no weight left: any of them evenly); repeated pairs made much less likely when
+    // asked (the major-majors are on every PP: their pairs cannot be avoided and do not count)
+    const draw = (cands: PPLeg[], fallback: boolean): PPLeg | null => {
       const repeats = (l: PPLeg) => ids.filter((id) => !mmIds.has(id)).reduce((a, id) => a + (pairs.get(pairKey(id, l.id)) ?? 0), 0);
-      const fresh = s.avoidPairs && cands.some((l) => (rem.get(l.id) ?? 0) > 0 && repeats(l) === 0);
+      const left = (l: PPLeg) => Math.max(0, rem.get(l.id) ?? 0);
+      const base = fallback && cands.every((l) => left(l) === 0) ? () => 1 : left;
+      const fresh = s.avoidPairs && cands.some((l) => base(l) > 0 && repeats(l) === 0);
       const w = cands.map((l) => {
-        const x = rem.get(l.id) ?? 0;
+        const x = base(l);
         if (!s.avoidPairs) return x;
         // a leg making no repeated pair is always preferred while one is left
         return fresh ? (repeats(l) === 0 ? x : 0) : x / (1 + 20 * repeats(l));
       });
       const total = w.reduce((a, b) => a + b, 0);
-      if (total <= 0) break;
+      if (total <= 0) return null;
       let pick = rand() * total;
       let i = 0;
       while (i < w.length - 1 && pick >= w[i]!) pick -= w[i++]!;
-      const l = cands[i]!;
+      return cands[i]!;
+    };
+    const add = (l: PPLeg) => {
+      ids.push(l.id);
+      odds *= l.odds;
+      games.add(gameKey(l));
+    };
+    // Majors: exactly the level's Majors per PP (ones keeping the PP under the band top first)
+    majorLevelsLegs.forEach((ls, k) => {
+      for (let j = 0; j < perLevel(s, k); j++) {
+        const cands = ls.filter(free);
+        const fits = cands.filter((l) => odds * l.odds <= s.bandMax + 1e-9);
+        const l = draw(fits.length ? fits : cands, true);
+        if (!l) break;
+        add(l);
+      }
+    });
+    // PP shots until the PP is inside the band
+    let cands = shotPool.filter((l) => (rem.get(l.id) ?? 0) > 0);
+    while (cands.length) {
+      cands = cands.filter((l) => free(l) && odds * l.odds <= s.bandMax + 1e-9);
+      if (!cands.length) break;
+      const l = draw(cands, false);
+      if (!l) break;
       const next = odds * l.odds;
       // inside the band: only a leg that brings it closer to the target is still added
       if (odds >= s.bandMin && Math.abs(ln(next) - T) >= Math.abs(ln(odds) - T)) break;
-      ids.push(l.id);
-      odds = next;
-      games.add(gameKey(l));
+      add(l);
     }
     return ids;
   };

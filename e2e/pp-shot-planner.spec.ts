@@ -12,10 +12,10 @@ test('shot planner: PP shots needed from the pool, live as legs are added, share
   expect(res.status()).toBe(201);
   const b = (await res.json()) as { id: string };
 
-  // the Major share lives in Build: set it there, then plan in the Legs tab (same numbers)
+  // Majors per PP live in Build: one (the owner's), then plan in the Legs tab (same numbers)
   await page.goto(`/pp/${b.id}?edit=1`);
   await page.getByRole('tab', { name: 'Build' }).click();
-  await page.getByTestId('builder').getByLabel('Major: % of PPs').fill('50');
+  await page.getByTestId('builder').getByLabel('Major: per PP').fill('1');
   await page.getByRole('tab', { name: /Legs/ }).click();
 
   const planner = page.getByTestId('shot-planner');
@@ -23,9 +23,9 @@ test('shot planner: PP shots needed from the pool, live as legs are added, share
   await planner.getByLabel('Target odds').fill('20');
   await planner.getByLabel('PP shot: PPs each').fill('2');
   await expect(planner.getByLabel('PP shot odds (typical)')).toHaveValue('3'); // the pool's shots at their average
-  await expect(planner.getByTestId('shot-plan')).toContainText('1 Major-major and 4 Majors (on 50% of PPs): the average PP is 5.78 before any PP shot.');
-  await expect(planner.getByTestId('shots-needed')).toHaveText('12 PP shots');
-  await expect(planner.getByTestId('shots-missing')).toHaveText('You have 3: find 9 more.');
+  await expect(planner.getByTestId('shot-plan')).toContainText('1 Major-major and 4 Majors (1 per PP): the average PP is 3.40 before any PP shot.');
+  await expect(planner.getByTestId('shots-needed')).toHaveText('17 PP shots');
+  await expect(planner.getByTestId('shots-missing')).toHaveText('You have 3: find 14 more.');
 
   // live: one more shot in the pool
   const f = page.getByRole('form', { name: 'Add leg' });
@@ -34,11 +34,11 @@ test('shot planner: PP shots needed from the pool, live as legs are added, share
   await f.getByLabel('Leg odds').fill('3');
   await f.getByLabel('Leg tier').selectOption({ label: 'PP shot' });
   await f.getByRole('button', { name: 'Add leg' }).click();
-  await expect(planner.getByTestId('shots-missing')).toHaveText('You have 4: find 8 more.');
+  await expect(planner.getByTestId('shots-missing')).toHaveText('You have 4: find 13 more.');
 
   // a cheaper typical shot needs more of them
   await planner.getByLabel('PP shot odds (typical)').fill('2.5');
-  await expect(planner.getByTestId('shots-needed')).toHaveText('14 PP shots');
+  await expect(planner.getByTestId('shots-needed')).toHaveText('20 PP shots');
 
   // fewer PPs: enough
   await planner.getByLabel('Number of PPs').fill('4');
@@ -48,5 +48,5 @@ test('shot planner: PP shots needed from the pool, live as legs are added, share
   await page.getByRole('tab', { name: 'Build' }).click();
   const builder = page.getByTestId('builder');
   await expect(builder.getByLabel('Number of PPs')).toHaveValue('4');
-  await expect(builder.getByTestId('shot-planner').getByTestId('shots-needed')).toHaveText('3 PP shots');
+  await expect(builder.getByTestId('shot-planner').getByTestId('shots-needed')).toHaveText('4 PP shots');
 });

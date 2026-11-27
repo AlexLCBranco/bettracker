@@ -9,7 +9,7 @@ import { BalanceHint } from '@/components/Bankroll';
 import { OddsInput } from '@/components/OddsInput';
 import { formatMoney, formatOdds, oddsFromText, parseNumber, profitMoney } from '@/lib/money';
 import { ppId, ticketStake, ticketView, type BatchInput, type PPBatch } from '@/lib/pp';
-import { generate, majorLevels, mmGroups, placeLine, preview, propose, roles, shotPlan, startingScheme, typicalShotOdds, type PPScheme } from '@/lib/ppBuilder';
+import { generate, majorLevels, mmGroups, perLevel, placeLine, preview, propose, roles, shotPlan, startingScheme, typicalShotOdds, type PPScheme } from '@/lib/ppBuilder';
 
 const ROLE_TEXT = { every: 'on every PP', share: 'a share of the PPs', fixed: 'a fixed number of PPs each' } as const;
 
@@ -33,7 +33,7 @@ export function useBatchScheme(batch: PPBatch | undefined): BatchScheme | null {
   // a Major level added or removed since: refit the shares to the levels
   const s = !own
     ? startingScheme(batch, previous?.scheme ?? null)
-    : own.majorShares.length !== majorLevels(batch.tiers)
+    : own.majorsPerPP?.length !== majorLevels(batch.tiers)
       ? startingScheme({ tiers: batch.tiers, targetOdds: batch.targetOdds, scheme: own as unknown as Record<string, unknown> }, null)
       : own;
   return { s, setS: (f) => setOwn(f(s)), shotOdds, setShotOdds };
@@ -91,7 +91,7 @@ export function Builder({ batch, save, editPool, scheme }: { batch: PPBatch; sav
           <Num label="Band from" value={s.bandMin} onChange={(v) => set('bandMin', v)} />
           <Num label="Band to" value={s.bandMax} onChange={(v) => set('bandMax', v)} />
           {levelNames.map((name, i) => (
-            <Num key={name + i} label={`${name}: % of PPs`} value={s.majorShares[i] ?? 0} onChange={(v) => set('majorShares', s.majorShares.map((x, j) => (j === i ? Math.min(100, Math.max(0, v)) : x)))} />
+            <Num key={name + i} label={`${name}: per PP`} value={s.majorsPerPP[i] ?? 1} onChange={(v) => set('majorsPerPP', s.majorsPerPP.map((x, j) => (j === i ? Math.max(0, Math.round(v)) : x)))} />
           ))}
           {r.size >= 3 && <Num label={`${batch.tiers.at(-1)!.name}: PPs each`} value={s.shotCount} onChange={(v) => set('shotCount', Math.max(0, Math.round(v)))} />}
         </div>
@@ -103,13 +103,13 @@ export function Builder({ batch, save, editPool, scheme }: { batch: PPBatch; sav
         </div>
         <div className={`flex flex-wrap items-center gap-2 rounded-md border px-3 py-2 text-sm ${proposal.short ? 'border-amber-500/40 bg-amber-500/10 text-amber-200' : 'border-zinc-800 bg-zinc-900/60 text-zinc-300'}`} data-testid="proposal">
           <span className="font-semibold">Proposal:</span> <span>{proposal.message}</span>
-          {!proposal.short && batch.legs.length > 0 && (
+          {batch.legs.length > 0 && (
             <button className="btn ml-auto text-xs" onClick={() => setS(proposal.scheme)}>
               Use proposal
             </button>
           )}
         </div>
-        <p className="text-[11px] text-zinc-500">No numbers are fixed: Majors 50% and PP shots on 2 PPs each are only where it starts. The last batch&apos;s scheme is where the next one starts.</p>
+        <p className="text-[11px] text-zinc-500">One Major per PP and PP shots on 2 PPs each are where it starts; change them here. The last batch&apos;s scheme is where the next one starts.</p>
         <Preview batch={batch} s={s} pv={pv} />
       </Step>
 
@@ -178,7 +178,7 @@ export function ShotPlanner({ batch, scheme, inputs = true }: { batch: PPBatch; 
       )}
       <p className="text-sm text-zinc-300" data-testid="shot-plan">
         {p.mm} Major-major{p.mm === 1 ? '' : 's'} and {p.majors} Major{p.majors === 1 ? '' : 's'}
-        {p.majors ? ` (on ${s.majorShares.map((x) => `${x}%`).join(' / ')} of PPs)` : ''}: the average PP is <b className="text-zinc-100">{p.base.toFixed(2)}</b> before any {shot}. {answer}
+        {p.majors ? ` (${s.majorsPerPP.map((_, k) => perLevel(s, k)).join(' / ')} per PP)` : ''}: the average PP is <b className="text-zinc-100">{p.base.toFixed(2)}</b> before any {shot}. {answer}
       </p>
       {inputs && scheme.shotOdds == null && (
         <p className="text-[11px] text-zinc-500">
