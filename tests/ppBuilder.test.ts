@@ -250,6 +250,19 @@ describe('generator hard rules (fixed seeds)', () => {
     expect(groups.map((g) => g.map((l) => l.id))).toEqual([['a1', 'a2'], ['b1', 'b2']]);
     expect([0, 1, 2, 3].map((n) => mmFor(groups, n).map((l) => l.id).join('+'))).toEqual(['a1+b1', 'a2+b1', 'a1+b2', 'a2+b2']);
   });
+  it('a combo Major-major takes turns with every Major-major sharing any of its parts’ games', () => {
+    const part = (game: string) => ({ game, market: '', selection: game, odds: 1.2 });
+    // the combo's game text is its parts' games joined, so grouping by that text alone would miss the overlap
+    const combo: PPLeg = { ...leg('c', 'mm', 1.7, 'A / B / C'), parts: [part('A'), part('B'), part('C')] };
+    const legs = [leg('a', 'mm', 1.3, 'A'), leg('x', 'mm', 1.3, 'X'), combo, leg('b', 'mm', 1.3, 'B')];
+    const groups = mmGroups(legs, DEFAULT_TIERS);
+    expect(groups.map((g) => g.map((l) => l.id))).toEqual([['a', 'c', 'b'], ['x']]);
+    const g = generate({ legs: [...legs, ...shots(4)], tiers: DEFAULT_TIERS }, scheme({ count: 6, majorsPerPP: [0], shotCount: 0, bandMin: 1 }));
+    for (const t of g.tickets) {
+      expect(t.legIds.filter((id) => ['a', 'b', 'c'].includes(id))).toHaveLength(1);
+      expect(t.legIds).toContain('x');
+    }
+  });
   it('legs with no game typed are each a game of their own', () => {
     expect(gameKey(leg('p', 'mm', 2, ''))).not.toBe(gameKey(leg('q', 'mm', 2, '')));
     expect(mmGroups([leg('p', 'mm', 2, ''), leg('q', 'mm', 2, ' ')], DEFAULT_TIERS)).toHaveLength(2);

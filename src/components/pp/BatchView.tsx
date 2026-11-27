@@ -39,7 +39,7 @@ import {
   type TicketView,
 } from '@/lib/pp';
 import { formatPercent } from '@/lib/stats';
-import { mmGroups, roles, sameGame } from '@/lib/ppBuilder';
+import { mmGroups, sameGame } from '@/lib/ppBuilder';
 
 export type BatchTab = 'legs' | 'tickets';
 
@@ -499,8 +499,8 @@ type PartText = { game: string; market: string; selection: string; odds: string 
 const blankPart = (game = ''): PartText => ({ game, market: '', selection: '', odds: '' });
 
 /**
- * Adds a leg to the pool (or edits one): sport, game, market, selection, odds in any format, tier, note. A PP shot can
- * be a combo (owner, 2026-11-27): its parts (game, market, selection, odds each) at the book's combo price, which starts
+ * Adds a leg to the pool (or edits one): sport, game, market, selection, odds in any format, tier, note. Any leg, of
+ * any tier, can be a combo (owner, 2026-11-27): its parts (game, market, selection, odds each) at the book's combo price, which starts
  * as the parts multiplied, marked "estimated", until the book's price is typed over it.
  */
 function LegForm({ batch, leg, onSave, onCancel }: { batch: PPBatch; leg?: PPLeg; onSave(l: PPLeg): void; onCancel?(): void }) {
@@ -515,14 +515,12 @@ function LegForm({ batch, leg, onSave, onCancel }: { batch: PPBatch; leg?: PPLeg
   const sel = useRef<HTMLInputElement>(null);
   const set = (k: keyof typeof blank, v: string) => setF((x) => ({ ...x, [k]: v }));
   const setPart = (i: number, k: keyof PartText, v: string) => setParts((ps) => ps.map((x, j) => (j === i ? { ...x, [k]: v } : x)));
-  const isShot = roles(batch.tiers).get(f.tier)?.role === 'fixed';
-  const asCombo = combo && isShot;
   const partOdds = parts.map((x) => oddsFromText(x.odds));
   const estimate = parts.length >= 2 && partOdds.every((o) => o != null) ? partsOdds(partOdds.map((o) => ({ odds: o! }))) : null;
   const shownPrice = priced ? price : estimate != null ? estimate.toFixed(2) : '';
   const submit = () => {
     const base = { id: leg?.id ?? ppId('leg'), sport: f.sport.trim(), tier: f.tier, result: leg?.result ?? 'pending', actual: leg?.actual ?? '', note: f.note.trim() } as const;
-    if (asCombo) {
+    if (combo) {
       if (parts.length < 2) return setError('A combo needs two parts or more');
       for (const [i, x] of parts.entries()) {
         if (!x.selection.trim()) return setError(`Part ${i + 1}: selection is needed`);
@@ -565,7 +563,7 @@ function LegForm({ batch, leg, onSave, onCancel }: { batch: PPBatch; leg?: PPLeg
       <L label="Sport">
         <Autocomplete value={f.sport} onChange={(v) => set('sport', v)} getSuggestions={(q) => suggestFor('sport', q)} aria-label="Leg sport" />
       </L>
-      {asCombo ? (
+      {combo ? (
         <>
           <p className="col-span-3 self-center pt-4 text-xs text-zinc-400">Combo: its parts below. It goes on PPs as one leg and settles as one (W / L / V), as the book settles it.</p>
           <L label={priced ? 'Combo odds *' : 'Combo odds (estimated)'}>
@@ -618,22 +616,20 @@ function LegForm({ batch, leg, onSave, onCancel }: { batch: PPBatch; leg?: PPLeg
           {leg ? 'Save' : 'Add leg'}
         </button>
       </span>
-      {isShot && (
-        <label className="col-span-full flex items-center gap-1.5 text-xs text-zinc-300">
-          <input
-            type="checkbox"
-            checked={combo}
-            onChange={(e) => {
-              setCombo(e.target.checked);
-              // the first part starts from what was typed as a single selection
-              if (e.target.checked && !leg && parts.every((x) => !x.selection && !x.odds)) setParts([{ game: f.game, market: f.market, selection: f.selection, odds: f.odds }, blankPart(f.game)]);
-            }}
-            aria-label="Combo"
-          />
-          Combo: this {batch.tiers.at(-1)!.name} is several selections at the book&apos;s combo price
-        </label>
-      )}
-      {asCombo && (
+      <label className="col-span-full flex items-center gap-1.5 text-xs text-zinc-300">
+        <input
+          type="checkbox"
+          checked={combo}
+          onChange={(e) => {
+            setCombo(e.target.checked);
+            // the first part starts from what was typed as a single selection
+            if (e.target.checked && !leg && parts.every((x) => !x.selection && !x.odds)) setParts([{ game: f.game, market: f.market, selection: f.selection, odds: f.odds }, blankPart(f.game)]);
+          }}
+          aria-label="Combo"
+        />
+        Combo: this leg is several selections at the book&apos;s combo price
+      </label>
+      {combo && (
         <div className="col-span-full space-y-1.5 rounded-md border border-zinc-800 p-2" data-testid="combo-parts">
           {parts.map((x, i) => (
             <div key={i} className="grid grid-cols-[3.5rem_repeat(3,minmax(0,1fr))_6rem_2rem] items-center gap-2">

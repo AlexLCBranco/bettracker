@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-27
+- PP: a combo on any tier, not only PP shots (v0.79.0)
+  Combo can be ticked on any leg (Major-major, Major, PP shot); a combo Major-major takes turns with every Major-major sharing a game with any of its parts.
 - PP: plan the shots you will send; every PP shot on exactly the same number of PPs; the minimum odds is hard (v0.78.0)
   The planner works out PP shots per PP from the target (never leaving the average under the minimum), checks the shots you plan to send split evenly and offers the nearest numbers of shots or PPs that do; Generate puts every shot on exactly the same number of PPs, lifts each PP to the minimum with its Major, and waits while the pool's shots do not split evenly or a PP would be under the minimum.
 - PP: a PP shot can be a combo (v0.77.0)

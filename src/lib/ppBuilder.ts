@@ -105,12 +105,25 @@ export const sameGame = (a: Pick<PPLeg, 'id' | 'game'> & { parts?: PPLeg['parts'
   return gameKeys(b).some((k) => ka.has(k));
 };
 
-/** The Major-majors grouped by game, in pool order: the legs of one group take turns. */
+/**
+ * The Major-majors grouped by game, in pool order: the legs of one group take turns. A combo Major-major is grouped
+ * with every Major-major sharing any of its parts' games (they can never share a PP), so groups chain through combos.
+ */
 export function mmGroups(legs: PPLeg[], tiers: PPTier[]): PPLeg[][] {
   const r = roles(tiers);
-  const groups = new Map<string, PPLeg[]>();
-  for (const l of legs) if (r.get(l.tier)?.role === 'every') groups.set(gameKey(l), [...(groups.get(gameKey(l)) ?? []), l]);
-  return [...groups.values()];
+  let groups: { keys: Set<string>; legs: PPLeg[] }[] = [];
+  for (const l of legs) {
+    if (r.get(l.tier)?.role !== 'every') continue;
+    const ks = gameKeys(l);
+    const hit = groups.filter((g) => ks.some((k) => g.keys.has(k)));
+    const merged = { keys: new Set([...ks, ...hit.flatMap((g) => [...g.keys])]), legs: [...hit.flatMap((g) => g.legs), l] };
+    // the merged group keeps the place of its first group, its legs in pool order
+    merged.legs.sort((a, b) => legs.indexOf(a) - legs.indexOf(b));
+    const at = hit.length ? groups.indexOf(hit[0]!) : groups.length;
+    groups = groups.filter((g) => !hit.includes(g));
+    groups.splice(Math.min(at, groups.length), 0, merged);
+  }
+  return groups.map((g) => g.legs);
 }
 
 /** The Major-majors on PP n (0-based): one per game, counting through the groups so every combination comes up. */

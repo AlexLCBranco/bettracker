@@ -1,10 +1,10 @@
-// Owner, 2026-11-27: a PP shot can be a combo. Add one in the pool: its parts, the estimate (parts multiplied), the
+// Owner, 2026-11-27: any leg can be a combo, of any tier (his Major-major is a 3-part combo). Add one in the pool: its parts, the estimate (parts multiplied), the
 // book's price typed over it; it shows as one leg with its parts, is edited back the same, and settles as one.
 import { expect, test } from './helpers';
 
-type Saved = { id: string; legs: { id: string; selection: string; odds: number; game: string; parts: { game: string; selection: string; odds: number }[]; result: string }[] };
+type Saved = { id: string; legs: { id: string; selection: string; odds: number; game: string; parts: { game: string; selection: string; odds: number }[]; result: string; tier: string }[] };
 
-test('a combo PP shot: parts, estimated then the book’s price, one leg, settled as one', async ({ page, request, tag }) => {
+test('a combo Major-major: parts, estimated then the book’s price, one leg, settled as one', async ({ page, request, tag }) => {
   const res = await request.post('/api/pp', {
     data: { name: `${tag} combo`, placedDate: '2000-01-01', book: tag, stake: 0.5, money: 'real', legs: [{ id: 'mm', selection: `${tag} MM`, odds: 1.5, tier: 'mm', game: 'G0' }], tickets: [] },
   });
@@ -14,9 +14,8 @@ test('a combo PP shot: parts, estimated then the book’s price, one leg, settle
 
   await page.goto(`/pp/${b.id}?edit=1`);
   const f = page.getByRole('form', { name: 'Add leg' });
-  // Combo only for a PP shot
-  await expect(f.getByLabel('Combo', { exact: true })).toHaveCount(0);
-  await f.getByLabel('Leg tier').selectOption({ label: 'PP shot' });
+  // a combo on the first tier (Major-major), not only on PP shots
+  await expect(f.getByLabel('Leg tier')).toHaveValue('mm');
   await f.getByLabel('Leg game').fill('Lakers v Celtics');
   await f.getByLabel('Leg selection').fill(`${tag} LeBron 25+`);
   await f.getByLabel('Leg odds').fill('1.5');
@@ -46,6 +45,7 @@ test('a combo PP shot: parts, estimated then the book’s price, one leg, settle
   await expect.poll(async () => (await fetchBatch()).legs.length).toBe(2);
   const combo = (await fetchBatch()).legs.find((l) => l.parts.length)!;
   expect(combo.odds).toBe(6.25);
+  expect(combo.tier).toBe('mm');
   expect(combo.parts.map((x) => [x.selection, x.odds, x.game])).toEqual([
     [`${tag} LeBron 25+`, 1.5, 'Lakers v Celtics'],
     [`${tag} Scottie 8 ast`, 2.2, 'Nets vs Raptors'],
