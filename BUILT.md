@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-27
+- PP: a PP shot can be a combo (v0.77.0)
+  Tick Combo on a PP shot to enter its parts (game, market, selection, odds each); its odds start as the parts multiplied (estimated) until you type the book's price; it goes on PPs and settles as one leg, and no part shares a game with another leg on the same PP.
 - PP: PP shot PPs each worked out automatically (v0.76.0)
   Once the pool has PP shots, PPs each = PPs × shots each PP needs ÷ your shots (rounded up), marked Auto and used by Generate; type a number to set it yourself, Auto puts it back.
 - PP: one Major per PP (v0.75.0)

@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { batchSummary, DEFAULT_TIERS, equalPayoutStakes, suggestStake, ticketMoney, ticketStake, ticketView, validateBatch, type PPBatch, type PPLeg, type PPTicket } from '@/lib/pp';
 import { generate, preview, type PPScheme } from '@/lib/ppBuilder';
 
-const leg = (id: string, odds: number, tier = 'major', game = `${id} game`): PPLeg => ({ id, sport: '', game, market: '', selection: id, odds, tier, result: 'pending', actual: '', note: '' });
+const leg = (id: string, odds: number, tier = 'major', game = `${id} game`): PPLeg => ({ id, sport: '', game, market: '', selection: id, odds, tier, result: 'pending', actual: '', note: '', parts: [] });
 const ticket = (number: number, legIds: string[], stake: number | null): PPTicket => ({ id: `t${number}`, number, legIds, placed: true, oddsOverride: null, stake });
 const batch = (legs: PPLeg[], tickets: PPTicket[], over: Partial<PPBatch> = {}): PPBatch => ({
   id: 'b',

@@ -24,6 +24,7 @@ import {
   legsByTier,
   legUse,
   nextNumber,
+  partsOdds,
   ppId,
   STATUS_LABEL,
   suggestStake,
@@ -38,7 +39,7 @@ import {
   type TicketView,
 } from '@/lib/pp';
 import { formatPercent } from '@/lib/stats';
-import { mmGroups, sameGame } from '@/lib/ppBuilder';
+import { mmGroups, roles, sameGame } from '@/lib/ppBuilder';
 
 export type BatchTab = 'legs' | 'tickets';
 
@@ -391,6 +392,11 @@ function LegsView({ batch, groups, editing, save, selected, select, settle, anno
                               </span>
                               {l.actual && <span className="text-zinc-400" data-testid="leg-actual">→ {l.actual}</span>}
                               <span className="rounded bg-sky-500/10 px-1 text-[10px] font-bold uppercase leading-4 tracking-wide text-sky-300">{tierName.get(l.tier) ?? 'No tier'}</span>
+                              {l.parts.length > 0 && (
+                                <span className="rounded bg-violet-500/15 px-1 text-[10px] font-bold uppercase leading-4 tracking-wide text-violet-300" data-testid="leg-combo">
+                                  combo · {l.parts.length}
+                                </span>
+                              )}
                               {u.decides > 0 && l.result === 'pending' && (
                                 <span className="rounded bg-amber-500/15 px-1 text-[10px] font-bold uppercase leading-4 tracking-wide text-amber-300" data-testid="decides" title="The last pending leg of these PPs: its result decides them">
                                   decides {u.decides} {u.decides === 1 ? 'PP' : 'PPs'}
@@ -398,7 +404,11 @@ function LegsView({ batch, groups, editing, save, selected, select, settle, anno
                               )}
                             </div>
                             <div className="text-[11px] leading-5 text-zinc-500 [overflow-wrap:anywhere]">
-                              {[l.game, l.sport, l.market].filter(Boolean).join(' · ')}
+                              {l.parts.length ? (
+                                <span data-testid="leg-parts">{l.parts.map((x) => `${x.selection} @ ${formatOdds(x.odds, 2)}${x.game ? ` (${x.game})` : ''}`).join(' · ')}{l.sport ? ` · ${l.sport}` : ''}</span>
+                              ) : (
+                                [l.game, l.sport, l.market].filter(Boolean).join(' · ')
+                              )}
                               {l.note && <span className="italic text-zinc-400" data-testid="leg-note"> · {l.note}</span>}
                             </div>
                             {annotating === l.id && <LegAnnotator leg={l} onSave={(p) => { annotate(l, p); setAnnotating(null); }} onClose={() => setAnnotating(null)} />}
@@ -485,20 +495,57 @@ function LegAnnotator({ leg, onSave, onClose }: { leg: PPLeg; onSave(p: Pick<PPL
   );
 }
 
-/** Adds a leg to the pool (or edits one): sport, game, market, selection, odds in any format, tier, note. */
+type PartText = { game: string; market: string; selection: string; odds: string };
+const blankPart = (game = ''): PartText => ({ game, market: '', selection: '', odds: '' });
+
+/**
+ * Adds a leg to the pool (or edits one): sport, game, market, selection, odds in any format, tier, note. A PP shot can
+ * be a combo (owner, 2026-11-27): its parts (game, market, selection, odds each) at the book's combo price, which starts
+ * as the parts multiplied, marked "estimated", until the book's price is typed over it.
+ */
 function LegForm({ batch, leg, onSave, onCancel }: { batch: PPBatch; leg?: PPLeg; onSave(l: PPLeg): void; onCancel?(): void }) {
   const { suggestFor } = useApp();
   const blank = { sport: '', game: '', market: '', selection: '', odds: '', tier: batch.tiers[0]?.id ?? '', note: '' };
-  const [f, setF] = useState(leg ? { ...leg, odds: String(leg.odds) } : blank);
+  const [f, setF] = useState(leg ? { sport: leg.sport, game: leg.game, market: leg.market, selection: leg.selection, odds: String(leg.odds), tier: leg.tier, note: leg.note } : blank);
+  const [combo, setCombo] = useState(!!leg?.parts.length);
+  const [parts, setParts] = useState<PartText[]>(leg?.parts.length ? leg.parts.map((x) => ({ game: x.game, market: x.market, selection: x.selection, odds: String(x.odds) })) : [blankPart(), blankPart()]);
+  const [price, setPrice] = useState(leg?.parts.length ? String(leg.odds) : '');
+  const [priced, setPriced] = useState(!!leg?.parts.length && leg.odds !== partsOdds(leg.parts));
   const [error, setError] = useState('');
   const sel = useRef<HTMLInputElement>(null);
   const set = (k: keyof typeof blank, v: string) => setF((x) => ({ ...x, [k]: v }));
+  const setPart = (i: number, k: keyof PartText, v: string) => setParts((ps) => ps.map((x, j) => (j === i ? { ...x, [k]: v } : x)));
+  const isShot = roles(batch.tiers).get(f.tier)?.role === 'fixed';
+  const asCombo = combo && isShot;
+  const partOdds = parts.map((x) => oddsFromText(x.odds));
+  const estimate = parts.length >= 2 && partOdds.every((o) => o != null) ? partsOdds(partOdds.map((o) => ({ odds: o! }))) : null;
+  const shownPrice = priced ? price : estimate != null ? estimate.toFixed(2) : '';
   const submit = () => {
+    const base = { id: leg?.id ?? ppId('leg'), sport: f.sport.trim(), tier: f.tier, result: leg?.result ?? 'pending', actual: leg?.actual ?? '', note: f.note.trim() } as const;
+    if (asCombo) {
+      if (parts.length < 2) return setError('A combo needs two parts or more');
+      for (const [i, x] of parts.entries()) {
+        if (!x.selection.trim()) return setError(`Part ${i + 1}: selection is needed`);
+        if (partOdds[i] == null) return setError(`Part ${i + 1}: odds must be above 1`);
+      }
+      const odds = oddsFromText(shownPrice);
+      if (odds == null) return setError('Combo odds must be above 1');
+      const ps = parts.map((x, i) => ({ game: x.game.trim(), market: x.market.trim(), selection: x.selection.trim(), odds: partOdds[i]! }));
+      setError('');
+      onSave({ ...base, game: [...new Set(ps.map((x) => x.game).filter(Boolean))].join(' / '), market: '', selection: ps.map((x) => x.selection).join(' + '), odds, parts: ps });
+      if (!leg) {
+        setParts([blankPart(), blankPart()]);
+        setPrice('');
+        setPriced(false);
+        setF((x) => ({ ...x, note: '' }));
+      }
+      return;
+    }
     const odds = oddsFromText(f.odds);
     if (!f.selection.trim()) return setError('Selection is needed');
     if (odds == null) return setError('Odds must be above 1');
     setError('');
-    onSave({ id: leg?.id ?? ppId('leg'), sport: f.sport.trim(), game: f.game.trim(), market: f.market.trim(), selection: f.selection.trim(), odds, tier: f.tier, result: leg?.result ?? 'pending', actual: leg?.actual ?? '', note: f.note.trim() });
+    onSave({ ...base, game: f.game.trim(), market: f.market.trim(), selection: f.selection.trim(), odds, parts: [] });
     // the next leg keeps sport, game and tier
     if (!leg) {
       setF((x) => ({ ...x, market: '', selection: '', odds: '', note: '' }));
@@ -518,19 +565,38 @@ function LegForm({ batch, leg, onSave, onCancel }: { batch: PPBatch; leg?: PPLeg
       <L label="Sport">
         <Autocomplete value={f.sport} onChange={(v) => set('sport', v)} getSuggestions={(q) => suggestFor('sport', q)} aria-label="Leg sport" />
       </L>
-      <L label="Game">
-        <Autocomplete value={f.game} onChange={(v) => set('game', v)} getSuggestions={(q) => suggestFor('game', q, f.sport)} aria-label="Leg game" />
-      </L>
-      <L label="Market">
-        <Autocomplete value={f.market} onChange={(v) => set('market', v)} getSuggestions={(q) => suggestFor('market', q, f.sport)} aria-label="Leg market" />
-      </L>
-      <L label="Selection *">
-        <Autocomplete ref={sel} value={f.selection} onChange={(v) => set('selection', v)} getSuggestions={(q) => suggestFor('selection', q, f.sport)} aria-label="Leg selection" />
-      </L>
-      <L label="Odds *">
-        <OddsInput value={f.odds} onChange={(v) => set('odds', v)} aria-label="Leg odds" />
-      </L>
-      <L label="Tier">
+      {asCombo ? (
+        <>
+          <p className="col-span-3 self-center pt-4 text-xs text-zinc-400">Combo: its parts below. It goes on PPs as one leg and settles as one (W / L / V), as the book settles it.</p>
+          <L label={priced ? 'Combo odds *' : 'Combo odds (estimated)'}>
+            <OddsInput
+              value={shownPrice}
+              onChange={(v) => {
+                setPrice(v);
+                setPriced(v.trim() !== '');
+              }}
+              aria-label="Combo odds"
+            />
+          </L>
+        </>
+      ) : (
+        <>
+          <L label="Game">
+            <Autocomplete value={f.game} onChange={(v) => set('game', v)} getSuggestions={(q) => suggestFor('game', q, f.sport)} aria-label="Leg game" />
+          </L>
+          <L label="Market">
+            <Autocomplete value={f.market} onChange={(v) => set('market', v)} getSuggestions={(q) => suggestFor('market', q, f.sport)} aria-label="Leg market" />
+          </L>
+          <L label="Selection *">
+            <Autocomplete ref={sel} value={f.selection} onChange={(v) => set('selection', v)} getSuggestions={(q) => suggestFor('selection', q, f.sport)} aria-label="Leg selection" />
+          </L>
+          <L label="Odds *">
+            <OddsInput value={f.odds} onChange={(v) => set('odds', v)} aria-label="Leg odds" />
+          </L>
+        </>
+      )}
+      <div className="flex min-w-0 flex-col gap-1">
+        <span className="text-xs text-zinc-400">Tier</span>
         <select className="field" value={f.tier} onChange={(e) => set('tier', e.target.value)} aria-label="Leg tier">
           {batch.tiers.map((t) => (
             <option key={t.id} value={t.id}>
@@ -538,7 +604,7 @@ function LegForm({ batch, leg, onSave, onCancel }: { batch: PPBatch; leg?: PPLeg
             </option>
           ))}
         </select>
-      </L>
+      </div>
       <L label="Note">
         <input className="field" value={f.note} onChange={(e) => set('note', e.target.value)} placeholder="confidence, theory" aria-label="Leg note" />
       </L>
@@ -552,6 +618,47 @@ function LegForm({ batch, leg, onSave, onCancel }: { batch: PPBatch; leg?: PPLeg
           {leg ? 'Save' : 'Add leg'}
         </button>
       </span>
+      {isShot && (
+        <label className="col-span-full flex items-center gap-1.5 text-xs text-zinc-300">
+          <input
+            type="checkbox"
+            checked={combo}
+            onChange={(e) => {
+              setCombo(e.target.checked);
+              // the first part starts from what was typed as a single selection
+              if (e.target.checked && !leg && parts.every((x) => !x.selection && !x.odds)) setParts([{ game: f.game, market: f.market, selection: f.selection, odds: f.odds }, blankPart(f.game)]);
+            }}
+            aria-label="Combo"
+          />
+          Combo: this {batch.tiers.at(-1)!.name} is several selections at the book&apos;s combo price
+        </label>
+      )}
+      {asCombo && (
+        <div className="col-span-full space-y-1.5 rounded-md border border-zinc-800 p-2" data-testid="combo-parts">
+          {parts.map((x, i) => (
+            <div key={i} className="grid grid-cols-[3.5rem_repeat(3,minmax(0,1fr))_6rem_2rem] items-center gap-2">
+              <span className="text-xs text-zinc-500">Part {i + 1}</span>
+              <Autocomplete value={x.game} onChange={(v) => setPart(i, 'game', v)} getSuggestions={(q) => suggestFor('game', q, f.sport)} aria-label={`Part ${i + 1} game`} placeholder="game" />
+              <Autocomplete value={x.market} onChange={(v) => setPart(i, 'market', v)} getSuggestions={(q) => suggestFor('market', q, f.sport)} aria-label={`Part ${i + 1} market`} placeholder="market" />
+              <Autocomplete value={x.selection} onChange={(v) => setPart(i, 'selection', v)} getSuggestions={(q) => suggestFor('selection', q, f.sport)} aria-label={`Part ${i + 1} selection`} placeholder="selection *" />
+              <OddsInput value={x.odds} onChange={(v) => setPart(i, 'odds', v)} aria-label={`Part ${i + 1} odds`} placeholder="odds *" />
+              {parts.length > 2 ? (
+                <button type="button" className="text-xs text-red-300 hover:text-red-200" aria-label={`Remove part ${i + 1}`} onClick={() => setParts((ps) => ps.filter((_, j) => j !== i))}>
+                  ✕
+                </button>
+              ) : (
+                <span />
+              )}
+            </div>
+          ))}
+          <div className="flex items-center gap-3">
+            <button type="button" className="chip" onClick={() => setParts((ps) => [...ps, blankPart(ps.at(-1)?.game ?? '')])}>
+              + Part
+            </button>
+            <span className="text-[11px] text-zinc-500">{priced ? 'Your price from the book.' : 'Combo odds: the parts multiplied (estimated). Type the book’s price over it.'}</span>
+          </div>
+        </div>
+      )}
       {error && (
         <p role="alert" className="col-span-full text-xs text-red-400">
           {error}

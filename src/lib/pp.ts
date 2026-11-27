@@ -17,6 +17,14 @@ export interface PPTier {
   name: string;
 }
 
+/** Owner, 2026-11-27: a PP shot can be a combo: one pool leg made of several selections at the book's combo price. */
+export interface PPLegPart {
+  game: string;
+  market: string;
+  selection: string;
+  odds: number;
+}
+
 export interface PPLeg {
   id: string;
   sport: string;
@@ -31,7 +39,12 @@ export interface PPLeg {
   actual: string;
   /** His confidence or theory on it. */
   note: string;
+  /** A combo's selections (empty: a single selection). Its odds are the book's combo price; it settles as one leg. */
+  parts: PPLegPart[];
 }
+
+/** A combo's parts multiplied: the estimate its price starts from (never forced: the book's price is typed over it). */
+export const partsOdds = (parts: Pick<PPLegPart, 'odds'>[]) => Math.round(parts.reduce((p, x) => p * x.odds, 1) * 100) / 100;
 
 export interface PPTicket {
   id: string;
@@ -319,7 +332,15 @@ export function validateBatch(raw: unknown): ValidatedBatch {
     if (!tierIds.has(tier)) return { ok: false, error: `Leg ${i + 1}: unknown tier` };
     const result = (lr.result ?? 'pending') as PPLegResult;
     if (!PP_LEG_RESULTS.includes(result)) return { ok: false, error: `Leg ${i + 1}: result must be pending, won, lost or void` };
-    legs.push({ id, sport: str(lr.sport), game: str(lr.game), market: str(lr.market), selection: str(lr.selection), odds, tier, result, actual: str(lr.actual), note: str(lr.note, 300) });
+    const parts: PPLegPart[] = [];
+    for (const [j, x] of (Array.isArray(lr.parts) ? lr.parts : []).slice(0, 20).entries()) {
+      const xr = (x ?? {}) as Record<string, unknown>;
+      const po = num(xr.odds);
+      if (po == null || po <= 1) return { ok: false, error: `Leg ${i + 1}, part ${j + 1}: odds must be above 1` };
+      parts.push({ game: str(xr.game), market: str(xr.market), selection: str(xr.selection), odds: po });
+    }
+    if (parts.length === 1) return { ok: false, error: `Leg ${i + 1}: a combo needs two parts or more` };
+    legs.push({ id, sport: str(lr.sport), game: str(lr.game), market: str(lr.market), selection: str(lr.selection), odds, tier, result, actual: str(lr.actual), note: str(lr.note, 300), parts });
   }
   const legIds = new Set(legs.map((l) => l.id));
 

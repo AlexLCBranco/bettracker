@@ -78,8 +78,18 @@ export function startingScheme(batch: Pick<PPBatch, 'tiers' | 'targetOdds' | 'sc
 /** The game a leg is from; a leg with no game typed is a game of its own. */
 export const gameKey = (l: Pick<PPLeg, 'id' | 'game'>) => (l.game.trim() ? `g:${normalize(l.game).replace(/\s+/g, ' ')}` : `id:${l.id}`);
 
-/** Two different legs from the same game: they can never share a PP. */
-export const sameGame = (a: Pick<PPLeg, 'id' | 'game'>, b: Pick<PPLeg, 'id' | 'game'>) => a.id !== b.id && gameKey(a) === gameKey(b);
+/** Every game a leg is from: a combo's parts' games (a part with no game typed is a game of its own), else its game. */
+export function gameKeys(l: Pick<PPLeg, 'id' | 'game'> & { parts?: PPLeg['parts'] }): string[] {
+  if (!l.parts?.length) return [gameKey(l)];
+  return [...new Set(l.parts.map((x, i) => gameKey({ id: `${l.id}#${i}`, game: x.game })))];
+}
+
+/** Two different legs sharing a game (a combo: any of its parts' games): they can never share a PP. */
+export const sameGame = (a: Pick<PPLeg, 'id' | 'game'> & { parts?: PPLeg['parts'] }, b: Pick<PPLeg, 'id' | 'game'> & { parts?: PPLeg['parts'] }) => {
+  if (a.id === b.id) return false;
+  const ka = new Set(gameKeys(a));
+  return gameKeys(b).some((k) => ka.has(k));
+};
 
 /** The Major-majors grouped by game, in pool order: the legs of one group take turns. */
 export function mmGroups(legs: PPLeg[], tiers: PPTier[]): PPLeg[][] {
@@ -287,8 +297,8 @@ export function generate(batch: Pick<PPBatch, 'legs' | 'tiers'>, s: PPScheme, ma
     const mine = mmFor(groups, n);
     const ids = mine.map((l) => l.id);
     let odds = mine.reduce((p, l) => p * l.odds, 1);
-    const games = new Set(mine.map(gameKey));
-    const free = (l: PPLeg) => !ids.includes(l.id) && !games.has(gameKey(l));
+    const games = new Set(mine.flatMap(gameKeys));
+    const free = (l: PPLeg) => !ids.includes(l.id) && !gameKeys(l).some((k) => games.has(k));
     // weighted by remaining appearances (no weight left: any of them evenly); repeated pairs made much less likely when
     // asked (the major-majors are on every PP: their pairs cannot be avoided and do not count)
     const draw = (cands: PPLeg[], fallback: boolean): PPLeg | null => {
@@ -312,7 +322,7 @@ export function generate(batch: Pick<PPBatch, 'legs' | 'tiers'>, s: PPScheme, ma
     const add = (l: PPLeg) => {
       ids.push(l.id);
       odds *= l.odds;
-      games.add(gameKey(l));
+      for (const k of gameKeys(l)) games.add(k);
     };
     // Majors: exactly the level's Majors per PP (ones keeping the PP under the band top first)
     majorLevelsLegs.forEach((ls, k) => {

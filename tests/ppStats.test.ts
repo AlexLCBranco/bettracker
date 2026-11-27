@@ -4,7 +4,7 @@ import { batchSummary, DEFAULT_TIERS, type PPBatch, type PPLeg, type PPTicket } 
 import { batchesBetween, legBreakdown, lostByOne, tierHitOverTime, tierStats } from '@/lib/ppStats';
 import { formatPercent } from '@/lib/stats';
 
-const leg = (id: string, over: Partial<PPLeg> = {}): PPLeg => ({ id, sport: 'NBA', game: '', market: 'Points', selection: id, odds: 2, tier: 'major', result: 'pending', actual: '', note: '', ...over });
+const leg = (id: string, over: Partial<PPLeg> = {}): PPLeg => ({ id, sport: 'NBA', game: '', market: 'Points', selection: id, odds: 2, tier: 'major', result: 'pending', actual: '', note: '', parts: [], ...over });
 const ticket = (number: number, legIds: string[]): PPTicket => ({ id: `t${number}`, number, legIds, placed: true, oddsOverride: null, stake: null });
 let n = 0;
 const batch = (legs: PPLeg[], tickets: PPTicket[] = [], over: Partial<PPBatch> = {}): PPBatch => ({

@@ -109,6 +109,7 @@ const SCHEMA = [
     result TEXT NOT NULL DEFAULT 'pending',
     actual TEXT NOT NULL DEFAULT '',
     note TEXT NOT NULL DEFAULT '',
+    parts TEXT NOT NULL DEFAULT '[]',
     PRIMARY KEY (batch_id, id)
   )`,
   // BT-42: a game's page links (one per site), by the game's normalized text and its game date
@@ -169,6 +170,9 @@ async function migrate(c: Client): Promise<void> {
   // existing PPs have no stake of their own: they keep the batch's
   const ppCols = new Set((await c.execute('PRAGMA table_info(pp_tickets)')).rows.map((r) => String(r.name)));
   if (!ppCols.has('stake')) await c.execute('ALTER TABLE pp_tickets ADD COLUMN stake REAL');
+  // existing PP legs are single selections, not combos
+  const ppLegCols = new Set((await c.execute('PRAGMA table_info(pp_legs)')).rows.map((r) => String(r.name)));
+  if (!ppLegCols.has('parts')) await c.execute("ALTER TABLE pp_legs ADD COLUMN parts TEXT NOT NULL DEFAULT '[]'");
   await repairLegsOnce(c);
 }
 
@@ -489,7 +493,7 @@ async function readBatches(c: Client, id?: string): Promise<PPBatch[]> {
   for (const r of l!.rows) {
     const k = s(r.batch_id);
     if (!legs.has(k)) legs.set(k, []);
-    legs.get(k)!.push({ id: s(r.id), sport: s(r.sport), game: s(r.game), market: s(r.market), selection: s(r.selection), odds: Number(r.odds), tier: s(r.tier), result: s(r.result) as PPLeg['result'], actual: s(r.actual), note: s(r.note) });
+    legs.get(k)!.push({ id: s(r.id), sport: s(r.sport), game: s(r.game), market: s(r.market), selection: s(r.selection), odds: Number(r.odds), tier: s(r.tier), result: s(r.result) as PPLeg['result'], actual: s(r.actual), note: s(r.note), parts: parseJSON<PPLeg['parts']>(r.parts, []) });
   }
   const tickets = new Map<string, PPTicket[]>();
   for (const r of t!.rows) {
@@ -528,8 +532,8 @@ function batchStatements(b: PPBatch): InStatement[] {
     { sql: 'DELETE FROM pp_legs WHERE batch_id = ?', args: [b.id] },
     { sql: 'DELETE FROM pp_tickets WHERE batch_id = ?', args: [b.id] },
     ...b.legs.map((l, i) => ({
-      sql: 'INSERT INTO pp_legs (id, batch_id, position, sport, game, market, selection, odds, tier, result, actual, note) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
-      args: [l.id, b.id, i, l.sport, l.game, l.market, l.selection, l.odds, l.tier, l.result, l.actual, l.note],
+      sql: 'INSERT INTO pp_legs (id, batch_id, position, sport, game, market, selection, odds, tier, result, actual, note, parts) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
+      args: [l.id, b.id, i, l.sport, l.game, l.market, l.selection, l.odds, l.tier, l.result, l.actual, l.note, JSON.stringify(l.parts)],
     })),
     ...b.tickets.map((t) => ({
       sql: 'INSERT INTO pp_tickets (id, batch_id, number, leg_ids, placed, odds_override, stake) VALUES (?,?,?,?,?,?,?)',
