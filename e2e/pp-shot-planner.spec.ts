@@ -21,6 +21,20 @@ test('shot planner: PP shots needed from the pool, live as legs are added, share
   const planner = page.getByTestId('shot-planner');
   await planner.getByLabel('Number of PPs').fill('20');
   await planner.getByLabel('Target odds').fill('20');
+  // PPs each is automatic once the pool has shots: 20 PPs × 1.6 shots per PP = 32.3 places over 3 shots = 11 each
+  await expect(planner.getByTestId('shots-each-auto')).toBeVisible();
+  await expect(planner.getByLabel('PP shot: PPs each')).toHaveValue('11');
+  await expect(planner.getByTestId('shots-each')).toHaveText('11 PPs each');
+  await page.getByRole('tab', { name: 'Build' }).click();
+  await expect(page.getByTestId('builder').getByLabel('PP shot: PPs each')).toHaveValue('11'); // the generator uses it too
+  await expect(page.getByTestId('builder').getByTestId('proposal')).toContainText('PP shots on 11 each');
+  await page.getByRole('tab', { name: /Legs/ }).click();
+  // typing sets it yourself; Auto turns it back on
+  await planner.getByLabel('PP shot: PPs each').fill('3');
+  await expect(planner.getByTestId('shots-each-auto')).toHaveCount(0);
+  await expect(planner.getByLabel('PP shot: PPs each')).toBeFocused();
+  await planner.getByRole('button', { name: 'Auto' }).click();
+  await expect(planner.getByLabel('PP shot: PPs each')).toHaveValue('11');
   await planner.getByLabel('PP shot: PPs each').fill('2');
   await expect(planner.getByLabel('PP shot odds (typical)')).toHaveValue('3'); // the pool's shots at their average
   await expect(planner.getByTestId('shot-plan')).toContainText('1 Major-major and 4 Majors (1 per PP): the average PP is 3.40 before any PP shot.');

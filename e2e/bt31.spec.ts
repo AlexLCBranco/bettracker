@@ -19,7 +19,9 @@ test('BT-31: pool → scheme → generate → tick placed', async ({ page, reque
   await expect(builder.getByRole('region', { name: 'Step 1: Pool' })).toContainText('4 Major');
   // step 2: one Major per PP, then the proposal: about one PP shot per PP → 2 × 5 = 10 PPs
   await expect(builder.getByLabel('Major: per PP')).toHaveValue('1');
-  await expect(builder.getByLabel('PP shot: PPs each')).toHaveValue('2');
+  // PPs each is worked out from the pool's shots (Auto); typed here to check the proposal on a typed number
+  await expect(builder.getByTestId('shots-each-auto')).toBeVisible();
+  await builder.getByLabel('PP shot: PPs each').fill('2');
   await expect(builder.getByTestId('proposal')).toContainText('10 PPs');
   await builder.getByRole('button', { name: 'Use proposal' }).click();
   await expect(builder.getByLabel('Number of PPs')).toHaveValue('10');

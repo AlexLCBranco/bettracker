@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-27
+- PP: PP shot PPs each worked out automatically (v0.76.0)
+  Once the pool has PP shots, PPs each = PPs × shots each PP needs ÷ your shots (rounded up), marked Auto and used by Generate; type a number to set it yourself, Auto puts it back.
 - PP: one Major per PP (v0.75.0)
   Build asks for Majors per PP (1 by default) instead of a % of PPs: every generated PP gets exactly one Major, the Majors taking turns evenly, and the planner and proposal count it that way.
 - PP: type only the minimum stake; each PP gets its own stake for the same payout (v0.74.0)

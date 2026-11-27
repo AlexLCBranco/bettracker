@@ -1,10 +1,10 @@
 // BT-31: the proposal maths and the generator's hard rules, with fixed seeds.
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_TIERS, type PPLeg, type PPTier } from '@/lib/pp';
-import { appearances, gameKey, generate, mmFor, mmGroups, shotPlan, typicalShotOdds, majorLevels, placeLine, preview, propose, rng, roles, startingScheme, type PPScheme } from '@/lib/ppBuilder';
+import { appearances, effectiveScheme, gameKey, generate, mmFor, mmGroups, shotPlan, typicalShotOdds, majorLevels, placeLine, preview, propose, rng, roles, startingScheme, type PPScheme } from '@/lib/ppBuilder';
 
 const leg = (id: string, tier: string, odds: number, game = `${id} game`): PPLeg => ({ id, sport: '', game, market: '', selection: id, odds, tier, result: 'pending', actual: '', note: '' });
-const scheme = (over: Partial<PPScheme> = {}): PPScheme => ({ count: 20, target: 20, bandMin: 15, bandMax: 30, majorsPerPP: [1], shotCount: 2, avoidPairs: false, seed: 7, ...over });
+const scheme = (over: Partial<PPScheme> = {}): PPScheme => ({ count: 20, target: 20, bandMin: 15, bandMax: 30, majorsPerPP: [1], shotCount: 2, shotAuto: false, avoidPairs: false, seed: 7, ...over });
 
 // the owner's shape: one major-major around 2, majors, PP shots
 const pool = [
@@ -262,5 +262,58 @@ describe('shot plan', () => {
   it('typical shot odds: the pool’s shots at their geometric average, else 3.00', () => {
     expect(typicalShotOdds({ legs: pool, tiers: DEFAULT_TIERS })).toBe(3);
     expect(typicalShotOdds({ legs: [leg('s1', 'shot', 2), leg('s2', 'shot', 8)], tiers: DEFAULT_TIERS })).toBe(4);
+  });
+});
+
+// owner, 2026-11-27: "PP shot: PPs each should be automatic": PPs × shots per PP ÷ the pool's shots, rounded up
+describe('PPs each, automatic', () => {
+  const base = [leg('mm', 'mm', 2), ...[1, 2, 3, 4].map((i) => leg(`m${i}`, 'major', 1.7))];
+  const shots = (n: number) => Array.from({ length: n }, (_, i) => leg(`s${i}`, 'shot', 3, `H${i}`));
+  const auto = (over: Partial<PPScheme> = {}) => scheme({ shotAuto: true, ...over });
+  it('is on by default; a scheme with a typed number keeps it typed', () => {
+    expect(startingScheme({ tiers: DEFAULT_TIERS, targetOdds: 20, scheme: null }, null).shotAuto).toBe(true);
+    expect(startingScheme({ tiers: DEFAULT_TIERS, targetOdds: 20, scheme: null }, { shotAuto: false, shotCount: 3 })).toMatchObject({ shotAuto: false, shotCount: 3 });
+  });
+  it('worked out from the pool’s shots: 20 PPs × 1.6 shots per PP = 32.3 places', () => {
+    const perPP = Math.log(20 / 3.4) / Math.log(3);
+    for (const [n, each] of [[10, 4], [5, 7], [16, 3]] as const) {
+      const p = shotPlan({ legs: [...base, ...shots(n)], tiers: DEFAULT_TIERS }, auto(), 3);
+      expect(p.places).toBeCloseTo(20 * perPP, 6);
+      expect(p).toMatchObject({ auto: true, each, have: n });
+      expect(each).toBe(Math.ceil((20 * perPP) / n));
+    }
+  });
+  it('never more than the PPs; none when no shots are needed', () => {
+    expect(shotPlan({ legs: [...base, ...shots(1)], tiers: DEFAULT_TIERS }, auto(), 3).each).toBe(20);
+    expect(shotPlan({ legs: [...base, ...shots(4)], tiers: DEFAULT_TIERS }, auto({ target: 3 }), 3).each).toBe(0);
+  });
+  it('before any shot is in the pool: the planning number (2), and how many to find', () => {
+    expect(shotPlan({ legs: base, tiers: DEFAULT_TIERS }, auto(), 3)).toMatchObject({ auto: false, each: 2, needed: 17 });
+  });
+  it('typed: the typed number, whatever the pool', () => {
+    expect(shotPlan({ legs: [...base, ...shots(10)], tiers: DEFAULT_TIERS }, auto({ shotAuto: false, shotCount: 3 }), 3)).toMatchObject({ auto: false, each: 3 });
+  });
+  it('the generator and the proposal use it; the proposal keeps the PPs as typed', () => {
+    const b = { legs: [...base, ...shots(10)], tiers: DEFAULT_TIERS };
+    const eff = effectiveScheme(b, auto());
+    expect(eff.shotCount).toBe(4);
+    expect(effectiveScheme(b, auto({ shotAuto: false })).shotCount).toBe(2);
+    expect(effectiveScheme({ legs: base, tiers: DEFAULT_TIERS }, auto()).shotCount).toBe(2);
+    expect(appearances(b.legs, b.tiers, eff).get('s0')).toBe(4);
+    expect(propose(b, eff).scheme.count).toBe(20);
+    expect(propose(b, eff).message).toContain('PP shots on 4 each');
+  });
+  it('his batch of 2026-11-27 with 10 shots at 3.00: 2 PPs each', () => {
+    const legs = [
+      leg('blazers', 'mm', 1.33, 'Warriors@Blazers'),
+      leg('chelsea', 'mm', 1.23, 'Chelsea vs Forest'),
+      leg('palmeiras', 'mm', 1.2, 'Palmeiras vs Estudiantes'),
+      leg('maxeyPts', 'major', 3.3, '76ers@Pacers'),
+      leg('maxeyAst', 'major', 4.9, '76ers@Pacers'),
+      leg('scottiePts', 'major', 3, 'Nets vs Raptors'),
+      leg('scottieAst', 'major', 3.85, 'Nets vs Raptors'),
+      ...shots(10),
+    ];
+    expect(shotPlan({ legs, tiers: DEFAULT_TIERS }, auto(), 3)).toMatchObject({ auto: true, each: 2 });
   });
 });

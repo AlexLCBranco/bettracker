@@ -24,8 +24,10 @@ export interface PPScheme {
   bandMax: number;
   /** Majors on each PP, for each Major level, highest level first (owner: 1). */
   majorsPerPP: number[];
-  /** PPs each PP-shot leg is on. */
+  /** PPs each PP-shot leg is on: typed, or (shotAuto) the planning number until the pool has shots. */
   shotCount: number;
+  /** Owner, 2026-11-27: PPs each worked out from the pool's shots (effectiveScheme); typing a number turns it off. */
+  shotAuto: boolean;
   /** Toggle, off by default until the owner says otherwise. (Same-game legs are never together: always on.) */
   avoidPairs: boolean;
   /** Keeps a generation reproducible. */
@@ -54,7 +56,7 @@ export const majorLevels = (tiers: PPTier[]) => [...roles(tiers).values()].filte
 /** The scheme a batch starts from: its own, else the last batch's (fitted to this batch's levels), else the defaults. */
 export function startingScheme(batch: Pick<PPBatch, 'tiers' | 'targetOdds' | 'scheme'>, previous: Record<string, unknown> | null): PPScheme {
   const levels = majorLevels(batch.tiers);
-  const base: PPScheme = { count: 20, target: batch.targetOdds, bandMin: 15, bandMax: 30, majorsPerPP: Array.from({ length: levels }, () => MAJORS_PER_PP), shotCount: PLACEHOLDER_SHOTS, avoidPairs: false, seed: 1 };
+  const base: PPScheme = { count: 20, target: batch.targetOdds, bandMin: 15, bandMax: 30, majorsPerPP: Array.from({ length: levels }, () => MAJORS_PER_PP), shotCount: PLACEHOLDER_SHOTS, shotAuto: true, avoidPairs: false, seed: 1 };
   const from = (batch.scheme ?? previous) as Partial<PPScheme> | null;
   if (!from) return base;
   const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
@@ -67,6 +69,7 @@ export function startingScheme(batch: Pick<PPBatch, 'tiers' | 'targetOdds' | 'sc
     bandMax: num(from.bandMax, base.bandMax),
     majorsPerPP: Array.from({ length: levels }, (_, i) => per[i] ?? per.at(-1) ?? MAJORS_PER_PP),
     shotCount: Math.max(0, Math.round(num(from.shotCount, base.shotCount))),
+    shotAuto: from.shotAuto !== false,
     avoidPairs: from.avoidPairs === true,
     seed: Math.round(num(from.seed, 1)),
   };
@@ -154,7 +157,8 @@ export function propose(batch: Pick<PPBatch, 'legs' | 'tiers'>, s: PPScheme): Pr
   if (!batch.legs.length) return { scheme: s, average: 1, message: 'Add legs to the pool first.', short: true };
   // Major-majors of one game take turns: each game adds its legs' average (log) odds
   const L0 = mmGroups(batch.legs, batch.tiers).reduce((a, g) => a + g.reduce((x, l) => x + ln(l.odds), 0) / g.length, 0);
-  const count = shots.length && s.shotCount > 0 ? s.shotCount * shots.length : s.count;
+  // PPs each worked out from the PPs: the PPs stay as typed (otherwise each would follow the other)
+  const count = !s.shotAuto && shots.length && s.shotCount > 0 ? s.shotCount * shots.length : s.count;
   const shotsPerPP = count > 0 ? (Math.min(count, s.shotCount) * shots.length) / count : 0;
   const shotTerm = count > 0 ? (Math.min(count, s.shotCount) * shots.reduce((a, l) => a + ln(l.odds), 0)) / count : 0;
   const average = Math.exp(L0 + majorsLn(of('share'), r, s) + shotTerm);
@@ -186,8 +190,14 @@ export interface ShotPlan {
   base: number;
   /** PP shots each PP needs on average to land on the target; 0 when the base already reaches it. */
   perPP: number;
-  /** PP-shot legs the pool needs: PPs × shots per PP ÷ PPs each shot is on (rounded up). */
+  /** Shot places to fill: PPs × shots per PP. */
+  places: number;
+  /** PP-shot legs the pool needs: PPs × shots per PP ÷ PPs each shot is on (the typed or planning number; rounded up). */
   needed: number;
+  /** PPs each of the pool's shots goes on: worked out (places ÷ shots, rounded up, at most the PPs) when automatic and the pool has shots, else the typed number. */
+  each: number;
+  /** each was worked out from the pool. */
+  auto: boolean;
   have: number;
   /** Still to find (0 when there are enough). */
   missing: number;
@@ -206,9 +216,19 @@ export function shotPlan(batch: Pick<PPBatch, 'legs' | 'tiers'>, s: PPScheme, sh
   const base = Math.exp(L0 + majorLn);
   const gap = ln(s.target) - L0 - majorLn;
   const perPP = gap > 1e-9 && shotOdds > 1 ? gap / ln(shotOdds) : 0;
-  const needed = perPP > 0 && s.shotCount > 0 ? Math.ceil((s.count * perPP) / s.shotCount - 1e-9) : 0;
+  const places = s.count * perPP;
+  const needed = perPP > 0 && s.shotCount > 0 ? Math.ceil(places / s.shotCount - 1e-9) : 0;
   const have = of('fixed').length;
-  return { hasShotTier: batch.tiers.length >= 3, mm: of('every').length, majors: majors.length, base, perPP, needed, have, missing: Math.max(0, needed - have) };
+  const auto = s.shotAuto && have > 0;
+  const each = auto ? (perPP > 0 ? Math.min(s.count, Math.ceil(places / have - 1e-9)) : 0) : s.shotCount;
+  return { hasShotTier: batch.tiers.length >= 3, mm: of('every').length, majors: majors.length, base, perPP, places, needed, each, auto, have, missing: Math.max(0, needed - have) };
+}
+
+/** The scheme the generator, proposal and preview use: PPs each worked out from the pool's shots at their average price when automatic. */
+export function effectiveScheme(batch: Pick<PPBatch, 'legs' | 'tiers'>, s: PPScheme): PPScheme {
+  if (!s.shotAuto) return s;
+  const p = shotPlan(batch, s, typicalShotOdds(batch));
+  return p.auto ? { ...s, shotCount: p.each } : s;
 }
 
 /** A small seeded random generator (mulberry32): the same seed gives the same PPs. */

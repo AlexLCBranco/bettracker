@@ -9,7 +9,7 @@ import { BalanceHint } from '@/components/Bankroll';
 import { OddsInput } from '@/components/OddsInput';
 import { formatMoney, formatOdds, oddsFromText, parseNumber, profitMoney } from '@/lib/money';
 import { ppId, ticketStake, ticketView, type BatchInput, type PPBatch } from '@/lib/pp';
-import { generate, majorLevels, mmGroups, perLevel, placeLine, preview, propose, roles, shotPlan, startingScheme, typicalShotOdds, type PPScheme } from '@/lib/ppBuilder';
+import { effectiveScheme, generate, majorLevels, mmGroups, perLevel, placeLine, preview, propose, roles, shotPlan, startingScheme, typicalShotOdds, type PPScheme } from '@/lib/ppBuilder';
 
 const ROLE_TEXT = { every: 'on every PP', share: 'a share of the PPs', fixed: 'a fixed number of PPs each' } as const;
 
@@ -46,9 +46,11 @@ export function Builder({ batch, save, editPool, scheme }: { batch: PPBatch; sav
   const set = <K extends keyof PPScheme>(k: K, v: PPScheme[K]) => scheme.setS((x) => ({ ...x, [k]: v }));
   const r = roles(batch.tiers);
   const levelNames = batch.tiers.filter((t) => r.get(t.id)?.role === 'share').map((t) => t.name);
-  const proposal = useMemo(() => propose(batch, s), [batch, s]);
-  const gen = useMemo(() => generate(batch, s), [batch, s]);
-  const pv = useMemo(() => preview(batch, s, gen), [batch, s, gen]);
+  // PPs each worked out from the pool's shots when automatic
+  const eff = useMemo(() => effectiveScheme(batch, s), [batch, s]);
+  const proposal = useMemo(() => propose(batch, eff), [batch, eff]);
+  const gen = useMemo(() => generate(batch, eff), [batch, eff]);
+  const pv = useMemo(() => preview(batch, eff, gen), [batch, eff, gen]);
   const legName = new Map(batch.legs.map((l) => [l.id, l.selection]));
   const turns = mmGroups(batch.legs, batch.tiers).filter((g) => g.length > 1);
 
@@ -93,7 +95,7 @@ export function Builder({ batch, save, editPool, scheme }: { batch: PPBatch; sav
           {levelNames.map((name, i) => (
             <Num key={name + i} label={`${name}: per PP`} value={s.majorsPerPP[i] ?? 1} onChange={(v) => set('majorsPerPP', s.majorsPerPP.map((x, j) => (j === i ? Math.max(0, Math.round(v)) : x)))} />
           ))}
-          {r.size >= 3 && <Num label={`${batch.tiers.at(-1)!.name}: PPs each`} value={s.shotCount} onChange={(v) => set('shotCount', Math.max(0, Math.round(v)))} />}
+          {r.size >= 3 && <ShotsEach batch={batch} scheme={scheme} />}
         </div>
         <div className="flex flex-wrap items-center gap-4 text-xs text-zinc-300">
           <label className="flex items-center gap-1.5">
@@ -152,6 +154,16 @@ export function ShotPlanner({ batch, scheme, inputs = true }: { batch: PPBatch; 
   let answer: ReactNode;
   if (!p.mm && !p.majors) answer = <>Add the Major-majors and Majors first: the {shot}s needed follow from them.</>;
   else if (p.perPP <= 0) answer = <>That already reaches the target {s.target.toFixed(2)}: no {shot}s needed.</>;
+  else if (p.auto)
+    answer = (
+      <>
+        To reach {s.target.toFixed(2)} a PP needs about <b className="text-zinc-100">{p.perPP.toFixed(1)}</b> {shot}s at {odds.toFixed(2)}: {s.count} PPs × {p.perPP.toFixed(1)} = {p.places.toFixed(1)} places over your {p.have} {shot}s ={' '}
+        <b className="text-zinc-100" data-testid="shots-each">
+          {p.each} PPs each
+        </b>
+        .
+      </>
+    );
   else if (s.shotCount <= 0) answer = <>Set how many PPs each {shot} is on.</>;
   else
     answer = (
@@ -172,7 +184,7 @@ export function ShotPlanner({ batch, scheme, inputs = true }: { batch: PPBatch; 
         <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
           <Num label="Number of PPs" value={s.count} onChange={(v) => set('count', Math.max(0, Math.round(v)))} />
           <Num label="Target odds" value={s.target} onChange={(v) => set('target', v)} />
-          <Num label={`${shot}: PPs each`} value={s.shotCount} onChange={(v) => set('shotCount', Math.max(0, Math.round(v)))} />
+          <ShotsEach batch={batch} scheme={scheme} />
           <Num label={`${shot} odds (typical)`} value={odds} onChange={(v) => scheme.setShotOdds(v > 1 ? v : null)} />
         </div>
       )}
@@ -186,6 +198,36 @@ export function ShotPlanner({ batch, scheme, inputs = true }: { batch: PPBatch; 
         </p>
       )}
     </section>
+  );
+}
+
+/** "PP shot: PPs each": worked out from the pool's shots (Auto), or typed. Typing turns Auto off; Auto turns it back on. */
+function ShotsEach({ batch, scheme }: { batch: PPBatch; scheme: BatchScheme }) {
+  const { s } = scheme;
+  const shot = batch.tiers.at(-1)!.name;
+  const p = shotPlan(batch, s, typicalShotOdds(batch));
+  const label = `${shot}: PPs each`;
+  // one input in both modes, so typing over the worked-out number keeps the focus
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <span className="text-xs text-zinc-400">{label}</span>
+      <div className="flex items-center gap-1.5">
+        <Num bare label={label} value={p.auto ? p.each : s.shotCount} onChange={(v) => scheme.setS((x) => ({ ...x, shotAuto: false, shotCount: Math.max(0, Math.round(v)) }))} />
+        {p.auto ? (
+          <span className="rounded bg-emerald-500/15 px-1.5 text-[10px] font-bold uppercase tracking-wide text-emerald-300" title={`Worked out: PPs × ${shot}s each PP needs ÷ your ${p.have} ${shot}s. Type a number to set it yourself.`} data-testid="shots-each-auto">
+            Auto
+          </span>
+        ) : s.shotAuto ? (
+          <span className="whitespace-nowrap text-[10px] text-zinc-500" title={`Until the pool has ${shot}s, this is what the planner counts with`}>
+            until shots are in
+          </span>
+        ) : (
+          <button type="button" className="chip text-[10px]" onClick={() => scheme.setS((x) => ({ ...x, shotAuto: true }))}>
+            Auto
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -341,7 +383,7 @@ function OddsCell({ value, onSave, label }: { value: number | null; onSave(o: nu
   );
 }
 
-function Num({ label, value, onChange }: { label: string; value: number; onChange(v: number): void }) {
+function Num({ label, value, onChange, bare }: { label: string; value: number; onChange(v: number): void; bare?: boolean }) {
   const [text, setText] = useState(String(value));
   const [last, setLast] = useState(value);
   // a new value from outside (Use proposal) replaces the text
@@ -349,23 +391,27 @@ function Num({ label, value, onChange }: { label: string; value: number; onChang
     setLast(value);
     setText(String(value));
   }
+  const input = (
+    <input
+      className="field"
+      inputMode="decimal"
+      value={text}
+      aria-label={label}
+      onChange={(e) => {
+        setText(e.target.value);
+        const n = parseNumber(e.target.value);
+        if (n != null) {
+          setLast(n);
+          onChange(n);
+        }
+      }}
+    />
+  );
+  if (bare) return input;
   return (
     <label className="flex min-w-0 flex-col gap-1">
       <span className="text-xs text-zinc-400">{label}</span>
-      <input
-        className="field"
-        inputMode="decimal"
-        value={text}
-        aria-label={label}
-        onChange={(e) => {
-          setText(e.target.value);
-          const n = parseNumber(e.target.value);
-          if (n != null) {
-            setLast(n);
-            onChange(n);
-          }
-        }}
-      />
+      {input}
     </label>
   );
 }
