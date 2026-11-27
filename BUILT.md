@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-27
+- PP: a settled leg's result changes from its pill, as on the Bets page (v0.81.0)
+  Click Won / Lost / Void on a leg to switch it (or back to Pending) without pressing Edit first.
 - PP: each combo part has its own sport and day (v0.80.0)
   A combo's parts each take a sport and a date (a new part starts from the previous one's), shown on the leg as game · sport · dd/mm.
 - PP: a combo on any tier, not only PP shots (v0.79.0)

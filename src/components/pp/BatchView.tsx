@@ -106,10 +106,11 @@ export function BatchView({ id, extraTabs = [] }: { id: string; extraTabs?: Extr
   const order = useMemo(() => groups.flatMap((g) => g.legs.map((l) => l.id)), [groups]);
 
   const save = (patch: Partial<BatchInput>) => (batch ? saveBatch({ ...inputOf(batch), ...patch }, batch.id).catch(() => undefined) : undefined);
-  const settle = (leg: PPLeg, r: PPLegResult) => {
+  // a settled leg changes from its result pill (as on the Bets page); W / L / V keys only settle pending ones outside Edit
+  const settle = (leg: PPLeg, r: PPLegResult, fromPill = false) => {
     if (!batch) return;
     if (leg.result === r) return;
-    if (leg.result !== 'pending' && !editing) return notify('Already settled: press Edit to change it', 'error');
+    if (leg.result !== 'pending' && !editing && !fromPill) return notify('Already settled: change it on its result pill', 'error');
     setUndo((u) => [...u, { legId: leg.id, before: { result: leg.result, actual: leg.actual, note: leg.note } }]);
     void patchPPLeg(batch.id, leg.id, { result: r });
     const n = order.indexOf(leg.id);
@@ -324,12 +325,56 @@ interface LegsProps {
   save(p: Partial<BatchInput>): unknown;
   selected: string | null;
   select(id: string | null): void;
-  settle(leg: PPLeg, r: PPLegResult): void;
+  settle(leg: PPLeg, r: PPLegResult, fromPill?: boolean): void;
   annotating: string | null;
   setAnnotating(id: string | null): void;
   annotate(leg: PPLeg, p: Pick<PPLeg, 'actual' | 'note'>): void;
   showTickets(legId: string): void;
   scheme: BatchScheme;
+}
+
+/** A settled leg's result: click it to change (Pending / Won / Lost / Void), as the result pill on the Bets page. */
+function LegResultPill({ result, onPick }: { result: PPLegResult; onPick(r: PPLegResult): void }) {
+  const [open, setOpen] = useState(false);
+  const label = (r: PPLegResult) => r[0]!.toUpperCase() + r.slice(1);
+  if (open)
+    return (
+      <select
+        autoFocus
+        className="field w-24 py-0.5 text-xs"
+        aria-label="Leg result"
+        defaultValue={result}
+        onClick={(e) => e.stopPropagation()}
+        onBlur={() => setOpen(false)}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === 'Escape') setOpen(false);
+        }}
+        onChange={(e) => {
+          setOpen(false);
+          onPick(e.target.value as PPLegResult);
+        }}
+      >
+        {(['pending', 'won', 'lost', 'void'] as const).map((r) => (
+          <option key={r} value={r}>
+            {label(r)}
+          </option>
+        ))}
+      </select>
+    );
+  return (
+    <button
+      className={`rounded-full px-2 py-0.5 text-xs font-medium hover:brightness-125 ${RESULT_PILL[result]}`}
+      title="Click to change"
+      data-testid="leg-result"
+      onClick={(e) => {
+        e.stopPropagation();
+        setOpen(true);
+      }}
+    >
+      {label(result)}
+    </button>
+  );
 }
 
 function LegsView({ batch, groups, editing, save, selected, select, settle, annotating, setAnnotating, annotate, showTickets, scheme }: LegsProps) {
@@ -428,9 +473,7 @@ function LegsView({ batch, groups, editing, save, selected, select, settle, anno
                                   </button>
                                 ))
                               ) : (
-                                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${RESULT_PILL[l.result]}`} data-testid="leg-result">
-                                  {l.result[0]!.toUpperCase() + l.result.slice(1)}
-                                </span>
+                                <LegResultPill result={l.result} onPick={(r) => settle(l, r, true)} />
                               )}
                               {editing && l.result !== 'pending' && (
                                 <button className="rounded px-1 text-xs text-zinc-400 hover:text-white" title="Back to pending" aria-label="Back to pending" onClick={(e) => { e.stopPropagation(); settle(l, 'pending'); }}>

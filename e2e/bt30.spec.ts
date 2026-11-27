@@ -67,6 +67,16 @@ test('BT-30: batch → legs → PPs → settle legs by keyboard → PPs follow; 
   await expect(page.getByTestId('sum-dead')).toHaveText('2');
   await expect(page.getByTestId('sum-alive')).toHaveText('1');
 
+  // a settled leg changes from its result pill, outside Edit too (as on the Bets page)
+  await m1.getByTestId('leg-result').click();
+  await m1.getByLabel('Leg result').selectOption('won');
+  await expect(m1).toHaveAttribute('data-result', 'won');
+  await expect(page.getByTestId('sum-dead')).toHaveText('0');
+  await m1.getByTestId('leg-result').click();
+  await m1.getByLabel('Leg result').selectOption('lost');
+  await expect(m1).toHaveAttribute('data-result', 'lost');
+  await expect(page.getByTestId('sum-dead')).toHaveText('2');
+
   // S1 wins: PP 3 is one leg away and M2 decides it (flagged, sorted to the top of its tier)
   await page.getByTestId('pp-leg').filter({ hasText: `${tag} S1` }).click();
   await page.keyboard.press('w');
