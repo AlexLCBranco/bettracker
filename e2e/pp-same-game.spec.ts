@@ -11,7 +11,8 @@ test('same game never on one PP: generator turns, hand-made PP swaps', async ({ 
     { id: 'mmC', selection: `${tag} MMC`, odds: 1.4, tier: 'mm', game: 'G9' },
     { id: 'x', selection: `${tag} X`, odds: 2.1, tier: 'major', game: 'Lakers v Celtics' },
     ...[1.6, 1.7, 1.8, 1.9].map((odds, i) => ({ id: `m${i}`, selection: `${tag} M${i}`, odds, tier: 'major', game: `G${i % 2}` })),
-    ...[3, 3.5, 4, 2.5].map((odds, i) => ({ id: `s${i}`, selection: `${tag} S${i}`, odds, tier: 'shot', game: `H${i % 2}` })),
+    // 8 shots over two games: enough pairs for two shots to share one PP at most (v0.85.0)
+    ...[3, 3.5, 4, 2.5, 3, 3.5, 4, 2.5].map((odds, i) => ({ id: `s${i}`, selection: `${tag} S${i}`, odds, tier: 'shot', game: `H${i % 2}` })),
   ];
   const res = await request.post('/api/pp', { data: { name: `${tag} same game`, placedDate: '2000-01-01', book: tag, stake: 2, money: 'real', legs, tickets: [] } });
   expect(res.status()).toBe(201);

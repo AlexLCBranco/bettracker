@@ -67,6 +67,7 @@ test('shot planner: shots per PP, planned shots split evenly or suggestions, Gen
   await page.getByRole('tab', { name: 'Build' }).click();
   await expect(builder.getByTestId('not-even')).toHaveCount(0);
   await expect(builder.getByTestId('under-min')).toHaveCount(0);
-  await expect(builder.getByRole('button', { name: 'Generate 20 PPs' })).toBeEnabled();
-  await expect(builder.getByTestId('pv-appearances').locator('tr', { hasText: `${tag} S4` })).toContainText('10 (10)');
+  // even, but 4 shots make only 6 pairs and two shots share one PP at most (v0.85.0): 20 PPs × 2 cannot be built
+  await expect(builder.getByTestId('shot-pairs')).toContainText('so it needs 10 different partners, but there are only 3 other');
+  await expect(builder.getByRole('button', { name: /^Generate \d+ PPs$/ })).toBeDisabled();
 });

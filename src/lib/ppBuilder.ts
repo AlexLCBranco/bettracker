@@ -128,6 +128,39 @@ export function sameGameClashes(batch: Pick<PPBatch, 'legs' | 'tickets'>, only?:
   return out;
 }
 
+const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
+
+/** Two PP shots together on more than one PP (made before the rule, by hand, or after a leg edit). */
+export interface ShotPairRepeat {
+  a: PPLeg;
+  b: PPLeg;
+  /** The PPs' numbers, ascending. */
+  numbers: number[];
+}
+
+/** Owner, 2026-11-27: two PP shots share one PP at most. The pairs breaking it in a batch, in pool order. */
+export function shotPairRepeats(batch: Pick<PPBatch, 'legs' | 'tickets' | 'tiers'>): ShotPairRepeat[] {
+  const r = roles(batch.tiers);
+  const shots = batch.legs.filter((l) => r.get(l.tier)?.role === 'fixed');
+  const isShot = new Set(shots.map((l) => l.id));
+  const on = new Map<string, number[]>();
+  for (const t of [...batch.tickets].sort((x, y) => x.number - y.number)) {
+    const mine = t.legIds.filter((id) => isShot.has(id));
+    for (let i = 0; i < mine.length; i++) for (let j = i + 1; j < mine.length; j++) {
+      const k = pairKey(mine[i]!, mine[j]!);
+      on.set(k, [...(on.get(k) ?? []), t.number]);
+    }
+  }
+  const out: ShotPairRepeat[] = [];
+  shots.forEach((a, i) => shots.slice(i + 1).forEach((b) => {
+    const numbers = on.get(pairKey(a.id, b.id)) ?? [];
+    if (numbers.length > 1) out.push({ a, b, numbers });
+  }));
+  return out;
+}
+
+export const repeatText = (rs: ShotPairRepeat[]) => rs.map((x) => `${x.a.selection || 'a shot'} and ${x.b.selection || 'a shot'} on ${x.numbers.map((n) => `PP ${n}`).join(', ')}`).join('; ');
+
 /** "Dosunmu 20 pts and McDaniels 10 pts on PP 1, PP 3". */
 export function clashText(clashes: SameGameClash[]): string {
   const pairs = new Map<string, number[]>();
@@ -387,11 +420,71 @@ export interface Generated {
   dropped: number;
   /** The pool's shots do not split evenly over the PPs: nothing is generated (every shot must have the same weight). */
   notEven: boolean;
+  /**
+   * Two shots share one PP at most (hard, owner 2026-11-27). impossible: each shot needs more different partners than
+   * there are other shots (nothing generated); stuck: no layout found with this seed (Shuffle may find one).
+   */
+  shotPairs: 'ok' | 'impossible' | 'stuck';
   /** PPs under the minimum odds (hard: Generate waits while any is). */
   underMin: number;
 }
 
-const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
+
+/** Search steps for the shot layout: per try (a fresh random order), and over all the tries of one generation (the Build tab regenerates live). */
+const LAYOUT_TRY = 5_000;
+export const LAYOUT_BUDGET = 100_000;
+
+/**
+ * Lays the shots out over the PPs before anything else (owner, 2026-11-27): each shot on exactly `each` PPs, `perPP` per
+ * PP, never two from one game on a PP (nor from a game already on it: `taken`), and two shots together on ONE PP at
+ * most. A depth-first search, slot by slot: the shot with the most places left first, ties in the random order. null
+ * when it finds none within its steps (budget.left is shared by every try).
+ */
+export function shotLayout(shots: PPLeg[], count: number, perPP: number, each: number, taken: Set<string>[], rand: () => number, budget = { left: LAYOUT_TRY }): string[][] | null {
+  const tie = new Map(shots.map((l) => [l.id, rand()]));
+  const keys = new Map(shots.map((l) => [l.id, gameKeys(l)]));
+  const rem = new Map(shots.map((l) => [l.id, each]));
+  const together = new Set<string>();
+  const pps: string[][] = Array.from({ length: count }, () => []);
+  let steps = 0;
+  const max = Math.min(LAYOUT_TRY, budget.left);
+  const fill = (slot: number): boolean => {
+    if (slot === count * perPP) return true;
+    if (++steps > max) return false;
+    const n = Math.floor(slot / perPP);
+    const mine = pps[n]!;
+    // places left must still fit in the slots left
+    const left = count * perPP - slot;
+    const cands = shots.filter((l) => {
+      if (!rem.get(l.id) || mine.includes(l.id)) return false;
+      if (keys.get(l.id)!.some((k) => taken[n]?.has(k) || mine.some((id) => keys.get(id)!.includes(k)))) return false;
+      return !mine.some((id) => together.has(pairKey(id, l.id)));
+    });
+    // a shot needing more PPs than are left cannot finish
+    if ([...rem.values()].some((r) => r > count - n)) return false;
+    if (!cands.length || left <= 0) return false;
+    // within a PP, shots in pool order (the same PP is not tried in every order)
+    const last = mine.length ? shots.findIndex((l) => l.id === mine.at(-1)) : -1;
+    // partners a shot can still be paired with: the fewer per place left, the sooner it goes (most constrained first)
+    const slack = (l: PPLeg) => shots.filter((x) => x.id !== l.id && rem.get(x.id)! > 0 && !together.has(pairKey(x.id, l.id))).length / rem.get(l.id)!;
+    const ordered = cands.filter((l) => shots.indexOf(l) > last).sort((a, b) => rem.get(b.id)! - rem.get(a.id)! || slack(a) - slack(b) || tie.get(a.id)! - tie.get(b.id)!);
+    for (const l of ordered) {
+      mine.push(l.id);
+      rem.set(l.id, rem.get(l.id)! - 1);
+      const added = mine.slice(0, -1).map((id) => pairKey(id, l.id));
+      for (const k of added) together.add(k);
+      if (fill(slot + 1)) return true;
+      for (const k of added) together.delete(k);
+      rem.set(l.id, rem.get(l.id)! + 1);
+      mine.pop();
+      if (steps > max) return false;
+    }
+    return false;
+  };
+  const ok = fill(0);
+  budget.left -= steps;
+  return ok ? pps : null;
+}
 
 /** Generates the PPs (reproducible by seed). Tickets are numbered 1..n, not placed yet. Every shot ends on exactly s.shotCount PPs. */
 export function generate(batch: Pick<PPBatch, 'legs' | 'tiers'>, s: PPScheme, makeId: (i: number) => string = (i) => `pp-${s.seed}-${i + 1}`): Generated {
@@ -410,10 +503,14 @@ export function generate(batch: Pick<PPBatch, 'legs' | 'tiers'>, s: PPScheme, ma
   }
   const perPP = shots.length ? s.shotsPerPP : 0;
   // every shot the same weight: nothing until the shots split evenly
-  if (perPP > 0 && (s.shotCount <= 0 || s.count * perPP !== shots.length * s.shotCount)) return { tickets: [], shortfalls: [], dropped: 0, notEven: true, underMin: 0 };
+  if (perPP > 0 && (s.shotCount <= 0 || s.count * perPP !== shots.length * s.shotCount)) return { tickets: [], shortfalls: [], dropped: 0, notEven: true, underMin: 0, shotPairs: 'ok' };
+  // each shot sits with perPP - 1 others on each of its PPs, every one a different shot
+  if (perPP > 1 && s.shotCount * (perPP - 1) > shots.length - 1) return { tickets: [], shortfalls: [], dropped: 0, notEven: false, underMin: 0, shotPairs: 'impossible' };
   const groups = mmGroups(batch.legs, batch.tiers);
   const T = ln(s.target);
 
+  const budget = { left: LAYOUT_BUDGET };
+  const taken = Array.from({ length: s.count }, (_, n) => new Set(mmFor(groups, n).flatMap(gameKeys)));
   const attempt = (seed: number) => {
     const rand = rng(seed);
     const rem = new Map(want);
@@ -424,6 +521,9 @@ export function generate(batch: Pick<PPBatch, 'legs' | 'tiers'>, s: PPScheme, ma
     const made: string[][] = [];
     // a random order for ties, fixed per attempt
     const tie = new Map(batch.legs.map((l) => [l.id, rand()]));
+    // the shots laid out first (two shots share one PP at most); the greedy below only when no layout was found
+    let layout: string[][] | null = null;
+    while (perPP > 0 && !layout && budget.left > 0) layout = shotLayout(shots, s.count, perPP, s.shotCount, taken, rand, budget);
     for (let n = 0; n < s.count; n++) {
       const mine = mmFor(groups, n);
       const ids = mine.map((l) => l.id);
@@ -436,12 +536,21 @@ export function generate(batch: Pick<PPBatch, 'legs' | 'tiers'>, s: PPScheme, ma
         odds *= l.odds;
         for (const k of gameKeys(l)) games.add(k);
       };
-      // shots: the most places left first (so each ends on exactly its PPs), fewer repeated pairs, then the tie order
-      for (let j = 0; j < perPP; j++) {
-        const cands = shots.filter((l) => free(l) && (rem.get(l.id) ?? 0) > 0);
+      // shots: the most places left first (so each ends on exactly its PPs), then the one with the most partners still
+      // free (so the last PPs are not stuck), then the tie order. Hard (owner, 2026-11-27): two shots share one PP at most.
+      const myShots: string[] = [];
+      const paired = (a: string, b: string) => (pairs.get(pairKey(a, b)) ?? 0) > 0;
+      const partnersLeft = (l: PPLeg) => shots.filter((x) => x.id !== l.id && (rem.get(x.id) ?? 0) > 0 && !paired(x.id, l.id)).length;
+      for (const id of layout?.[n] ?? []) {
+        add(byId.get(id)!);
+        myShots.push(id);
+      }
+      for (let j = myShots.length; j < perPP; j++) {
+        const cands = shots.filter((l) => free(l) && (rem.get(l.id) ?? 0) > 0 && !myShots.some((id) => paired(id, l.id)));
         if (!cands.length) break;
-        cands.sort((a, b) => rem.get(b.id)! - rem.get(a.id)! || repeatsOf(a) - repeatsOf(b) || tie.get(a.id)! - tie.get(b.id)!);
+        cands.sort((a, b) => rem.get(b.id)! - rem.get(a.id)! || partnersLeft(b) - partnersLeft(a) || repeatsOf(a) - repeatsOf(b) || tie.get(a.id)! - tie.get(b.id)!);
         add(cands[0]!);
+        myShots.push(cands[0]!.id);
       }
       // Majors: the most places left first, then the one bringing the PP closest to the target, and a PP unlike the others
       majorLevelsLegs.forEach((ls, k) => {
@@ -485,7 +594,7 @@ export function generate(batch: Pick<PPBatch, 'legs' | 'tiers'>, s: PPScheme, ma
   const got = new Map<string, number>();
   for (const ids of best.made) for (const id of ids) got.set(id, (got.get(id) ?? 0) + 1);
   const shortfalls = batch.legs.filter((l) => want.has(l.id) && (got.get(l.id) ?? 0) < want.get(l.id)!).map((l) => ({ legId: l.id, wanted: want.get(l.id)!, got: got.get(l.id) ?? 0 }));
-  return { tickets: best.made.map((legIds, i) => ({ id: makeId(i), number: i + 1, legIds, placed: false, oddsOverride: null, stake: null })), shortfalls, dropped: best.repeats, notEven: false, underMin: best.underMin };
+  return { tickets: best.made.map((legIds, i) => ({ id: makeId(i), number: i + 1, legIds, placed: false, oddsOverride: null, stake: null })), shortfalls, dropped: best.repeats, notEven: false, underMin: best.underMin, shotPairs: perPP > 1 && best.short > 0 ? 'stuck' : 'ok' };
 }
 
 export interface Preview {

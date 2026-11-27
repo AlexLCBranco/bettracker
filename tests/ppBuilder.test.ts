@@ -3,7 +3,7 @@
 // flexible a little, the minimum is not; two legs from the same game never on one PP.
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_TIERS, type PPLeg, type PPTier } from '@/lib/pp';
-import { appearances, effectiveScheme, gameKey, generate, majorLevels, mmFor, mmGroups, placeLine, preview, propose, rng, roles, shotPlan, split, startingScheme, suggestedShots, typicalShotOdds, type PPScheme } from '@/lib/ppBuilder';
+import { appearances, repeatText, shotPairRepeats, effectiveScheme, gameKey, generate, majorLevels, mmFor, mmGroups, placeLine, preview, propose, rng, roles, shotPlan, split, startingScheme, suggestedShots, typicalShotOdds, type PPScheme } from '@/lib/ppBuilder';
 
 const leg = (id: string, tier: string, odds: number, game = `${id} game`): PPLeg => ({ id, sport: '', game, market: '', selection: id, odds, tier, result: 'pending', actual: '', note: '', parts: [] });
 const scheme = (over: Partial<PPScheme> = {}): PPScheme => ({ count: 20, target: 20, bandMin: 8, bandMax: 30, majorsPerPP: [1], shotsPerPP: 1, shotsPerPPAuto: false, plannedShots: null, shotCount: 2, avoidPairs: false, seed: 7, ...over });
@@ -297,7 +297,7 @@ describe('preview and place line', () => {
     expect(p.outside).toBe(g.tickets.filter((t) => { const o = oddsOf(pool, t.legIds); return o < 9.5 || o > 30; }).length);
   });
   it('an empty generation has zeros, never NaN', () => {
-    const p = preview(batch, scheme({ count: 0 }), { tickets: [], shortfalls: [], dropped: 0, notEven: false, underMin: 0 });
+    const p = preview(batch, scheme({ count: 0 }), { tickets: [], shortfalls: [], dropped: 0, notEven: false, underMin: 0, shotPairs: 'ok' });
     expect(p).toMatchObject({ legs: { min: 0, avg: 0, max: 0 }, odds: { min: 0, avg: 0, max: 0 }, outside: 0, under: 0, totalStake: 0, totalPotential: 0 });
   });
   it('copy-friendly line', () => expect(placeLine({ id: 't', number: 3, legIds: ['mm', 'm1'], placed: false, oddsOverride: null, stake: null }, pool, 3.2)).toBe('PP 3 · mm + m1 · 3.20'));
@@ -307,5 +307,59 @@ describe('preview and place line', () => {
     const b = rng(1);
     expect([b(), b(), b()]).toEqual(xs);
     for (const x of xs) expect(x >= 0 && x < 1).toBe(true);
+  });
+});
+
+// Owner, 2026-11-27 (Garland 21 pts and McDaniels 20 pts together on PP 8 and PP 18): two PP shots share ONE PP at most.
+describe('two PP shots together on one PP at most', () => {
+  const shotPool = (n: number) => [
+    leg('mm', 'mm', 1.5),
+    ...[1.6, 1.7, 1.8, 1.9].map((o, i) => leg(`m${i}`, 'major', o)),
+    ...Array.from({ length: n }, (_, i) => leg(`s${i}`, 'shot', 2.5 + (i % 4) * 0.3)),
+  ];
+  const shotPairsTwice = (g: { tickets: { legIds: string[] }[] }) => {
+    const seen = new Map<string, number>();
+    for (const t of g.tickets) {
+      const ss = t.legIds.filter((x) => x.startsWith('s'));
+      for (const a of ss) for (const b of ss) if (a < b) seen.set(`${a}|${b}`, (seen.get(`${a}|${b}`) ?? 0) + 1);
+    }
+    return [...seen.values()].filter((c) => c > 1).length;
+  };
+  // PPs, shots per PP, shots: each shot on PPs × per PP ÷ shots
+  for (const [count, perPP, shots] of [[10, 2, 10], [20, 2, 10], [12, 2, 6], [18, 2, 9], [24, 2, 12], [12, 3, 12], [16, 3, 12], [20, 3, 15]] as const) {
+    it(`${count} PPs × ${perPP} shots from ${shots}: no pair twice, every shot on exactly its PPs (seeds 1-10)`, () => {
+      const each = (count * perPP) / shots;
+      for (let seed = 1; seed <= 10; seed++) {
+        const legs = shotPool(shots);
+        const g = generate({ legs, tiers: DEFAULT_TIERS }, scheme({ count, shotsPerPP: perPP, shotCount: each, bandMin: 1, bandMax: 999, seed }));
+        expect(g.shotPairs).toBe('ok');
+        expect(shotPairsTwice(g)).toBe(0);
+        for (const l of legs.filter((x) => x.tier === 'shot')) expect(on(g, l.id)).toBe(each);
+      }
+    });
+  }
+  it('impossible when each shot needs more partners than there are shots: nothing generated', () => {
+    // 5 shots on 4 PPs each, 2 per PP: 4 partners needed, 4 others: fine; 4 shots on 5 PPs each: 5 needed, 3 others
+    expect(generate({ legs: shotPool(5), tiers: DEFAULT_TIERS }, scheme({ count: 10, shotsPerPP: 2, shotCount: 4, bandMin: 1 })).shotPairs).toBe('ok');
+    const g = generate({ legs: shotPool(4), tiers: DEFAULT_TIERS }, scheme({ count: 10, shotsPerPP: 2, shotCount: 5, bandMin: 1 }));
+    expect(g).toMatchObject({ shotPairs: 'impossible', tickets: [] });
+  });
+  it('one shot per PP: nothing to pair', () => expect(generate({ legs: shotPool(10), tiers: DEFAULT_TIERS }, scheme({ count: 20, shotsPerPP: 1, shotCount: 2 })).shotPairs).toBe('ok'));
+  it('a shot layout keeps the same-game rule with the Major-majors and between shots', () => {
+    const legs = [leg('mm', 'mm', 1.5, 'G'), leg('m0', 'major', 1.8), ...Array.from({ length: 8 }, (_, i) => leg(`s${i}`, 'shot', 3, i < 2 ? 'G' : i < 4 ? 'H' : `S${i}`))];
+    const g = generate({ legs, tiers: DEFAULT_TIERS }, scheme({ count: 8, shotsPerPP: 2, shotCount: 2, bandMin: 1 }));
+    expect(g.tickets.length).toBe(8);
+    for (const t of g.tickets) expect(t.legIds.filter((id) => ['s0', 's1', 'mm'].includes(id))).toHaveLength(1);
+  });
+});
+
+describe('shot pairs repeated on an existing batch', () => {
+  const legs = [leg('blazers', 'mm', 1.3), leg('garland', 'shot', 3), leg('mcd', 'shot', 3), leg('maxey', 'shot', 3), leg('chelsea', 'major', 1.5)];
+  const t = (number: number, legIds: string[]) => ({ id: `t${number}`, number, legIds, placed: false, oddsOverride: null, stake: null });
+  const b = { legs, tiers: DEFAULT_TIERS, tickets: [t(18, ['blazers', 'garland', 'mcd']), t(8, ['blazers', 'chelsea', 'garland', 'mcd']), t(3, ['blazers', 'garland', 'maxey'])] };
+  it('finds the shots together on more than one PP (Major-majors and Majors are not shots)', () => {
+    const r = shotPairRepeats(b);
+    expect(r.map((x) => [x.a.id, x.b.id, x.numbers])).toEqual([['garland', 'mcd', [8, 18]]]);
+    expect(repeatText(r)).toBe('garland and mcd on PP 8, PP 18');
   });
 });

@@ -119,7 +119,7 @@ export function Builder({ batch, save, editPool, scheme }: { batch: PPBatch; sav
           <button className="btn text-xs" onClick={() => set('seed', Math.floor(Math.random() * 1e6) + 1)} title="Draw again with a new seed">
             Shuffle
           </button>
-          <button className="btn btn-primary text-sm" disabled={!gen.tickets.length || gen.underMin > 0} onClick={commit}>
+          <button className="btn btn-primary text-sm" disabled={!gen.tickets.length || gen.underMin > 0 || gen.shotPairs !== 'ok'} onClick={commit}>
             Generate {gen.tickets.length} PPs
           </button>
           {gen.dropped > 0 && <span className="text-xs text-amber-300">{gen.dropped} PPs are the same as another (too few legs to make them all different).</span>}
@@ -127,6 +127,16 @@ export function Builder({ batch, save, editPool, scheme }: { batch: PPBatch; sav
         {gen.notEven && (
           <p className="text-sm text-red-300" role="alert" data-testid="not-even">
             Your {pool.have} {shot}s do not split evenly over {s.count} PPs × {eff.shotsPerPP}: every {shot} must be on the same number of PPs. <SplitFix sp={pool.poolSplit} scheme={scheme} pool />
+          </p>
+        )}
+        {gen.shotPairs === 'impossible' && (
+          <p className="text-sm text-red-300" role="alert" data-testid="shot-pairs">
+            Two {shot}s share one PP at most: each {shot} would be on {eff.shotCount} PPs with {eff.shotsPerPP - 1} other {shot}{eff.shotsPerPP > 2 ? 's' : ''} on each, so it needs {eff.shotCount * (eff.shotsPerPP - 1)} different partners, but there are only {pool.have - 1} other {shot}s. Send more {shot}s, or fewer per PP.
+          </p>
+        )}
+        {gen.shotPairs === 'stuck' && (
+          <p className="text-sm text-red-300" role="alert" data-testid="shot-pairs">
+            No layout found where two {shot}s share one PP at most with this draw: press Shuffle to try another, or send more {shot}s.
           </p>
         )}
         {gen.underMin > 0 && (

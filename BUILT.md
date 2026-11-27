@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-27
+- PP: two PP shots share one PP at most (v0.85.0)
+  Generate never pairs the same two shots on more than one PP (it says so when the shots cannot fit); a batch already breaking it shows "⚠ shots repeat" on the Tickets tab.
 - PP: a warning when a PP holds two legs from the same game (v0.84.0)
   Editing a pool leg into the same game as another leg on a PP asks first; such PPs show "⚠ same game" on the Tickets tab and in the copied table.
 - PP: copy every PP of a batch as a table (v0.83.0)

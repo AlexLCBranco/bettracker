@@ -40,7 +40,7 @@ import {
   type TicketView,
 } from '@/lib/pp';
 import { formatPercent } from '@/lib/stats';
-import { clashText, mmGroups, sameGame, sameGameClashes } from '@/lib/ppBuilder';
+import { clashText, mmGroups, repeatText, sameGame, sameGameClashes, shotPairRepeats } from '@/lib/ppBuilder';
 import { batchTableHtml, batchTableText } from '@/lib/ppCopy';
 
 export type BatchTab = 'legs' | 'tickets';
@@ -813,6 +813,8 @@ function TicketsView({ batch, editing, save, legFilter, setLegFilter }: { batch:
   const pm = profitMoney(batch.money);
   const clashes = useMemo(() => sameGameClashes(batch), [batch]);
   const clashOf = new Map(clashes.map((c) => [c.ticket.id, c]));
+  const repeats = useMemo(() => shotPairRepeats(batch), [batch]);
+  const repeatOn = (n: number) => repeats.filter((x) => x.numbers.includes(n));
   const { notify } = useApp();
   // every PP of the batch (not only the filtered ones): HTML for apps that paste tables, plain text for the rest
   const copyTable = async () => {
@@ -873,6 +875,11 @@ function TicketsView({ batch, editing, save, legFilter, setLegFilter }: { batch:
           ⚠ Two legs from the same game on one PP: {clashText(clashes)}. Check with the book that it took them (or swap a leg).
         </p>
       )}
+      {repeats.length > 0 && (
+        <p role="alert" className="rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-xs text-amber-200" data-testid="shot-repeat-warning">
+          ⚠ Two {batch.tiers.at(-1)?.name ?? 'PP shot'}s share one PP at most, but these are together on more: {repeatText(repeats)}.
+        </p>
+      )}
       {edit && (
         <TicketEditor
           batch={batch}
@@ -915,6 +922,11 @@ function TicketsView({ batch, editing, save, legFilter, setLegFilter }: { batch:
                     {clashOf.has(v.ticket.id) && (
                       <div className="text-[10px] font-normal text-amber-300" data-testid="ticket-same-game" title={clashText([clashOf.get(v.ticket.id)!])}>
                         ⚠ same game
+                      </div>
+                    )}
+                    {repeatOn(v.ticket.number).length > 0 && (
+                      <div className="text-[10px] font-normal text-amber-300" data-testid="ticket-shot-repeat" title={repeatText(repeatOn(v.ticket.number))}>
+                        ⚠ shots repeat
                       </div>
                     )}
                   </td>

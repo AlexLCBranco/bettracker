@@ -80,3 +80,9 @@ describe('same game on one PP (a pool leg edited after the PPs were made)', () =
   });
   it('the copied table marks those PPs', () => expect(batchRows(b).map((r) => r[0])).toEqual(['PP 1', 'PP 2 ⚠ same game', 'PP 3 ⚠ same game']));
 });
+
+describe('the copied table marks PPs whose shots repeat a pair', () => {
+  const legs = [leg('Garland 21 pts', { tier: 'shot' }), leg('McDaniels 20 pts', { tier: 'shot' }), leg('Blazers ML', { tier: 'mm' })];
+  const b = batch(legs, [ticket(8, ['Blazers ML', 'Garland 21 pts', 'McDaniels 20 pts']), ticket(18, ['Blazers ML', 'Garland 21 pts', 'McDaniels 20 pts']), ticket(1, ['Blazers ML', 'Garland 21 pts'])]);
+  it('PP 8 and PP 18 marked, PP 1 not', () => expect(batchRows(b).map((r) => r[0])).toEqual(['PP 1', 'PP 8 ⚠ shots repeat', 'PP 18 ⚠ shots repeat']));
+});
