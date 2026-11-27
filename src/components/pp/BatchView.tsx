@@ -20,6 +20,7 @@ import { formatDate, formatShortDate, parseDateInput } from '@/lib/dates';
 import { formatMoney, formatOdds, oddsFromText, parseNumber, profitMoney } from '@/lib/money';
 import {
   batchSummary,
+  batchSystem,
   isAlive,
   legsByTier,
   legUse,
@@ -239,7 +240,26 @@ export function BatchView({ id, extraTabs = [] }: { id: string; extraTabs?: Extr
   );
 }
 
-function Header({ batch, editing, save }: { batch: PPBatch; editing: boolean; save(p: Partial<BatchInput>): unknown }) {
+/** The system the PPs were built with: legs per PP of each tier, "3 mjmj → 1 mj → 2 shot". */
+function BatchSystem({ batch }: { batch: PPBatch }) {
+  const sys = batchSystem(batch);
+  if (!sys.length) return null;
+  const n = (g: (typeof sys)[number]) => (g.min === g.max ? `${g.max}` : `${g.min}–${g.max}`);
+  return (
+    <div className="flex flex-wrap items-baseline gap-x-1.5 text-sm text-zinc-400" data-testid="batch-system" title={`Legs of each tier on every PP. In the pool: ${sys.map((g) => `${g.pool} ${g.tier.name}`).join(', ')}`}>
+      {sys.map((g, i) => (
+        <span key={g.tier.id || '-'} className="whitespace-nowrap">
+          {i > 0 && <span className="mr-1.5 text-zinc-600">→</span>}
+          <span className="font-semibold tabular-nums text-zinc-100">{n(g)}</span> <span title={g.tier.name}>{g.short}</span>
+          <span className="text-xs text-zinc-600"> /{g.pool}</span>
+        </span>
+      ))}
+      <span className="ml-1 text-xs text-zinc-500">per PP</span>
+    </div>
+  );
+}
+
+function Header({ batch, editing, save }:{ batch: PPBatch; editing: boolean; save(p: Partial<BatchInput>): unknown }) {
   const { suggestFor } = useApp();
   const s = batchSummary(batch);
   const pm = profitMoney(batch.money);
@@ -266,7 +286,10 @@ function Header({ batch, editing, save }: { batch: PPBatch; editing: boolean; sa
         </div>
       ) : (
         <div>
-          <h1 className="text-2xl font-bold [overflow-wrap:anywhere]">{batch.name}</h1>
+          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+            <h1 className="text-2xl font-bold [overflow-wrap:anywhere]">{batch.name}</h1>
+            <BatchSystem batch={batch} />
+          </div>
           <p className="text-sm text-zinc-400">
             {formatDate(batch.placedDate)} · {batch.book || 'no book'} · min <span className={MONEY_TEXT[batch.money]}>{formatMoney(batch.stake, batch.money)}</span> per PP · target {formatOdds(batch.targetOdds, 2)}
             {batch.notes && <span className="text-zinc-500"> · {batch.notes}</span>}

@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-27
+- PP: the batch shows its system beside its name (v0.82.0)
+  Next to the batch name: how many legs of each tier every PP carries, e.g. "3 mjmj → 1 mj → 2 shot per PP", with each tier's pool size.
 - PP: a settled leg's result changes from its pill, as on the Bets page (v0.81.0)
   Click Won / Lost / Void on a leg to switch it (or back to Pending) without pressing Edit first.
 - PP: each combo part has its own sport and day (v0.80.0)

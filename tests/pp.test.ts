@@ -1,6 +1,6 @@
 // BT-30: ticket result and status are derived from the legs (void legs, undo), odds estimated or typed over.
 import { describe, expect, it } from 'vitest';
-import { batchSummary, DEFAULT_TIERS, defaultBatchName, legsByTier, legUse, nextNumber, ticketMoney, ticketOdds, ticketResult, ticketStatus, ticketView, validateBatch, type PPBatch, type PPLeg, type PPTicket } from '@/lib/pp';
+import { batchSummary, batchSystem, DEFAULT_TIERS, defaultBatchName, legsByTier, legUse, nextNumber, ticketMoney, ticketOdds, ticketResult, ticketStatus, ticketView, validateBatch, type PPBatch, type PPLeg, type PPTicket } from '@/lib/pp';
 
 const leg = (id: string, over: Partial<PPLeg> = {}): PPLeg => ({ id, sport: 'NBA', game: 'A vs B', market: 'ML', selection: id, odds: 2, tier: 'major', result: 'pending', actual: '', note: '', parts: [], ...over });
 const ticket = (number: number, legIds: string[], over: Partial<PPTicket> = {}): PPTicket => ({ id: `t${number}`, number, legIds, placed: true, oddsOverride: null, stake: null, ...over });
@@ -143,5 +143,25 @@ describe('validateBatch', () => {
   it('names and numbers', () => {
     expect(defaultBatchName('2026-01-05')).toBe('Batch 05/01');
     expect(nextNumber([ticket(1, []), ticket(3, [])])).toBe(2);
+  });
+});
+
+describe('batch system (owner, 2026-11-27: shown beside the batch name)', () => {
+  it('per tier, in tier order: legs per PP (a range when PPs differ) and the pool', () => {
+    const legs = [leg('a', { tier: 'mm' }), leg('b', { tier: 'mm' }), leg('m1'), leg('m2'), leg('m3'), leg('s1', { tier: 'shot' }), leg('s2', { tier: 'shot' }), leg('x', { tier: 'gone' })];
+    const b = batch(legs, [ticket(1, ['s1', 'a', 'b', 'm1']), ticket(2, ['a', 'b', 'm2', 's1', 's2']), ticket(3, ['a', 'b', 'm3', 's2', 'x'])]);
+    expect(batchSystem(b).map((g) => [g.short, g.min, g.max, g.pool])).toEqual([
+      ['mjmj', 2, 2, 2],
+      ['mj', 1, 1, 3],
+      ['shot', 1, 2, 2],
+      ['no tier', 0, 1, 1],
+    ]);
+    const four = [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }, { id: 'c', name: 'C' }, { id: 'd', name: 'D' }];
+    const b4 = batch(['a', 'b', 'c', 'd'].map((t) => leg(t, { tier: t })), [ticket(1, ['a', 'b', 'c', 'd'])], { tiers: four });
+    expect(batchSystem(b4).map((g) => g.short)).toEqual(['mjmj', 'mj', 'mj2', 'shot']);
+  });
+  it('nothing without PPs; tiers no PP uses are left out', () => {
+    expect(batchSystem(batch([leg('a')], []))).toEqual([]);
+    expect(batchSystem(batch([leg('a'), leg('s', { tier: 'shot' })], [ticket(1, ['a'])])).map((g) => g.tier.id)).toEqual(['major']);
   });
 });

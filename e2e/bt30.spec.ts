@@ -114,6 +114,9 @@ test('BT-30: batch → legs → PPs → settle legs by keyboard → PPs follow; 
   await expect(m2).toHaveAttribute('data-result', 'pending');
   await expect(page.getByTestId('sum-alive')).toHaveText('1');
   await expect(page.getByTestId('batch-summary')).toContainText('1 one leg away');
+  // the system beside the name: legs of each tier per PP (and the pool)
+  await expect(page.getByTestId('batch-system')).toContainText('mjmj');
+  await expect(page.getByTestId('batch-system')).toContainText('per PP');
 
   // the batch list row, and it survives a reload
   await page.goto('/pp');

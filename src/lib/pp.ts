@@ -222,6 +222,28 @@ export function legUse(batch: Pick<PPBatch, 'legs' | 'tickets'>): Map<string, Le
   return m;
 }
 
+/**
+ * Owner, 2026-11-27: the system the batch was built with, read from its PPs: per tier (in tier order), how many of
+ * its legs each PP carries (min–max when PPs differ) and how many legs the tier has in the pool. Tiers no PP uses are
+ * left out; legs of an unknown tier count as "No tier". Short names by the tier's place, as the builder's roles
+ * (owner): the first "mjmj", the last of 3+ "shot", the ones between "mj" (a second Major level "mj2", ...).
+ */
+export function batchSystem(batch: Pick<PPBatch, 'tiers' | 'legs' | 'tickets'>): { tier: PPTier; short: string; min: number; max: number; pool: number }[] {
+  const known = new Set(batch.tiers.map((t) => t.id));
+  const tierOf = new Map(batch.legs.map((l) => [l.id, known.has(l.tier) ? l.tier : '']));
+  const n = batch.tiers.length;
+  const short = (i: number) => (i === 0 ? 'mjmj' : i === n - 1 && n >= 3 ? 'shot' : i === 1 ? 'mj' : `mj${i}`);
+  const tiers = [...batch.tiers.map((tier, i) => ({ tier, short: short(i) })), { tier: { id: '', name: 'No tier' }, short: 'no tier' }];
+  const out: { tier: PPTier; short: string; min: number; max: number; pool: number }[] = [];
+  if (!batch.tickets.length) return out;
+  for (const { tier, short } of tiers) {
+    const counts = batch.tickets.map((t) => t.legIds.filter((id) => tierOf.get(id) === tier.id).length);
+    const max = Math.max(...counts);
+    if (max > 0) out.push({ tier, short, min: Math.min(...counts), max, pool: batch.legs.filter((l) => tierOf.get(l.id) === tier.id).length });
+  }
+  return out;
+}
+
 /** The legs of each tier, in tier order; within a tier the legs that decide tickets first, then as entered. */
 export function legsByTier(batch: Pick<PPBatch, 'tiers' | 'legs' | 'tickets'>): { tier: PPTier; legs: PPLeg[] }[] {
   const use = legUse(batch);
