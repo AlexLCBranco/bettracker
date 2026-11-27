@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-27
+- PP: a warning when a PP holds two legs from the same game (v0.84.0)
+  Editing a pool leg into the same game as another leg on a PP asks first; such PPs show "⚠ same game" on the Tickets tab and in the copied table.
 - PP: copy every PP of a batch as a table (v0.83.0)
   "Copy table" on the Tickets tab puts every PP (PP, legs, odds, stake, potential, status) on the clipboard, to paste and recheck later.
 - PP: the batch shows its system beside its name (v0.82.0)

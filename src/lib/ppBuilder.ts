@@ -105,6 +105,39 @@ export const sameGame = (a: Pick<PPLeg, 'id' | 'game'> & { parts?: PPLeg['parts'
   return gameKeys(b).some((k) => ka.has(k));
 };
 
+/** A PP breaking the same-game rule: the pairs of its legs that share a game. */
+export interface SameGameClash {
+  ticket: PPTicket;
+  pairs: [PPLeg, PPLeg][];
+}
+
+/**
+ * PPs already holding two legs from the same game (owner, 2026-11-27: a pool leg edited or swapped afterwards can
+ * break the rule the builder keeps). Only warned about, never changed: the PPs may already be placed. `only`: just the
+ * pairs involving that leg.
+ */
+export function sameGameClashes(batch: Pick<PPBatch, 'legs' | 'tickets'>, only?: string): SameGameClash[] {
+  const byId = new Map(batch.legs.map((l) => [l.id, l]));
+  const out: SameGameClash[] = [];
+  for (const t of [...batch.tickets].sort((a, b) => a.number - b.number)) {
+    const legs = t.legIds.map((id) => byId.get(id)).filter((l): l is PPLeg => !!l);
+    const pairs: [PPLeg, PPLeg][] = [];
+    legs.forEach((a, i) => legs.slice(i + 1).forEach((b) => sameGame(a, b) && (!only || a.id === only || b.id === only) && pairs.push([a, b])));
+    if (pairs.length) out.push({ ticket: t, pairs });
+  }
+  return out;
+}
+
+/** "Dosunmu 20 pts and McDaniels 10 pts on PP 1, PP 3". */
+export function clashText(clashes: SameGameClash[]): string {
+  const pairs = new Map<string, number[]>();
+  for (const c of clashes) for (const [a, b] of c.pairs) {
+    const k = `${a.selection || 'a leg'} and ${b.selection || 'a leg'}`;
+    pairs.set(k, [...(pairs.get(k) ?? []), c.ticket.number]);
+  }
+  return [...pairs].map(([k, ns]) => `${k} on ${ns.map((n) => `PP ${n}`).join(', ')}`).join('; ');
+}
+
 /**
  * The Major-majors grouped by game, in pool order: the legs of one group take turns. A combo Major-major is grouped
  * with every Major-major sharing any of its parts' games (they can never share a PP), so groups chain through combos.

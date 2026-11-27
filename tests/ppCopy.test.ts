@@ -1,9 +1,10 @@
 // "Copy table": every PP of the batch as a table in the PPs tab's style, plain text and HTML.
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_TIERS, type PPBatch, type PPLeg, type PPTicket } from '@/lib/pp';
+import { clashText, sameGameClashes } from '@/lib/ppBuilder';
 import { batchRows, batchTableHtml, batchTableText, COPY_HEADER } from '@/lib/ppCopy';
 
-const leg = (id: string, over: Partial<PPLeg> = {}): PPLeg => ({ id, sport: 'NBA', game: 'A vs B', market: 'ML', selection: id, odds: 2, tier: 'major', result: 'pending', actual: '', note: '', parts: [], ...over });
+const leg = (id: string, over: Partial<PPLeg> = {}): PPLeg => ({ id, sport: 'NBA', market: 'ML', selection: id, odds: 2, tier: 'major', result: 'pending', actual: '', note: '', parts: [], ...over, game: over.game ?? `${id} game` });
 const ticket = (number: number, legIds: string[], over: Partial<PPTicket> = {}): PPTicket => ({ id: `t${number}`, number, legIds, placed: true, oddsOverride: null, stake: null, ...over });
 const batch = (legs: PPLeg[], tickets: PPTicket[], over: Partial<PPBatch> = {}): PPBatch => ({
   id: 'b1',
@@ -56,4 +57,26 @@ describe('copy a batch as a table', () => {
   });
 
   it('a batch with no PPs copies only the title and header', () => expect(batchTableText(batch([], [])).split('\n')).toHaveLength(2));
+});
+
+describe('same game on one PP (a pool leg edited after the PPs were made)', () => {
+  const legs = [leg('McDaniels 10 pts', { game: 'Bulls v Wolves' }), leg('Dosunmu 20 pts', { game: 'bulls  v wolves' }), leg('Chelsea G', { game: 'Chelsea v Spurs' })];
+  const b = batch(legs, [ticket(2, ['McDaniels 10 pts', 'Dosunmu 20 pts', 'Chelsea G']), ticket(1, ['McDaniels 10 pts', 'Chelsea G']), ticket(3, ['Dosunmu 20 pts', 'McDaniels 10 pts'])]);
+
+  it('finds every PP holding two legs from one game, by number', () => {
+    const c = sameGameClashes(b);
+    expect(c.map((x) => x.ticket.number)).toEqual([2, 3]);
+    expect(c[0]!.pairs.map(([x, y]) => [x.id, y.id])).toEqual([['McDaniels 10 pts', 'Dosunmu 20 pts']]);
+  });
+  it('only: just the pairs with that leg', () => {
+    expect(sameGameClashes(b, 'Chelsea G')).toEqual([]);
+    expect(sameGameClashes(b, 'Dosunmu 20 pts')).toHaveLength(2);
+  });
+  it('says which legs and which PPs', () => expect(clashText(sameGameClashes(b))).toBe('McDaniels 10 pts and Dosunmu 20 pts on PP 2; Dosunmu 20 pts and McDaniels 10 pts on PP 3'));
+  it('a leg with no game typed never clashes', () => expect(sameGameClashes(batch([leg('a', { game: '' }), leg('b', { game: '' })], [ticket(1, ['a', 'b'])]))).toEqual([]));
+  it('a combo clashes through any of its parts', () => {
+    const combo = leg('combo', { game: 'X / Bulls v Wolves', parts: [{ sport: '', date: '', game: 'X', market: '', selection: 'p1', odds: 2 }, { sport: '', date: '', game: 'Bulls v Wolves', market: '', selection: 'p2', odds: 2 }] });
+    expect(sameGameClashes(batch([combo, legs[0]!], [ticket(1, ['combo', 'McDaniels 10 pts'])]))).toHaveLength(1);
+  });
+  it('the copied table marks those PPs', () => expect(batchRows(b).map((r) => r[0])).toEqual(['PP 1', 'PP 2 ⚠ same game', 'PP 3 ⚠ same game']));
 });

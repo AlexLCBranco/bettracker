@@ -3,16 +3,17 @@
 // PP, columns split by " | ") and an HTML table for apps that paste tables.
 import { formatDate } from './dates';
 import { formatMoney, formatOdds, profitMoney } from './money';
+import { sameGameClashes } from './ppBuilder';
 import { STATUS_LABEL, ticketStake, ticketView, type PPBatch, type TicketView } from './pp';
 
 export const COPY_HEADER = ['PP', 'Legs', 'Odds', 'Stake', 'Potential', 'Status'] as const;
 
-/** One PP's cells, as the PPs tab shows them. */
-export function ticketRow(v: TicketView, batch: Pick<PPBatch, 'stake' | 'money'>): string[] {
+/** One PP's cells, as the PPs tab shows them. `clash`: it holds two legs from the same game. */
+export function ticketRow(v: TicketView, batch: Pick<PPBatch, 'stake' | 'money'>, clash = false): string[] {
   const pm = profitMoney(batch.money);
   const left = v.status !== 'won' && v.status !== 'dead' && v.status !== 'void' ? ` (${v.left} left)` : '';
   return [
-    `PP ${v.ticket.number}${v.ticket.placed ? '' : ' (not placed)'}`,
+    `PP ${v.ticket.number}${v.ticket.placed ? '' : ' (not placed)'}${clash ? ' ⚠ same game' : ''}`,
     v.legs.map((l) => l.selection).join(', '),
     `${formatOdds(v.odds, 2)}${v.estimated ? ' (est.)' : ''}`,
     formatMoney(ticketStake(v.ticket, batch), batch.money),
@@ -23,7 +24,8 @@ export function ticketRow(v: TicketView, batch: Pick<PPBatch, 'stake' | 'money'>
 
 /** Every PP of the batch, by number. */
 export function batchRows(batch: PPBatch): string[][] {
-  return [...batch.tickets].sort((a, b) => a.number - b.number).map((t) => ticketRow(ticketView(t, batch), batch));
+  const clashing = new Set(sameGameClashes(batch).map((c) => c.ticket.id));
+  return [...batch.tickets].sort((a, b) => a.number - b.number).map((t) => ticketRow(ticketView(t, batch), batch, clashing.has(t.id)));
 }
 
 const title = (batch: PPBatch) => [batch.name, batch.book, formatDate(batch.placedDate)].filter(Boolean).join(' · ');

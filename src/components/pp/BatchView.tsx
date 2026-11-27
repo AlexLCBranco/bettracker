@@ -40,7 +40,7 @@ import {
   type TicketView,
 } from '@/lib/pp';
 import { formatPercent } from '@/lib/stats';
-import { mmGroups, sameGame } from '@/lib/ppBuilder';
+import { clashText, mmGroups, sameGame, sameGameClashes } from '@/lib/ppBuilder';
 import { batchTableHtml, batchTableText } from '@/lib/ppCopy';
 
 export type BatchTab = 'legs' | 'tickets';
@@ -440,7 +440,19 @@ function LegsView({ batch, groups, editing, save, selected, select, settle, anno
                       return (
                         <tr key={l.id}>
                           <td colSpan={4} className="py-1">
-                            <LegForm batch={batch} leg={l} onSave={(leg) => { void save({ legs: batch.legs.map((x) => (x.id === l.id ? leg : x)) }); setEdit(null); }} onCancel={() => setEdit(null)} />
+                            <LegForm
+                              batch={batch}
+                              leg={l}
+                              onSave={(leg) => {
+                                const legs = batch.legs.map((x) => (x.id === l.id ? leg : x));
+                                // the builder never puts two legs from one game on a PP; an edited leg can, so it asks first
+                                const clashes = sameGameClashes({ legs, tickets: batch.tickets }, leg.id);
+                                if (clashes.length && !window.confirm(`Same game on one PP: ${clashText(clashes)}.\n\nSave anyway? The PPs stay as they are and are marked "same game".`)) return;
+                                void save({ legs });
+                                setEdit(null);
+                              }}
+                              onCancel={() => setEdit(null)}
+                            />
                           </td>
                         </tr>
                       );
@@ -799,6 +811,8 @@ function TicketsView({ batch, editing, save, legFilter, setLegFilter }: { batch:
   }, [views, filter, sort, legFilter]);
   const leg = legFilter ? batch.legs.find((l) => l.id === legFilter) : undefined;
   const pm = profitMoney(batch.money);
+  const clashes = useMemo(() => sameGameClashes(batch), [batch]);
+  const clashOf = new Map(clashes.map((c) => [c.ticket.id, c]));
   const { notify } = useApp();
   // every PP of the batch (not only the filtered ones): HTML for apps that paste tables, plain text for the rest
   const copyTable = async () => {
@@ -854,6 +868,11 @@ function TicketsView({ batch, editing, save, legFilter, setLegFilter }: { batch:
           </button>
         )}
       </div>
+      {clashes.length > 0 && (
+        <p role="alert" className="rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-xs text-amber-200" data-testid="same-game-warning">
+          ⚠ Two legs from the same game on one PP: {clashText(clashes)}. Check with the book that it took them (or swap a leg).
+        </p>
+      )}
       {edit && (
         <TicketEditor
           batch={batch}
@@ -893,6 +912,11 @@ function TicketsView({ batch, editing, save, legFilter, setLegFilter }: { batch:
                   <td className="px-2 py-1.5 font-semibold text-zinc-200">
                     PP {v.ticket.number}
                     {!v.ticket.placed && <div className="text-[10px] font-normal text-zinc-500">not placed</div>}
+                    {clashOf.has(v.ticket.id) && (
+                      <div className="text-[10px] font-normal text-amber-300" data-testid="ticket-same-game" title={clashText([clashOf.get(v.ticket.id)!])}>
+                        ⚠ same game
+                      </div>
+                    )}
                   </td>
                   <td className="px-2 py-1.5">
                     <div className="flex flex-wrap gap-1">
