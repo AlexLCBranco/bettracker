@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-27
+- PP: copy every PP of a batch as a table (v0.83.0)
+  "Copy table" on the Tickets tab puts every PP (PP, legs, odds, stake, potential, status) on the clipboard, to paste and recheck later.
 - PP: the batch shows its system beside its name (v0.82.0)
   Next to the batch name: how many legs of each tier every PP carries, e.g. "3 mjmj → 1 mj → 2 shot per PP", with each tier's pool size.
 - PP: a settled leg's result changes from its pill, as on the Bets page (v0.81.0)

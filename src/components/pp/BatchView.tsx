@@ -41,6 +41,7 @@ import {
 } from '@/lib/pp';
 import { formatPercent } from '@/lib/stats';
 import { mmGroups, sameGame } from '@/lib/ppBuilder';
+import { batchTableHtml, batchTableText } from '@/lib/ppCopy';
 
 export type BatchTab = 'legs' | 'tickets';
 
@@ -798,6 +799,19 @@ function TicketsView({ batch, editing, save, legFilter, setLegFilter }: { batch:
   }, [views, filter, sort, legFilter]);
   const leg = legFilter ? batch.legs.find((l) => l.id === legFilter) : undefined;
   const pm = profitMoney(batch.money);
+  const { notify } = useApp();
+  // every PP of the batch (not only the filtered ones): HTML for apps that paste tables, plain text for the rest
+  const copyTable = async () => {
+    const text = batchTableText(batch);
+    try {
+      if (typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write) {
+        await navigator.clipboard.write([new ClipboardItem({ 'text/plain': new Blob([text], { type: 'text/plain' }), 'text/html': new Blob([batchTableHtml(batch)], { type: 'text/html' }) })]);
+      } else await navigator.clipboard.writeText(text);
+      notify(`Copied ${batch.tickets.length} PP${batch.tickets.length === 1 ? '' : 's'}`);
+    } catch {
+      notify('Could not copy to the clipboard', 'error');
+    }
+  };
   const saveTicket = (t: PPTicket) => {
     void save({ tickets: [...batch.tickets.filter((x) => x.id !== t.id), t].sort((a, b) => a.number - b.number) });
     setEdit(null);
@@ -829,6 +843,11 @@ function TicketsView({ batch, editing, save, legFilter, setLegFilter }: { batch:
             <option value="left">Legs left</option>
           </select>
         </label>
+        {batch.tickets.length > 0 && (
+          <button className="btn text-xs" onClick={copyTable} title="Every PP of this batch as a table, to paste and recheck later">
+            Copy table
+          </button>
+        )}
         {editing && (
           <button className="btn text-xs" onClick={() => setEdit('new')}>
             + Add PP
