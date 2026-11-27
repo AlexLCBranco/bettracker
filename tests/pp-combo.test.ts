@@ -5,7 +5,7 @@ import { DEFAULT_TIERS, partsOdds, validateBatch, type PPLeg, type PPLegPart } f
 import { gameKeys, generate, sameGame, type PPScheme } from '@/lib/ppBuilder';
 
 const leg = (id: string, tier: string, odds: number, game: string, parts: PPLegPart[] = []): PPLeg => ({ id, sport: '', game, market: '', selection: id, odds, tier, result: 'pending', actual: '', note: '', parts });
-const part = (selection: string, odds: number, game: string): PPLegPart => ({ game, market: '', selection, odds });
+const part = (selection: string, odds: number, game: string): PPLegPart => ({ sport: '', date: '', game, market: '', selection, odds });
 const scheme = (over: Partial<PPScheme> = {}): PPScheme => ({ count: 12, target: 20, bandMin: 8, bandMax: 60, majorsPerPP: [1], shotsPerPP: 1, shotsPerPPAuto: false, plannedShots: null, shotCount: 3, avoidPairs: false, seed: 1, ...over });
 
 describe('combo legs', () => {
@@ -16,12 +16,18 @@ describe('combo legs', () => {
   it('validation keeps the parts; a part needs odds above 1; one part is not a combo', () => {
     const raw = (parts: unknown[]) => ({ placedDate: '2026-11-27', stake: 0.5, legs: [{ id: 'c', selection: 'A + B', odds: 3.5, tier: 'shot', parts }], tickets: [] });
     const v = validateBatch(raw([{ game: 'G1', selection: 'A', odds: 1.5 }, { game: 'G2', market: 'ML', selection: 'B', odds: 2.2 }]));
-    expect(v.ok && v.value.legs[0]!.parts).toEqual([part('A', 1.5, 'G1'), { game: 'G2', market: 'ML', selection: 'B', odds: 2.2 }]);
+    expect(v.ok && v.value.legs[0]!.parts).toEqual([part('A', 1.5, 'G1'), { sport: '', date: '', game: 'G2', market: 'ML', selection: 'B', odds: 2.2 }]);
     expect(v.ok && v.value.legs[0]!.odds).toBe(3.5); // the book's price, never forced to the parts multiplied
     expect(validateBatch(raw([{ selection: 'A', odds: 1 }, { selection: 'B', odds: 2 }]))).toEqual({ ok: false, error: 'Leg 1, part 1: odds must be above 1' });
     expect(validateBatch(raw([{ selection: 'A', odds: 1.5 }]))).toEqual({ ok: false, error: 'Leg 1: a combo needs two parts or more' });
     const single = validateBatch({ placedDate: '2026-11-27', stake: 0.5, legs: [{ id: 's', odds: 2, tier: 'shot' }], tickets: [] });
     expect(single.ok && single.value.legs[0]!.parts).toEqual([]);
+  });
+  it('each part keeps its own sport and day (owner: a combo can mix sports played on different days)', () => {
+    const raw = (parts: unknown[]) => ({ placedDate: '2026-11-27', stake: 0.5, legs: [{ id: 'c', selection: 'A + B', odds: 3.5, tier: 'mm', parts }], tickets: [] });
+    const v = validateBatch(raw([{ sport: 'Basketball', date: '2026-11-28', game: 'G1', selection: 'A', odds: 1.5 }, { sport: 'Football', date: '2026-11-30', game: 'G2', selection: 'B', odds: 2.2 }]));
+    expect(v.ok && v.value.legs[0]!.parts.map((x) => [x.sport, x.date])).toEqual([['Basketball', '2026-11-28'], ['Football', '2026-11-30']]);
+    expect(validateBatch(raw([{ selection: 'A', odds: 1.5, date: '28/11/2026' }, { selection: 'B', odds: 2 }]))).toEqual({ ok: false, error: 'Leg 1, part 1: the date must be a valid date' });
   });
   it('a combo is from every game of its parts', () => {
     const c = leg('c', 'shot', 3.3, 'G1 / G2', [part('A', 1.5, 'G1'), part('B', 2.2, 'g2 ')]);

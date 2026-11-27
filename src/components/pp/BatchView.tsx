@@ -16,7 +16,7 @@ import { OddsInput } from '@/components/OddsInput';
 import { isTyping, isUndoKey } from '@/components/Shell';
 import { Builder, ShotPlanner, useBatchScheme, type BatchScheme } from './Builder';
 import { BatchStats } from './PPStats';
-import { formatDate, parseDateInput } from '@/lib/dates';
+import { formatDate, formatShortDate, parseDateInput } from '@/lib/dates';
 import { formatMoney, formatOdds, oddsFromText, parseNumber, profitMoney } from '@/lib/money';
 import {
   batchSummary,
@@ -405,7 +405,7 @@ function LegsView({ batch, groups, editing, save, selected, select, settle, anno
                             </div>
                             <div className="text-[11px] leading-5 text-zinc-500 [overflow-wrap:anywhere]">
                               {l.parts.length ? (
-                                <span data-testid="leg-parts">{l.parts.map((x) => `${x.selection} @ ${formatOdds(x.odds, 2)}${x.game ? ` (${x.game})` : ''}`).join(' · ')}{l.sport ? ` · ${l.sport}` : ''}</span>
+                                <span data-testid="leg-parts">{l.parts.map((x) => { const about = [x.game, x.sport, x.date && formatShortDate(x.date)].filter(Boolean).join(' · '); return `${x.selection} @ ${formatOdds(x.odds, 2)}${about ? ` (${about})` : ''}`; }).join(' · ')}</span>
                               ) : (
                                 [l.game, l.sport, l.market].filter(Boolean).join(' · ')
                               )}
@@ -495,12 +495,13 @@ function LegAnnotator({ leg, onSave, onClose }: { leg: PPLeg; onSave(p: Pick<PPL
   );
 }
 
-type PartText = { game: string; market: string; selection: string; odds: string };
-const blankPart = (game = ''): PartText => ({ game, market: '', selection: '', odds: '' });
+type PartText = { sport: string; date: string; game: string; market: string; selection: string; odds: string };
+/** A new part keeps the previous part's sport, day and game. */
+const blankPart = (prev?: PartText): PartText => ({ sport: prev?.sport ?? '', date: prev?.date ?? '', game: prev?.game ?? '', market: '', selection: '', odds: '' });
 
 /**
  * Adds a leg to the pool (or edits one): sport, game, market, selection, odds in any format, tier, note. Any leg, of
- * any tier, can be a combo (owner, 2026-11-27): its parts (game, market, selection, odds each) at the book's combo price, which starts
+ * any tier, can be a combo (owner, 2026-11-27): its parts (sport, day, game, market, selection, odds each: a combo can mix sports and days) at the book's combo price, which starts
  * as the parts multiplied, marked "estimated", until the book's price is typed over it.
  */
 function LegForm({ batch, leg, onSave, onCancel }: { batch: PPBatch; leg?: PPLeg; onSave(l: PPLeg): void; onCancel?(): void }) {
@@ -508,7 +509,7 @@ function LegForm({ batch, leg, onSave, onCancel }: { batch: PPBatch; leg?: PPLeg
   const blank = { sport: '', game: '', market: '', selection: '', odds: '', tier: batch.tiers[0]?.id ?? '', note: '' };
   const [f, setF] = useState(leg ? { sport: leg.sport, game: leg.game, market: leg.market, selection: leg.selection, odds: String(leg.odds), tier: leg.tier, note: leg.note } : blank);
   const [combo, setCombo] = useState(!!leg?.parts.length);
-  const [parts, setParts] = useState<PartText[]>(leg?.parts.length ? leg.parts.map((x) => ({ game: x.game, market: x.market, selection: x.selection, odds: String(x.odds) })) : [blankPart(), blankPart()]);
+  const [parts, setParts] = useState<PartText[]>(leg?.parts.length ? leg.parts.map((x) => ({ sport: x.sport, date: x.date ? formatDate(x.date) : '', game: x.game, market: x.market, selection: x.selection, odds: String(x.odds) })) : [blankPart(), blankPart()]);
   const [price, setPrice] = useState(leg?.parts.length ? String(leg.odds) : '');
   const [priced, setPriced] = useState(!!leg?.parts.length && leg.odds !== partsOdds(leg.parts));
   const [error, setError] = useState('');
@@ -525,12 +526,13 @@ function LegForm({ batch, leg, onSave, onCancel }: { batch: PPBatch; leg?: PPLeg
       for (const [i, x] of parts.entries()) {
         if (!x.selection.trim()) return setError(`Part ${i + 1}: selection is needed`);
         if (partOdds[i] == null) return setError(`Part ${i + 1}: odds must be above 1`);
+        if (x.date.trim() && !parseDateInput(x.date)) return setError(`Part ${i + 1}: the date is not a valid date`);
       }
       const odds = oddsFromText(shownPrice);
       if (odds == null) return setError('Combo odds must be above 1');
-      const ps = parts.map((x, i) => ({ game: x.game.trim(), market: x.market.trim(), selection: x.selection.trim(), odds: partOdds[i]! }));
+      const ps = parts.map((x, i) => ({ sport: x.sport.trim(), date: x.date.trim() ? parseDateInput(x.date)! : '', game: x.game.trim(), market: x.market.trim(), selection: x.selection.trim(), odds: partOdds[i]! }));
       setError('');
-      onSave({ ...base, game: [...new Set(ps.map((x) => x.game).filter(Boolean))].join(' / '), market: '', selection: ps.map((x) => x.selection).join(' + '), odds, parts: ps });
+      onSave({ ...base, sport: [...new Set(ps.map((x) => x.sport).filter(Boolean))].join(' / '), game: [...new Set(ps.map((x) => x.game).filter(Boolean))].join(' / '), market: '', selection: ps.map((x) => x.selection).join(' + '), odds, parts: ps });
       if (!leg) {
         setParts([blankPart(), blankPart()]);
         setPrice('');
@@ -560,13 +562,10 @@ function LegForm({ batch, leg, onSave, onCancel }: { batch: PPBatch; leg?: PPLeg
       }}
       onKeyDown={(e) => e.key === 'Escape' && onCancel?.()}
     >
-      <L label="Sport">
-        <Autocomplete value={f.sport} onChange={(v) => set('sport', v)} getSuggestions={(q) => suggestFor('sport', q)} aria-label="Leg sport" />
-      </L>
       {combo ? (
         <>
-          <p className="col-span-3 self-center pt-4 text-xs text-zinc-400">Combo: its parts below. It goes on PPs as one leg and settles as one (W / L / V), as the book settles it.</p>
-          <L label={priced ? 'Combo odds *' : 'Combo odds (estimated)'}>
+          <p className="col-span-4 self-center pt-4 text-xs text-zinc-400">Combo: its parts below, each with its own sport and day. It goes on PPs as one leg and settles as one (W / L / V), as the book settles it.</p>
+          <L label={priced ? 'Odds *' : 'Odds (est.)'}>
             <OddsInput
               value={shownPrice}
               onChange={(v) => {
@@ -579,6 +578,9 @@ function LegForm({ batch, leg, onSave, onCancel }: { batch: PPBatch; leg?: PPLeg
         </>
       ) : (
         <>
+          <L label="Sport">
+            <Autocomplete value={f.sport} onChange={(v) => set('sport', v)} getSuggestions={(q) => suggestFor('sport', q)} aria-label="Leg sport" />
+          </L>
           <L label="Game">
             <Autocomplete value={f.game} onChange={(v) => set('game', v)} getSuggestions={(q) => suggestFor('game', q, f.sport)} aria-label="Leg game" />
           </L>
@@ -623,7 +625,10 @@ function LegForm({ batch, leg, onSave, onCancel }: { batch: PPBatch; leg?: PPLeg
           onChange={(e) => {
             setCombo(e.target.checked);
             // the first part starts from what was typed as a single selection
-            if (e.target.checked && !leg && parts.every((x) => !x.selection && !x.odds)) setParts([{ game: f.game, market: f.market, selection: f.selection, odds: f.odds }, blankPart(f.game)]);
+            if (e.target.checked && !leg && parts.every((x) => !x.selection && !x.odds)) {
+              const first = { sport: f.sport, date: '', game: f.game, market: f.market, selection: f.selection, odds: f.odds };
+              setParts([first, blankPart(first)]);
+            }
           }}
           aria-label="Combo"
         />
@@ -632,11 +637,13 @@ function LegForm({ batch, leg, onSave, onCancel }: { batch: PPBatch; leg?: PPLeg
       {combo && (
         <div className="col-span-full space-y-1.5 rounded-md border border-zinc-800 p-2" data-testid="combo-parts">
           {parts.map((x, i) => (
-            <div key={i} className="grid grid-cols-[3.5rem_repeat(3,minmax(0,1fr))_6rem_2rem] items-center gap-2">
+            <div key={i} className="grid grid-cols-[3.5rem_minmax(0,0.7fr)_7rem_repeat(3,minmax(0,1fr))_6rem_2rem] items-center gap-2">
               <span className="text-xs text-zinc-500">Part {i + 1}</span>
-              <Autocomplete value={x.game} onChange={(v) => setPart(i, 'game', v)} getSuggestions={(q) => suggestFor('game', q, f.sport)} aria-label={`Part ${i + 1} game`} placeholder="game" />
-              <Autocomplete value={x.market} onChange={(v) => setPart(i, 'market', v)} getSuggestions={(q) => suggestFor('market', q, f.sport)} aria-label={`Part ${i + 1} market`} placeholder="market" />
-              <Autocomplete value={x.selection} onChange={(v) => setPart(i, 'selection', v)} getSuggestions={(q) => suggestFor('selection', q, f.sport)} aria-label={`Part ${i + 1} selection`} placeholder="selection *" />
+              <Autocomplete value={x.sport} onChange={(v) => setPart(i, 'sport', v)} getSuggestions={(q) => suggestFor('sport', q)} aria-label={`Part ${i + 1} sport`} placeholder="sport" />
+              <DateField value={x.date} onChange={(v) => setPart(i, 'date', v)} aria-label={`Part ${i + 1} date`} />
+              <Autocomplete value={x.game} onChange={(v) => setPart(i, 'game', v)} getSuggestions={(q) => suggestFor('game', q, x.sport)} aria-label={`Part ${i + 1} game`} placeholder="game" />
+              <Autocomplete value={x.market} onChange={(v) => setPart(i, 'market', v)} getSuggestions={(q) => suggestFor('market', q, x.sport)} aria-label={`Part ${i + 1} market`} placeholder="market" />
+              <Autocomplete value={x.selection} onChange={(v) => setPart(i, 'selection', v)} getSuggestions={(q) => suggestFor('selection', q, x.sport)} aria-label={`Part ${i + 1} selection`} placeholder="selection *" />
               <OddsInput value={x.odds} onChange={(v) => setPart(i, 'odds', v)} aria-label={`Part ${i + 1} odds`} placeholder="odds *" />
               {parts.length > 2 ? (
                 <button type="button" className="text-xs text-red-300 hover:text-red-200" aria-label={`Remove part ${i + 1}`} onClick={() => setParts((ps) => ps.filter((_, j) => j !== i))}>
@@ -648,7 +655,7 @@ function LegForm({ batch, leg, onSave, onCancel }: { batch: PPBatch; leg?: PPLeg
             </div>
           ))}
           <div className="flex items-center gap-3">
-            <button type="button" className="chip" onClick={() => setParts((ps) => [...ps, blankPart(ps.at(-1)?.game ?? '')])}>
+            <button type="button" className="chip" onClick={() => setParts((ps) => [...ps, blankPart(ps.at(-1))])}>
               + Part
             </button>
             <span className="text-[11px] text-zinc-500">{priced ? 'Your price from the book.' : 'Combo odds: the parts multiplied (estimated). Type the book’s price over it.'}</span>

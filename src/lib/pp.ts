@@ -17,8 +17,14 @@ export interface PPTier {
   name: string;
 }
 
-/** Owner, 2026-11-27: a PP shot can be a combo: one pool leg made of several selections at the book's combo price. */
+/**
+ * Owner, 2026-11-27: any leg can be a combo: one pool leg made of several selections at the book's combo price. Its
+ * parts can be from different sports, played on different days.
+ */
 export interface PPLegPart {
+  sport: string;
+  /** The day it is played, "YYYY-MM-DD"; "" not typed. */
+  date: string;
   game: string;
   market: string;
   selection: string;
@@ -337,7 +343,9 @@ export function validateBatch(raw: unknown): ValidatedBatch {
       const xr = (x ?? {}) as Record<string, unknown>;
       const po = num(xr.odds);
       if (po == null || po <= 1) return { ok: false, error: `Leg ${i + 1}, part ${j + 1}: odds must be above 1` };
-      parts.push({ game: str(xr.game), market: str(xr.market), selection: str(xr.selection), odds: po });
+      const date = str(xr.date);
+      if (date && !isValidISODate(date)) return { ok: false, error: `Leg ${i + 1}, part ${j + 1}: the date must be a valid date` };
+      parts.push({ sport: str(xr.sport), date, game: str(xr.game), market: str(xr.market), selection: str(xr.selection), odds: po });
     }
     if (parts.length === 1) return { ok: false, error: `Leg ${i + 1}: a combo needs two parts or more` };
     legs.push({ id, sport: str(lr.sport), game: str(lr.game), market: str(lr.market), selection: str(lr.selection), odds, tier, result, actual: str(lr.actual), note: str(lr.note, 300), parts });

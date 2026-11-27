@@ -251,7 +251,7 @@ describe('generator hard rules (fixed seeds)', () => {
     expect([0, 1, 2, 3].map((n) => mmFor(groups, n).map((l) => l.id).join('+'))).toEqual(['a1+b1', 'a2+b1', 'a1+b2', 'a2+b2']);
   });
   it('a combo Major-major takes turns with every Major-major sharing any of its parts’ games', () => {
-    const part = (game: string) => ({ game, market: '', selection: game, odds: 1.2 });
+    const part = (game: string) => ({ sport: '', date: '', game, market: '', selection: game, odds: 1.2 });
     // the combo's game text is its parts' games joined, so grouping by that text alone would miss the overlap
     const combo: PPLeg = { ...leg('c', 'mm', 1.7, 'A / B / C'), parts: [part('A'), part('B'), part('C')] };
     const legs = [leg('a', 'mm', 1.3, 'A'), leg('x', 'mm', 1.3, 'X'), combo, leg('b', 'mm', 1.3, 'B')];

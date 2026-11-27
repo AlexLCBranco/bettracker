@@ -493,7 +493,7 @@ async function readBatches(c: Client, id?: string): Promise<PPBatch[]> {
   for (const r of l!.rows) {
     const k = s(r.batch_id);
     if (!legs.has(k)) legs.set(k, []);
-    legs.get(k)!.push({ id: s(r.id), sport: s(r.sport), game: s(r.game), market: s(r.market), selection: s(r.selection), odds: Number(r.odds), tier: s(r.tier), result: s(r.result) as PPLeg['result'], actual: s(r.actual), note: s(r.note), parts: parseJSON<PPLeg['parts']>(r.parts, []) });
+    legs.get(k)!.push({ id: s(r.id), sport: s(r.sport), game: s(r.game), market: s(r.market), selection: s(r.selection), odds: Number(r.odds), tier: s(r.tier), result: s(r.result) as PPLeg['result'], actual: s(r.actual), note: s(r.note), parts: parseJSON<Partial<PPLeg['parts'][number]>[]>(r.parts, []).map((x) => ({ sport: x.sport ?? '', date: x.date ?? '', game: x.game ?? '', market: x.market ?? '', selection: x.selection ?? '', odds: Number(x.odds) })) });
   }
   const tickets = new Map<string, PPTicket[]>();
   for (const r of t!.rows) {

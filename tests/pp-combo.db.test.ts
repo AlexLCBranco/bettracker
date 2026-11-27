@@ -47,4 +47,20 @@ describe('combo legs in the database', () => {
     c.close();
     expect(row.parts).toBe('[]');
   });
+  it('keeps each part’s sport and day; parts saved before them read with none', async () => {
+    const v = validateBatch({
+      placedDate: '2026-11-27',
+      stake: 0.5,
+      legs: [{ id: 'd', selection: 'A + B', odds: 3.5, tier: 'mm', parts: [{ sport: 'Basketball', date: '2026-11-28', selection: 'A', odds: 1.5 }, { sport: 'Football', date: '2026-11-30', selection: 'B', odds: 2.2 }] }],
+      tickets: [],
+    });
+    if (!v.ok) throw new Error(v.error);
+    const b = await db.saveBatch(v.value);
+    expect((await db.getBatch(b.id))!.legs[0]!.parts.map((x) => [x.sport, x.date])).toEqual([['Basketball', '2026-11-28'], ['Football', '2026-11-30']]);
+    // a combo saved before parts had a sport and a day
+    const c = createClient({ url });
+    await c.execute({ sql: 'UPDATE pp_legs SET parts = ? WHERE id = ?', args: [JSON.stringify([{ game: 'G1', market: '', selection: 'A', odds: 1.5 }, { game: 'G2', market: '', selection: 'B', odds: 2.2 }]), 'd'] });
+    c.close();
+    expect((await db.getBatch(b.id))!.legs[0]!.parts.map((x) => [x.sport, x.date, x.game])).toEqual([['', '', 'G1'], ['', '', 'G2']]);
+  });
 });
