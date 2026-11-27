@@ -36,6 +36,7 @@ import {
   type TicketView,
 } from '@/lib/pp';
 import { formatPercent } from '@/lib/stats';
+import { mmGroups, sameGame } from '@/lib/ppBuilder';
 
 export type BatchTab = 'legs' | 'tickets';
 
@@ -737,15 +738,25 @@ function TicketsView({ batch, editing, save, legFilter, setLegFilter }: { batch:
 
 /** A PP by hand: pick its legs from the pool; the book's price and whether it is placed are optional. */
 function TicketEditor({ batch, ticket, onSave, onCancel }: { batch: PPBatch; ticket?: PPTicket; onSave(t: PPTicket): void; onCancel(): void }) {
-  const [legIds, setLegIds] = useState<string[]>(ticket?.legIds ?? batch.legs.filter((l) => l.tier === batch.tiers[0]?.id).map((l) => l.id));
+  // a new PP starts with the Major-majors, one per game
+  const [legIds, setLegIds] = useState<string[]>(ticket?.legIds ?? mmGroups(batch.legs, batch.tiers).map((g) => g[0]!.id));
   const [odds, setOdds] = useState(ticket?.oddsOverride != null ? String(ticket.oddsOverride) : '');
   const [placed, setPlaced] = useState(ticket?.placed ?? true);
   const [error, setError] = useState('');
   const groups = legsByTier({ ...batch, tickets: [] });
   const estimate = legIds.map((id) => batch.legs.find((l) => l.id === id)!).filter(Boolean).reduce((p, l) => p * l.odds, 1);
-  const toggle = (id: string) => setLegIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
+  const legOf = (id: string) => batch.legs.find((l) => l.id === id);
+  // picking a leg takes out any other leg from its game: two legs from the same game are never on one PP
+  const toggle = (id: string) =>
+    setLegIds((ids) => {
+      if (ids.includes(id)) return ids.filter((x) => x !== id);
+      const l = legOf(id);
+      return [...ids.filter((x) => !(l && legOf(x) && sameGame(l, legOf(x)!))), id];
+    });
   const submit = () => {
     if (!legIds.length) return setError('Pick at least one leg');
+    const picked = legIds.map(legOf).filter((l): l is PPLeg => !!l);
+    if (picked.some((a, i) => picked.some((b, j) => j > i && sameGame(a, b)))) return setError('Two legs from the same game cannot be on one PP');
     const ov = odds.trim() ? oddsFromText(odds) : null;
     if (odds.trim() && ov == null) return setError('Odds must be above 1');
     const order = batch.legs.map((l) => l.id);

@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-27
+- PP: two legs from the same game are never on the same PP (v0.72.0)
+  Always on, every tier (the old checkbox is gone): Major-majors from one game take turns, one per PP, and picking a leg on a hand-made PP takes out the other leg from its game.
 - Bets: labels are negative (red), positive (green) or neutral (grey); no brainer in yellow (v0.71.0)
   A label like "MY BAD" is red; click its chip to make it green, then grey (or pick + Positive / − Negative / ○ Neutral when typing it), on every bet with it. The NO BRAINER chip and its cell are yellow.
 

@@ -9,7 +9,7 @@ import { BalanceHint } from '@/components/Bankroll';
 import { OddsInput } from '@/components/OddsInput';
 import { formatMoney, formatOdds, oddsFromText, parseNumber, profitMoney } from '@/lib/money';
 import { ppId, ticketView, type BatchInput, type PPBatch } from '@/lib/pp';
-import { generate, placeLine, preview, propose, roles, startingScheme, type PPScheme } from '@/lib/ppBuilder';
+import { generate, mmGroups, placeLine, preview, propose, roles, startingScheme, type PPScheme } from '@/lib/ppBuilder';
 
 const ROLE_TEXT = { every: 'on every PP', share: 'a share of the PPs', fixed: 'a fixed number of PPs each' } as const;
 
@@ -25,6 +25,7 @@ export function Builder({ batch, save, editPool }: { batch: PPBatch; save(p: Par
   const gen = useMemo(() => generate(batch, s), [batch, s]);
   const pv = useMemo(() => preview(batch, s, gen), [batch, s, gen]);
   const legName = new Map(batch.legs.map((l) => [l.id, l.selection]));
+  const turns = mmGroups(batch.legs, batch.tiers).filter((g) => g.length > 1);
 
   const commit = () => {
     const settled = batch.legs.some((l) => l.result !== 'pending');
@@ -46,6 +47,14 @@ export function Builder({ batch, save, editPool }: { batch: PPBatch; save(p: Par
             Edit pool
           </button>
         </div>
+        <p className="text-xs text-zinc-400" data-testid="same-game-rule">
+          Two legs from the same game are never on the same PP.
+          {turns.map((g) => (
+            <span key={g[0]!.id} className="block text-zinc-300" data-testid="mm-turns">
+              Same game, so they take turns (one per PP): {g.map((l) => l.selection).join(' / ')}
+            </span>
+          ))}
+        </p>
       </Step>
 
       <Step n={2} title="Scheme">
@@ -60,10 +69,6 @@ export function Builder({ batch, save, editPool }: { batch: PPBatch; save(p: Par
           {r.size >= 3 && <Num label={`${batch.tiers.at(-1)!.name}: PPs each`} value={s.shotCount} onChange={(v) => set('shotCount', Math.max(0, Math.round(v)))} />}
         </div>
         <div className="flex flex-wrap items-center gap-4 text-xs text-zinc-300">
-          <label className="flex items-center gap-1.5">
-            <input type="checkbox" checked={s.noSameGame} onChange={(e) => set('noSameGame', e.target.checked)} />
-            No two legs from the same game on one PP
-          </label>
           <label className="flex items-center gap-1.5">
             <input type="checkbox" checked={s.avoidPairs} onChange={(e) => set('avoidPairs', e.target.checked)} />
             Avoid repeating the same pair of legs

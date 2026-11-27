@@ -2,7 +2,8 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './helpers';
 
-async function addLeg(page: Page, selection: string, odds: string, tier: string, game = 'A vs B') {
+// each leg its own game: two legs from the same game are never on one PP
+async function addLeg(page: Page, selection: string, odds: string, tier: string, game: string) {
   const f = page.getByRole('form', { name: 'Add leg' });
   await f.getByLabel('Leg game').fill(game);
   await f.getByLabel('Leg selection').fill(selection);
@@ -33,10 +34,10 @@ test('BT-30: batch → legs → PPs → settle legs by keyboard → PPs follow; 
   await expect(page).toHaveURL(/\/pp\/[^/?]+\?edit=1/);
   await expect(page.getByTestId('batch')).toHaveAttribute('data-editing', 'true');
 
-  await addLeg(page, `${tag} MM`, '2', 'Major-major');
-  await addLeg(page, `${tag} M1`, '2.5', 'Major');
-  await addLeg(page, `${tag} M2`, '-150', 'Major'); // American odds → 1.67
-  await addLeg(page, `${tag} S1`, '4', 'PP shot');
+  await addLeg(page, `${tag} MM`, '2', 'Major-major', 'G MM');
+  await addLeg(page, `${tag} M1`, '2.5', 'Major', 'G M1');
+  await addLeg(page, `${tag} M2`, '-150', 'Major', 'G M2'); // American odds → 1.67
+  await addLeg(page, `${tag} S1`, '4', 'PP shot', 'G S1');
 
   await page.getByRole('tab', { name: /Tickets/ }).click();
   await addPP(page, [`${tag} M1`, `${tag} S1`]); // PP 1: MM M1 S1 = 20.00
