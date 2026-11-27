@@ -3,7 +3,7 @@
 // flexible a little, the minimum is not; two legs from the same game never on one PP.
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_TIERS, type PPLeg, type PPTier } from '@/lib/pp';
-import { appearances, repeatText, shotPairRepeats, effectiveScheme, gameKey, generate, majorLevels, mmFor, mmGroups, placeLine, preview, propose, rng, roles, shotPlan, split, startingScheme, suggestedShots, typicalShotOdds, type PPScheme } from '@/lib/ppBuilder';
+import { appearances, repeatText, shotPairRepeats, shotsForNoRepeats, effectiveScheme, gameKey, generate, majorLevels, mmFor, mmGroups, placeLine, preview, propose, rng, roles, shotPlan, split, startingScheme, suggestedShots, typicalShotOdds, type PPScheme } from '@/lib/ppBuilder';
 
 const leg = (id: string, tier: string, odds: number, game = `${id} game`): PPLeg => ({ id, sport: '', game, market: '', selection: id, odds, tier, result: 'pending', actual: '', note: '', parts: [] });
 const scheme = (over: Partial<PPScheme> = {}): PPScheme => ({ count: 20, target: 20, bandMin: 8, bandMax: 30, majorsPerPP: [1], shotsPerPP: 1, shotsPerPPAuto: false, plannedShots: null, shotCount: 2, avoidPairs: false, seed: 7, ...over });
@@ -297,7 +297,7 @@ describe('preview and place line', () => {
     expect(p.outside).toBe(g.tickets.filter((t) => { const o = oddsOf(pool, t.legIds); return o < 9.5 || o > 30; }).length);
   });
   it('an empty generation has zeros, never NaN', () => {
-    const p = preview(batch, scheme({ count: 0 }), { tickets: [], shortfalls: [], dropped: 0, notEven: false, underMin: 0, shotPairs: 'ok' });
+    const p = preview(batch, scheme({ count: 0 }), { tickets: [], shortfalls: [], dropped: 0, notEven: false, underMin: 0, shotPairs: 'ok', shotRepeats: 0 });
     expect(p).toMatchObject({ legs: { min: 0, avg: 0, max: 0 }, odds: { min: 0, avg: 0, max: 0 }, outside: 0, under: 0, totalStake: 0, totalPotential: 0 });
   });
   it('copy-friendly line', () => expect(placeLine({ id: 't', number: 3, legIds: ['mm', 'm1'], placed: false, oddsOverride: null, stake: null }, pool, 3.2)).toBe('PP 3 · mm + m1 · 3.20'));
@@ -332,17 +332,30 @@ describe('two PP shots together on one PP at most', () => {
       for (let seed = 1; seed <= 10; seed++) {
         const legs = shotPool(shots);
         const g = generate({ legs, tiers: DEFAULT_TIERS }, scheme({ count, shotsPerPP: perPP, shotCount: each, bandMin: 1, bandMax: 999, seed }));
-        expect(g.shotPairs).toBe('ok');
+        expect(g).toMatchObject({ shotPairs: 'ok', shotRepeats: 0 });
         expect(shotPairsTwice(g)).toBe(0);
         for (const l of legs.filter((x) => x.tier === 'shot')) expect(on(g, l.id)).toBe(each);
       }
     });
   }
-  it('impossible when each shot needs more partners than there are shots: nothing generated', () => {
-    // 5 shots on 4 PPs each, 2 per PP: 4 partners needed, 4 others: fine; 4 shots on 5 PPs each: 5 needed, 3 others
-    expect(generate({ legs: shotPool(5), tiers: DEFAULT_TIERS }, scheme({ count: 10, shotsPerPP: 2, shotCount: 4, bandMin: 1 })).shotPairs).toBe('ok');
-    const g = generate({ legs: shotPool(4), tiers: DEFAULT_TIERS }, scheme({ count: 10, shotsPerPP: 2, shotCount: 5, bandMin: 1 }));
-    expect(g).toMatchObject({ shotPairs: 'impossible', tickets: [] });
+  it('unavoidable (each shot needs more partners than there are shots): still generated, fewest repeats, every shot on its PPs', () => {
+    // 5 shots on 4 PPs each, 2 per PP: 4 partners needed, 4 others: no repeat
+    expect(generate({ legs: shotPool(5), tiers: DEFAULT_TIERS }, scheme({ count: 10, shotsPerPP: 2, shotCount: 4, bandMin: 1 }))).toMatchObject({ shotPairs: 'ok', shotRepeats: 0 });
+    // 4 shots on 5 PPs each: 10 pairings from 6 possible pairs, so 4 repeats at the fewest
+    for (let seed = 1; seed <= 10; seed++) {
+      const legs = shotPool(4);
+      const g = generate({ legs, tiers: DEFAULT_TIERS }, scheme({ count: 10, shotsPerPP: 2, shotCount: 5, bandMin: 1, seed }));
+      expect(g).toMatchObject({ shotPairs: 'unavoidable', shotRepeats: 4 });
+      expect(g.tickets).toHaveLength(10);
+      // spread out: four pairs on 2 PPs each, none on 3
+      expect(shotPairsTwice(g)).toBe(4);
+      for (const l of legs.filter((x) => x.tier === 'shot')) expect(on(g, l.id)).toBe(5);
+    }
+  });
+  it('the fewest shots for no repeated pair', () => {
+    expect(shotsForNoRepeats(10, 2)).toBe(5); // 5 × 4 = 20 ≥ 10 × 2 × 1
+    expect(shotsForNoRepeats(20, 2)).toBe(7); // 7 × 6 = 42 ≥ 40
+    expect(shotsForNoRepeats(20, 1)).toBe(1);
   });
   it('one shot per PP: nothing to pair', () => expect(generate({ legs: shotPool(10), tiers: DEFAULT_TIERS }, scheme({ count: 20, shotsPerPP: 1, shotCount: 2 })).shotPairs).toBe('ok'));
   it('a shot layout keeps the same-game rule with the Major-majors and between shots', () => {

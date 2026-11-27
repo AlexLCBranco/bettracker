@@ -34,10 +34,36 @@ test('Generate never puts two PP shots together on more than one PP', async ({ p
   }
   expect([...seen.values()].every((c) => c === 1)).toBe(true);
 
-  // 3 per PP from 10 shots on 10 PPs: each shot on 3 PPs, 6 partners needed out of 9: fine; 4 per PP: 12 needed, impossible
+  // 4 per PP from 10 shots on 10 PPs: each shot on 4 PPs, 12 partners needed out of 9: some pairs must repeat. Heavily
+  // discouraged, not forbidden (owner, 2026-11-27): said plainly, and Generate asks first.
   await builder.getByLabel('PP shots per PP').fill('4');
-  await expect(builder.getByTestId('shot-pairs')).toContainText('so it needs 12 different partners, but there are only 9 other');
-  await expect(builder.getByRole('button', { name: /^Generate \d+ PPs$/ })).toBeDisabled();
+  const warn = builder.getByTestId('shot-pairs');
+  await expect(warn).toContainText('of PP shots together on more than one PP');
+  await expect(warn).toContainText('Unavoidable with 10 PP shots');
+  await expect(warn).toContainText('so it needs 12 different partners, but there are only 9.');
+  await expect(warn).toContainText('To have none: send at least 12 PP shots'); // 12 × 11 = 132 ≥ 10 × 4 × 3 = 120
+  const generateBtn = builder.getByRole('button', { name: 'Generate 10 PPs' });
+  await expect(generateBtn).toBeEnabled();
+
+  // Cancel: the PPs stay as they were
+  const before = JSON.stringify((await fetchBatch()).tickets);
+  let message = '';
+  page.once('dialog', (d) => {
+    message = d.message();
+    void d.dismiss();
+  });
+  await generateBtn.click();
+  await expect.poll(() => message).toContain('of PP shots will be together on more than one PP');
+  expect(JSON.stringify((await fetchBatch()).tickets)).toBe(before);
+
+  // OK (and OK to replace the PPs): saved, every shot still on exactly 4 PPs, the Tickets tab flags the repeats
+  page.on('dialog', (d) => void d.accept());
+  await generateBtn.click();
+  await expect.poll(async () => (await fetchBatch()).tickets.filter((t) => t.legIds.filter((id) => id.startsWith('s')).length === 4).length).toBe(10);
+  const saved = await fetchBatch();
+  for (let i = 0; i < 10; i++) expect(saved.tickets.filter((t) => t.legIds.includes(`s${i}`))).toHaveLength(4);
+  await page.getByRole('tab', { name: /^Tickets/ }).click();
+  await expect(page.getByTestId('shot-repeat-warning')).toBeVisible();
 });
 
 test('a batch with two shots together on two PPs is flagged on the Tickets tab', async ({ page, request, tag }) => {

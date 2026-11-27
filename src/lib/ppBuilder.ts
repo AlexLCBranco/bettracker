@@ -421,14 +421,24 @@ export interface Generated {
   /** The pool's shots do not split evenly over the PPs: nothing is generated (every shot must have the same weight). */
   notEven: boolean;
   /**
-   * Two shots share one PP at most (hard, owner 2026-11-27). impossible: each shot needs more different partners than
-   * there are other shots (nothing generated); stuck: no layout found with this seed (Shuffle may find one).
+   * Owner, 2026-11-27: two shots together on more than one PP is heavily discouraged, and said plainly when it happens.
+   * ok: no pair repeats; unavoidable: each shot needs more different partners than there are other shots, so some pairs
+   * must repeat (as few as it can); repeats: this draw could not avoid it (Shuffle may).
    */
-  shotPairs: 'ok' | 'impossible' | 'stuck';
+  shotPairs: 'ok' | 'unavoidable' | 'repeats';
+  /** Shot pairings beyond the first of each pair (Garland + McDaniels on 2 PPs = 1). */
+  shotRepeats: number;
   /** PPs under the minimum odds (hard: Generate waits while any is). */
   underMin: number;
 }
 
+
+/** The fewest shots with which no two need to share more than one PP: shots × (shots - 1) ≥ PPs × perPP × (perPP - 1). */
+export function shotsForNoRepeats(count: number, perPP: number): number {
+  let n = perPP;
+  while (n * (n - 1) < count * perPP * (perPP - 1)) n++;
+  return n;
+}
 
 /** Search steps for the shot layout: per try (a fresh random order), and over all the tries of one generation (the Build tab regenerates live). */
 const LAYOUT_TRY = 5_000;
@@ -503,15 +513,16 @@ export function generate(batch: Pick<PPBatch, 'legs' | 'tiers'>, s: PPScheme, ma
   }
   const perPP = shots.length ? s.shotsPerPP : 0;
   // every shot the same weight: nothing until the shots split evenly
-  if (perPP > 0 && (s.shotCount <= 0 || s.count * perPP !== shots.length * s.shotCount)) return { tickets: [], shortfalls: [], dropped: 0, notEven: true, underMin: 0, shotPairs: 'ok' };
-  // each shot sits with perPP - 1 others on each of its PPs, every one a different shot
-  if (perPP > 1 && s.shotCount * (perPP - 1) > shots.length - 1) return { tickets: [], shortfalls: [], dropped: 0, notEven: false, underMin: 0, shotPairs: 'impossible' };
+  if (perPP > 0 && (s.shotCount <= 0 || s.count * perPP !== shots.length * s.shotCount)) return { tickets: [], shortfalls: [], dropped: 0, notEven: true, underMin: 0, shotPairs: 'ok', shotRepeats: 0 };
+  // each shot sits with perPP - 1 others on each of its PPs: when that is more than the other shots, pairs must repeat
+  const unavoidable = perPP > 1 && s.shotCount * (perPP - 1) > shots.length - 1;
   const groups = mmGroups(batch.legs, batch.tiers);
   const T = ln(s.target);
 
-  const budget = { left: LAYOUT_BUDGET };
+  const budget = { left: unavoidable ? 0 : LAYOUT_BUDGET };
   const taken = Array.from({ length: s.count }, (_, n) => new Set(mmFor(groups, n).flatMap(gameKeys)));
-  const attempt = (seed: number) => {
+  // fallback (no layout): fewest repeated shot pairs first, or most places left first; the attempts take turns
+  const attempt = (seed: number, pairsFirst: boolean) => {
     const rand = rng(seed);
     const rem = new Map(want);
     const pairs = new Map<string, number>();
@@ -536,19 +547,23 @@ export function generate(batch: Pick<PPBatch, 'legs' | 'tiers'>, s: PPScheme, ma
         odds *= l.odds;
         for (const k of gameKeys(l)) games.add(k);
       };
-      // shots: the most places left first (so each ends on exactly its PPs), then the one with the most partners still
-      // free (so the last PPs are not stuck), then the tie order. Hard (owner, 2026-11-27): two shots share one PP at most.
+      // shots with no layout: places left (so each ends on exactly its PPs) and shots already paired with this PP's
+      // (heavily discouraged), in the attempt's order, then the one with the most partners still free, then the tie order
       const myShots: string[] = [];
       const paired = (a: string, b: string) => (pairs.get(pairKey(a, b)) ?? 0) > 0;
       const partnersLeft = (l: PPLeg) => shots.filter((x) => x.id !== l.id && (rem.get(x.id) ?? 0) > 0 && !paired(x.id, l.id)).length;
+      // times this shot already sits with this PP's shots: a pair on 3 PPs is worse than two pairs on 2
+      const pairedWith = (l: PPLeg) => myShots.reduce((x, id) => x + (pairs.get(pairKey(id, l.id)) ?? 0) ** 2, 0);
       for (const id of layout?.[n] ?? []) {
         add(byId.get(id)!);
         myShots.push(id);
       }
       for (let j = myShots.length; j < perPP; j++) {
-        const cands = shots.filter((l) => free(l) && (rem.get(l.id) ?? 0) > 0 && !myShots.some((id) => paired(id, l.id)));
+        const cands = shots.filter((l) => free(l) && (rem.get(l.id) ?? 0) > 0);
         if (!cands.length) break;
-        cands.sort((a, b) => rem.get(b.id)! - rem.get(a.id)! || partnersLeft(b) - partnersLeft(a) || repeatsOf(a) - repeatsOf(b) || tie.get(a.id)! - tie.get(b.id)!);
+        const places = (a: PPLeg, b: PPLeg) => rem.get(b.id)! - rem.get(a.id)!;
+        const pairsOf = (a: PPLeg, b: PPLeg) => pairedWith(a) - pairedWith(b);
+        cands.sort((a, b) => (pairsFirst ? pairsOf(a, b) || places(a, b) : places(a, b) || pairsOf(a, b)) || partnersLeft(b) - partnersLeft(a) || repeatsOf(a) - repeatsOf(b) || tie.get(a.id)! - tie.get(b.id)!);
         add(cands[0]!);
         myShots.push(cands[0]!.id);
       }
@@ -582,19 +597,23 @@ export function generate(batch: Pick<PPBatch, 'legs' | 'tiers'>, s: PPScheme, ma
       made.push(sortLegs(ids));
     }
     const short = shots.reduce((a, l) => a + Math.max(0, rem.get(l.id) ?? 0), 0);
-    return { made, repeats, short, underMin };
+    const isShot = new Set(shots.map((l) => l.id));
+    let shotRepeats = 0;
+    for (const [k, c] of pairs) if (c > 1 && k.split('|').every((id) => isShot.has(id))) shotRepeats += c - 1;
+    return { made, repeats, short, underMin, shotRepeats };
   };
   // a few tie orders: the first where every shot is on exactly its PPs (the same-game rule can get in the way)
-  let best = attempt(s.seed);
-  const worse = (a: typeof best, b: typeof best) => a.short - b.short || a.underMin - b.underMin || a.repeats - b.repeats;
-  for (let i = 1; i < 40 && (best.short > 0 || best.underMin > 0 || best.repeats > 0); i++) {
-    const a = attempt(s.seed * 7919 + i);
+  // every shot on exactly its PPs first (hard), then the minimum (hard), then the fewest repeated shot pairs
+  let best = attempt(s.seed, true);
+  const worse = (a: typeof best, b: typeof best) => a.short - b.short || a.underMin - b.underMin || a.shotRepeats - b.shotRepeats || a.repeats - b.repeats;
+  for (let i = 1; i < 40 && (best.short > 0 || best.underMin > 0 || best.shotRepeats > 0 || best.repeats > 0); i++) {
+    const a = attempt(s.seed * 7919 + i, i % 2 === 0);
     if (worse(a, best) < 0) best = a;
   }
   const got = new Map<string, number>();
   for (const ids of best.made) for (const id of ids) got.set(id, (got.get(id) ?? 0) + 1);
   const shortfalls = batch.legs.filter((l) => want.has(l.id) && (got.get(l.id) ?? 0) < want.get(l.id)!).map((l) => ({ legId: l.id, wanted: want.get(l.id)!, got: got.get(l.id) ?? 0 }));
-  return { tickets: best.made.map((legIds, i) => ({ id: makeId(i), number: i + 1, legIds, placed: false, oddsOverride: null, stake: null })), shortfalls, dropped: best.repeats, notEven: false, underMin: best.underMin, shotPairs: perPP > 1 && best.short > 0 ? 'stuck' : 'ok' };
+  return { tickets: best.made.map((legIds, i) => ({ id: makeId(i), number: i + 1, legIds, placed: false, oddsOverride: null, stake: null })), shortfalls, dropped: best.repeats, notEven: false, underMin: best.underMin, shotPairs: best.shotRepeats === 0 ? 'ok' : unavoidable ? 'unavoidable' : 'repeats', shotRepeats: best.shotRepeats };
 }
 
 export interface Preview {

@@ -9,7 +9,7 @@ import { BalanceHint } from '@/components/Bankroll';
 import { OddsInput } from '@/components/OddsInput';
 import { formatMoney, formatOdds, oddsFromText, parseNumber, profitMoney } from '@/lib/money';
 import { ppId, ticketStake, ticketView, type BatchInput, type PPBatch } from '@/lib/pp';
-import { effectiveScheme, generate, type Split, majorLevels, mmGroups, perLevel, placeLine, preview, propose, roles, shotPlan, startingScheme, typicalShotOdds, type PPScheme } from '@/lib/ppBuilder';
+import { effectiveScheme, generate, repeatText, shotPairRepeats, shotsForNoRepeats, type Split, majorLevels, mmGroups, perLevel, placeLine, preview, propose, roles, shotPlan, startingScheme, typicalShotOdds, type PPScheme } from '@/lib/ppBuilder';
 
 const ROLE_TEXT = { every: 'on every PP', share: 'one per PP, taking turns', fixed: 'each on the same number of PPs' } as const;
 
@@ -54,8 +54,13 @@ export function Builder({ batch, save, editPool, scheme }: { batch: PPBatch; sav
   const turns = mmGroups(batch.legs, batch.tiers).filter((g) => g.length > 1);
   const pool = shotPlan(batch, s, typicalShotOdds(batch));
   const shot = batch.tiers.at(-1)?.name ?? 'PP shot';
+  // the shot pairs this draw repeats (heavily discouraged): listed, and asked about before saving
+  const pairRepeats = useMemo(() => (gen.shotRepeats ? shotPairRepeats({ legs: batch.legs, tiers: batch.tiers, tickets: gen.tickets }) : []), [batch, gen]);
+
+  const pairsLabel = pairRepeats.length === 1 ? 'One pair' : `${pairRepeats.length} pairs`;
 
   const commit = () => {
+    if (pairRepeats.length && !window.confirm(`${pairsLabel} of ${shot}s will be together on more than one PP: ${repeatText(pairRepeats)}.\n\nGenerate anyway?`)) return;
     const settled = batch.legs.some((l) => l.result !== 'pending');
     if (batch.tickets.length && !window.confirm(`Replace the ${batch.tickets.length} PPs of this batch with ${gen.tickets.length} new ones?${settled ? ' Some legs are already settled.' : ''}`)) return;
     // each PP its own stake: the longest gets the minimum, every PP pays about the same
@@ -119,7 +124,7 @@ export function Builder({ batch, save, editPool, scheme }: { batch: PPBatch; sav
           <button className="btn text-xs" onClick={() => set('seed', Math.floor(Math.random() * 1e6) + 1)} title="Draw again with a new seed">
             Shuffle
           </button>
-          <button className="btn btn-primary text-sm" disabled={!gen.tickets.length || gen.underMin > 0 || gen.shotPairs !== 'ok'} onClick={commit}>
+          <button className="btn btn-primary text-sm" disabled={!gen.tickets.length || gen.underMin > 0} onClick={commit}>
             Generate {gen.tickets.length} PPs
           </button>
           {gen.dropped > 0 && <span className="text-xs text-amber-300">{gen.dropped} PPs are the same as another (too few legs to make them all different).</span>}
@@ -129,15 +134,20 @@ export function Builder({ batch, save, editPool, scheme }: { batch: PPBatch; sav
             Your {pool.have} {shot}s do not split evenly over {s.count} PPs × {eff.shotsPerPP}: every {shot} must be on the same number of PPs. <SplitFix sp={pool.poolSplit} scheme={scheme} pool />
           </p>
         )}
-        {gen.shotPairs === 'impossible' && (
-          <p className="text-sm text-red-300" role="alert" data-testid="shot-pairs">
-            Two {shot}s share one PP at most: each {shot} would be on {eff.shotCount} PPs with {eff.shotsPerPP - 1} other {shot}{eff.shotsPerPP > 2 ? 's' : ''} on each, so it needs {eff.shotCount * (eff.shotsPerPP - 1)} different partners, but there are only {pool.have - 1} other {shot}s. Send more {shot}s, or fewer per PP.
-          </p>
-        )}
-        {gen.shotPairs === 'stuck' && (
-          <p className="text-sm text-red-300" role="alert" data-testid="shot-pairs">
-            No layout found where two {shot}s share one PP at most with this draw: press Shuffle to try another, or send more {shot}s.
-          </p>
+        {gen.shotPairs !== 'ok' && (
+          <div className="rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-sm text-amber-200" role="alert" data-testid="shot-pairs">
+            <p className="font-semibold">⚠ {pairsLabel} of {shot}s together on more than one PP</p>
+            <p className="mt-0.5 text-xs">{repeatText(pairRepeats)}.</p>
+            <p className="mt-1 text-xs text-amber-300/90">
+              {gen.shotPairs === 'unavoidable' ? (
+                <>
+                  Unavoidable with {pool.have} {shot}s: each is on {eff.shotCount} PPs with {eff.shotsPerPP - 1} other {shot}{eff.shotsPerPP > 2 ? 's' : ''} on each, so it needs {eff.shotCount * (eff.shotsPerPP - 1)} different partners, but there are only {pool.have - 1}. This is the fewest repeats the draw found. To have none: send at least {shotsForNoRepeats(s.count, eff.shotsPerPP)} {shot}s, or fewer PPs or {shot}s per PP.
+                </>
+              ) : (
+                <>This draw could not avoid it: press Shuffle to try another, or send more {shot}s.</>
+              )}
+            </p>
+          </div>
         )}
         {gen.underMin > 0 && (
           <p className="text-sm text-red-300" role="alert" data-testid="under-min">

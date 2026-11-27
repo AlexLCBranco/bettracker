@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-27
+- PP: repeated PP-shot pairs are a last resort, said plainly (v0.86.0)
+  When the shots cannot avoid sharing PPs, Generate still works with the fewest repeats, lists every repeated pair with why and how many shots would avoid it, and asks before saving.
 - PP: two PP shots share one PP at most (v0.85.0)
   Generate never pairs the same two shots on more than one PP (it says so when the shots cannot fit); a batch already breaking it shows "⚠ shots repeat" on the Tickets tab.
 - PP: a warning when a PP holds two legs from the same game (v0.84.0)
