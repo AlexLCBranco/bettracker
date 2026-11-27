@@ -17,6 +17,9 @@ import { batchSummary, DEFAULT_TARGET, DEFAULT_TIERS, defaultBatchName } from '@
 import type { Money } from '@/lib/types';
 
 const LAST_MONEY = 'bettracker:pp-money';
+// owner, 2026-11-27: the minimum per PP is 0,50 most of the time: prefilled, the last one used remembered
+const LAST_MIN = 'bettracker:pp-min-stake';
+const DEFAULT_MIN = '0,50';
 
 export default function PPPage() {
   const { batches, loaded } = useApp();
@@ -60,7 +63,7 @@ export default function PPPage() {
                       {b.name}
                     </Link>
                     <div className="text-[11px] text-zinc-500">
-                      {s.tickets} PPs · {b.legs.length} legs · {b.book || 'no book'} · <span className={MONEY_TEXT[b.money]}>{formatMoney(b.stake, b.money)}</span> each · target {formatOdds(b.targetOdds, 2)}
+                      {s.tickets} PPs · {b.legs.length} legs · {b.book || 'no book'} · min <span className={MONEY_TEXT[b.money]}>{formatMoney(b.stake, b.money)}</span> per PP · target {formatOdds(b.targetOdds, 2)}
                     </div>
                   </td>
                   <td className="whitespace-nowrap px-3 py-1.5 tabular-nums">{formatDate(b.placedDate)}</td>
@@ -82,7 +85,7 @@ export default function PPPage() {
   );
 }
 
-/** A new batch: name, date, book, stake per ticket, target odds, money. It opens in edit mode to add legs. */
+/** A new batch: name, date, book, minimum stake per PP, target odds, money. It opens in edit mode to add legs. */
 function NewBatch({ onClose }: { onClose(): void }) {
   const { saveBatch, suggestFor, defaults } = useApp();
   const router = useRouter();
@@ -90,7 +93,7 @@ function NewBatch({ onClose }: { onClose(): void }) {
   const [name, setName] = useState('');
   const [date, setDate] = useState(formatDate(today));
   const [book, setBook] = useState(defaults.book ?? '');
-  const [stake, setStake] = useState('');
+  const [stake, setStake] = useState(() => (typeof window === 'undefined' ? null : localStorage.getItem(LAST_MIN)) || DEFAULT_MIN);
   const [target, setTarget] = useState(String(DEFAULT_TARGET));
   // PPs are mainly placed with bonus money
   const [money, setMoney] = useState<Money>(() => {
@@ -103,10 +106,11 @@ function NewBatch({ onClose }: { onClose(): void }) {
     const s = parseNumber(stake);
     const t = parseNumber(target);
     if (!d) return setError('Date must be dd/mm/yyyy');
-    if (s == null || s <= 0) return setError('Stake per ticket must be above 0');
+    if (s == null || s <= 0) return setError('Minimum stake per PP must be above 0');
     if (t == null || t <= 1) return setError('Target odds must be above 1');
     try {
       localStorage.setItem(LAST_MONEY, money);
+      localStorage.setItem(LAST_MIN, stake.trim());
       const b = await saveBatch({ name: name.trim() || defaultBatchName(d), placedDate: d, book: book.trim(), stake: s, targetOdds: t, money, scheme: null, notes: '', tiers: DEFAULT_TIERS, legs: [], tickets: [] });
       router.push(`/pp/${b.id}?edit=1`);
     } catch (e) {
@@ -132,8 +136,8 @@ function NewBatch({ onClose }: { onClose(): void }) {
       <F label="Book">
         <Autocomplete value={book} onChange={setBook} getSuggestions={(q) => suggestFor('book', q)} aria-label="Book" />
       </F>
-      <F label="Stake per PP *">
-        <input className="field" inputMode="decimal" autoFocus value={stake} onChange={(e) => setStake(e.target.value)} aria-label="Stake per PP" />
+      <F label="Minimum stake per PP">
+        <input className="field" inputMode="decimal" value={stake} onChange={(e) => setStake(e.target.value)} aria-label="Minimum stake per PP" title="The longest PP gets it; shorter PPs get more, so every PP pays about the same" />
       </F>
       <F label="Target odds">
         <input className="field" inputMode="decimal" value={target} onChange={(e) => setTarget(e.target.value)} aria-label="Target odds" />

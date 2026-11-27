@@ -25,11 +25,13 @@ test('BT-31: pool → scheme → generate → tick placed', async ({ page, reque
   await expect(builder.getByLabel('Number of PPs')).toHaveValue('10');
   await expect(builder.getByLabel('Major: % of PPs')).not.toHaveValue('50');
   // live preview
-  await expect(builder.getByTestId('pv-stake')).toHaveText(/R\$\s20,00/);
+  // each PP its own stake: the longest gets the minimum (2,00), shorter ones more, so all pay the same
+  await expect(builder.getByTestId('pv-stakes')).toHaveText(/^R\$\s2,00 – R\$\s\d+,\d\d \(same payout on every PP\)$/);
+  const total10 = await builder.getByTestId('pv-stake').textContent();
   await expect(builder.getByTestId('pv-appearances')).toContainText(`${tag} MM`);
   await expect(builder.getByTestId('pv-appearances').locator('tr', { hasText: `${tag} MM` })).toContainText('10 (10)');
   await builder.getByLabel('Number of PPs').fill('6');
-  await expect(builder.getByTestId('pv-stake')).toHaveText(/R\$\s12,00/);
+  await expect(builder.getByTestId('pv-stake')).not.toHaveText(total10!);
   await builder.getByLabel('Number of PPs').fill('10');
 
   // step 3: the same seed gives the same PPs; Shuffle changes the seed
@@ -61,5 +63,10 @@ test('BT-31: pool → scheme → generate → tick placed', async ({ page, reque
   const first = page.locator('[data-testid="ticket"][data-number="1"]');
   await expect(first.getByTestId('ticket-odds')).toHaveText('21.50');
   await expect(page.locator('[data-testid="ticket"][data-number="4"]')).toContainText('not placed');
-  await expect(page.getByTestId('batch-summary')).toContainText('Staked R$ 6,00');
+  // staked: the three placed PPs' own stakes; the Tickets view shows each one
+  const saved = ((await (await request.get('/api/pp')).json()) as { id: string; tickets: { number: number; placed: boolean; stake: number }[] }[]).find((x) => x.id === b.id)!;
+  const brl = (n: number) => `R$ ${n.toFixed(2).replace('.', ',')}`;
+  expect(Math.min(...saved.tickets.map((t) => t.stake))).toBe(2);
+  await expect(page.getByTestId('batch-summary')).toContainText(`Staked ${brl(saved.tickets.filter((t) => t.placed).reduce((a, t) => a + t.stake, 0))}`);
+  await expect(first.getByTestId('ticket-stake')).toHaveText(brl(saved.tickets.find((t) => t.number === 1)!.stake));
 });

@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-27
+- PP: type only the minimum stake; each PP gets its own stake for the same payout (v0.74.0)
+  New batch asks for the minimum per PP (0,50 prefilled, the last one remembered); Generate gives the longest PP the minimum and shorter PPs more so every PP pays about the same, shown and editable in Place, Tickets and a hand-made PP.
 - PP: how many PP shots you need, live while you fill the pool (v0.73.0)
   From your Major-majors and Majors, the target, the number of PPs and the PPs each shot is on, it says the average PP before shots, the shots each PP needs and how many shot legs to find (have / still missing), in the Legs tab while editing and in Build.
 - PP: two legs from the same game are never on the same PP (v0.72.0)

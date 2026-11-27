@@ -46,8 +46,8 @@ describe('pp tables', () => {
     expect(read).toMatchObject({ name: 'Test batch', money: 'bonus', stake: 5, tiers: [{ name: 'Major-major' }, { name: 'Major' }, { name: 'PP shot' }] });
     expect(read!.legs.map((l) => [l.id, l.odds, l.tier, l.note])).toEqual([['l1', 2, 'mm', ''], ['l2', 3, 'major', 'strong']]);
     expect(read!.tickets).toEqual([
-      { id: 't1', number: 1, legIds: ['l1', 'l2'], placed: true, oddsOverride: null },
-      { id: 't2', number: 2, legIds: ['l1'], placed: false, oddsOverride: 2.1 },
+      { id: 't1', number: 1, legIds: ['l1', 'l2'], placed: true, oddsOverride: null, stake: null },
+      { id: 't2', number: 2, legIds: ['l1'], placed: false, oddsOverride: 2.1, stake: null },
     ]);
     await db.deleteBatch(b.id);
   });
@@ -65,7 +65,7 @@ describe('pp tables', () => {
 
   it('replacing a batch replaces its legs and tickets; delete removes all; restore keeps the id', async () => {
     const b = await db.saveBatch(input());
-    const smaller = { ...input(), legs: input().legs.slice(0, 1), tickets: [{ id: 't2', number: 2, legIds: ['l1'], placed: true, oddsOverride: null }] };
+    const smaller = { ...input(), legs: input().legs.slice(0, 1), tickets: [{ id: 't2', number: 2, legIds: ['l1'], placed: true, oddsOverride: null, stake: null }] };
     await db.saveBatch(smaller, b.id);
     const read = (await db.getBatch(b.id))!;
     expect(read.legs).toHaveLength(1);

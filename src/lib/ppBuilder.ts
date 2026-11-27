@@ -14,7 +14,7 @@
 // Major-majors from one game take turns: each PP gets exactly one of them, spread evenly.
 
 import { normalize } from './autocomplete';
-import type { PPBatch, PPLeg, PPTicket, PPTier } from './pp';
+import { equalPayoutStakes, type PPBatch, type PPLeg, type PPTicket, type PPTier } from './pp';
 
 export interface PPScheme {
   /** Number of PPs. */
@@ -325,7 +325,7 @@ export function generate(batch: Pick<PPBatch, 'legs' | 'tiers'>, s: PPScheme, ma
   const got = new Map<string, number>();
   for (const ids of made) for (const id of ids) got.set(id, (got.get(id) ?? 0) + 1);
   const shortfalls = batch.legs.filter((l) => want.has(l.id) && (got.get(l.id) ?? 0) < want.get(l.id)!).map((l) => ({ legId: l.id, wanted: want.get(l.id)!, got: got.get(l.id) ?? 0 }));
-  return { tickets: made.map((legIds, i) => ({ id: makeId(i), number: i + 1, legIds, placed: false, oddsOverride: null })), shortfalls, dropped };
+  return { tickets: made.map((legIds, i) => ({ id: makeId(i), number: i + 1, legIds, placed: false, oddsOverride: null, stake: null })), shortfalls, dropped };
 }
 
 export interface Preview {
@@ -333,6 +333,8 @@ export interface Preview {
   odds: { min: number; avg: number; max: number };
   outside: number;
   appearances: { leg: PPLeg; wanted: number; got: number }[];
+  /** Each PP's stake, same payout on every PP (equalPayoutStakes). */
+  stakes: number[];
   totalStake: number;
   totalPotential: number;
 }
@@ -341,6 +343,7 @@ export interface Preview {
 export function preview(batch: Pick<PPBatch, 'legs' | 'tiers' | 'stake'>, s: PPScheme, g: Generated): Preview {
   const byId = new Map(batch.legs.map((l) => [l.id, l]));
   const odds = g.tickets.map((t) => t.legIds.reduce((p, id) => p * (byId.get(id)?.odds ?? 1), 1));
+  const stakes = equalPayoutStakes(odds, batch.stake);
   const counts = g.tickets.map((t) => t.legIds.length);
   const stat = (xs: number[]) => (xs.length ? { min: Math.min(...xs), avg: xs.reduce((a, b) => a + b, 0) / xs.length, max: Math.max(...xs) } : { min: 0, avg: 0, max: 0 });
   const want = appearances(batch.legs, batch.tiers, s);
@@ -351,8 +354,9 @@ export function preview(batch: Pick<PPBatch, 'legs' | 'tiers' | 'stake'>, s: PPS
     odds: stat(odds),
     outside: odds.filter((o) => o < s.bandMin - 1e-9 || o > s.bandMax + 1e-9).length,
     appearances: batch.legs.map((leg) => ({ leg, wanted: want.get(leg.id) ?? 0, got: got.get(leg.id) ?? 0 })),
-    totalStake: Math.round(g.tickets.length * batch.stake * 100) / 100,
-    totalPotential: Math.round(odds.reduce((a, o) => a + o * batch.stake, 0) * 100) / 100,
+    stakes,
+    totalStake: Math.round(stakes.reduce((a, x) => a + x, 0) * 100) / 100,
+    totalPotential: Math.round(odds.reduce((a, o, i) => a + o * stakes[i]!, 0) * 100) / 100,
   };
 }
 

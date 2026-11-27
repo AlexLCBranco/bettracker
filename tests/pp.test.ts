@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { batchSummary, DEFAULT_TIERS, defaultBatchName, legsByTier, legUse, nextNumber, ticketMoney, ticketOdds, ticketResult, ticketStatus, ticketView, validateBatch, type PPBatch, type PPLeg, type PPTicket } from '@/lib/pp';
 
 const leg = (id: string, over: Partial<PPLeg> = {}): PPLeg => ({ id, sport: 'NBA', game: 'A vs B', market: 'ML', selection: id, odds: 2, tier: 'major', result: 'pending', actual: '', note: '', ...over });
-const ticket = (number: number, legIds: string[], over: Partial<PPTicket> = {}): PPTicket => ({ id: `t${number}`, number, legIds, placed: true, oddsOverride: null, ...over });
+const ticket = (number: number, legIds: string[], over: Partial<PPTicket> = {}): PPTicket => ({ id: `t${number}`, number, legIds, placed: true, oddsOverride: null, stake: null, ...over });
 const batch = (legs: PPLeg[], tickets: PPTicket[], over: Partial<PPBatch> = {}): PPBatch => ({
   id: 'b1',
   name: 'Batch 23/11',

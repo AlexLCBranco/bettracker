@@ -41,6 +41,8 @@ export interface PPTicket {
   placed: boolean;
   /** The book's real price, typed over the estimate; null = estimated from the legs. */
   oddsOverride: number | null;
+  /** This PP's own stake (owner, 2026-11-27: same payout on every PP); null = the batch's stake (batches from before). */
+  stake: number | null;
 }
 
 export interface PPBatch {
@@ -48,7 +50,7 @@ export interface PPBatch {
   name: string;
   placedDate: string;
   book: string;
-  /** Stake per ticket. */
+  /** The minimum stake per PP: the longest PP gets it, shorter ones more (equalPayoutStakes). Old batches: every PP's stake. */
   stake: number;
   targetOdds: number;
   money: Money;
@@ -122,6 +124,27 @@ export function ticketOdds(t: PPTicket, legs: PPLeg[]): { odds: number; estimate
   return { odds: live, estimated: true };
 }
 
+/** A PP's stake: its own, else the batch's. */
+export const ticketStake = (t: Pick<PPTicket, 'stake'>, batch: Pick<PPBatch, 'stake'>) => t.stake ?? batch.stake;
+
+/**
+ * Owner, 2026-11-27: he types only the minimum per PP; each PP's stake follows so every PP pays about the same if it
+ * wins. The longest PP gets the minimum; the others minimum × longest odds ÷ their odds, rounded to the cent, never under
+ * the minimum.
+ */
+export function equalPayoutStakes(odds: number[], min: number): number[] {
+  if (!odds.length) return [];
+  const top = Math.max(...odds);
+  return odds.map((o) => Math.max(min, round2((min * top) / o)));
+}
+
+/** The stake a new PP at these odds gets to pay what the batch's PPs pay (the largest payout among them), never under the minimum. */
+export function suggestStake(odds: number, batch: Pick<PPBatch, 'stake' | 'legs' | 'tickets'>): number {
+  const payouts = batch.tickets.map((t) => ticketStake(t, batch) * ticketOdds(t, batch.legs).odds);
+  const payout = payouts.length ? Math.max(...payouts) : 0;
+  return odds > 1 && payout > 0 ? Math.max(batch.stake, round2(payout / odds)) : batch.stake;
+}
+
 export interface TicketView {
   ticket: PPTicket;
   legs: PPLeg[];
@@ -141,7 +164,7 @@ export function ticketView(t: PPTicket, batch: Pick<PPBatch, 'legs' | 'stake' | 
   const legs = ticketLegs(t, batch.legs);
   const result = ticketResult(legs);
   const { odds, estimated } = ticketOdds(t, batch.legs);
-  const asBet = { stake: batch.stake, odds, result, cashout: null, money: batch.money };
+  const asBet = { stake: ticketStake(t, batch), odds, result, cashout: null, money: batch.money };
   return {
     ticket: t,
     legs,
@@ -223,12 +246,13 @@ export function batchSummary(batch: PPBatch): BatchSummary {
       if (v.status === 'one-away') s.oneAway++;
     }
     if (!t.placed) continue;
-    s.staked += batch.stake;
+    const stake = ticketStake(t, batch);
+    s.staked += stake;
     if (v.result === 'pending') continue;
     s.profit += v.profit;
     // bonus money: the stake was never real money, so what came back is the winnings (and nothing on a void)
-    s.returned += batch.money === 'bonus' ? v.profit : batch.stake + v.profit;
-    if (batch.money === 'bonus') bonusSpent += bonusSpentOf({ stake: batch.stake, result: v.result });
+    s.returned += batch.money === 'bonus' ? v.profit : stake + v.profit;
+    if (batch.money === 'bonus') bonusSpent += bonusSpentOf({ stake, result: v.result });
   }
   s.staked = round2(s.staked);
   s.returned = round2(s.returned);
@@ -244,7 +268,7 @@ export function ticketMoney(batches: PPBatch[]) {
       .filter((t) => t.placed)
       .map((t) => {
         const v = ticketView(t, b);
-        return { money: b.money, book: b.book, placedDate: b.placedDate, stake: b.stake, odds: v.odds, result: v.result, cashout: null };
+        return { money: b.money, book: b.book, placedDate: b.placedDate, stake: ticketStake(t, b), odds: v.odds, result: v.result, cashout: null };
       }),
   );
 }
@@ -264,7 +288,7 @@ export function validateBatch(raw: unknown): ValidatedBatch {
   if (!isValidISODate(placedDate)) return { ok: false, error: 'Placed date must be a valid date' };
   const name = str(r.name, 80) || defaultBatchName(placedDate);
   const stake = num(r.stake);
-  if (stake == null || stake <= 0) return { ok: false, error: 'Stake per ticket must be a number above 0' };
+  if (stake == null || stake <= 0) return { ok: false, error: 'Minimum stake per PP must be a number above 0' };
   const targetOdds = num(r.targetOdds) ?? DEFAULT_TARGET;
   if (!(targetOdds > 1)) return { ok: false, error: 'Target odds must be above 1' };
   const money = (r.money ?? 'real') as Money;
@@ -314,7 +338,9 @@ export function validateBatch(raw: unknown): ValidatedBatch {
     if (new Set(ids).size !== ids.length) return { ok: false, error: `PP ${number} has the same leg twice` };
     const ov = tr.oddsOverride == null || tr.oddsOverride === '' ? null : num(tr.oddsOverride);
     if (tr.oddsOverride != null && tr.oddsOverride !== '' && (ov == null || ov <= 1)) return { ok: false, error: `PP ${number}: odds must be above 1` };
-    tickets.push({ id, number, legIds: ids, placed: tr.placed !== false, oddsOverride: ov });
+    const tstake = tr.stake == null || tr.stake === '' ? null : num(tr.stake);
+    if (tr.stake != null && tr.stake !== '' && (tstake == null || tstake <= 0)) return { ok: false, error: `PP ${number}: stake must be above 0` };
+    tickets.push({ id, number, legIds: ids, placed: tr.placed !== false, oddsOverride: ov, stake: tstake });
   }
   tickets.sort((a, b) => a.number - b.number);
   return { ok: true, value: { name, placedDate, book: str(r.book), stake, targetOdds, money, scheme, notes: str(r.notes, 2000), tiers, legs, tickets } };

@@ -26,6 +26,8 @@ import {
   nextNumber,
   ppId,
   STATUS_LABEL,
+  suggestStake,
+  ticketStake,
   ticketView,
   type BatchInput,
   type PPBatch,
@@ -252,7 +254,7 @@ function Header({ batch, editing, save }: { batch: PPBatch; editing: boolean; sa
           <Commit key={`Name-${batch.name}`} label="Name" value={batch.name} onSave={(v) => save({ name: v || batch.name })} />
           <Commit key={`Placed date-${formatDate(batch.placedDate)}`} label="Placed date" value={formatDate(batch.placedDate)} date onSave={(v) => save({ placedDate: parseDateInput(v) ?? batch.placedDate })} />
           <Commit key={`Book-${batch.book}`} label="Book" value={batch.book} suggest={(q) => suggestFor('book', q)} onSave={(v) => save({ book: v })} />
-          <Commit key={`Stake per PP-${String(batch.stake)}`} label="Stake per PP" value={String(batch.stake)} onSave={(v) => save({ stake: parseNumber(v) ?? batch.stake })} />
+          <Commit key={`Minimum stake per PP-${String(batch.stake)}`} label="Minimum stake per PP" value={String(batch.stake)} onSave={(v) => save({ stake: parseNumber(v) ?? batch.stake })} />
           <Commit key={`Target odds-${String(batch.targetOdds)}`} label="Target odds" value={String(batch.targetOdds)} onSave={(v) => save({ targetOdds: parseNumber(v) ?? batch.targetOdds })} />
           <label className="flex min-w-0 flex-col gap-1">
             <span className="text-xs text-zinc-400">Money</span>
@@ -264,7 +266,7 @@ function Header({ batch, editing, save }: { batch: PPBatch; editing: boolean; sa
         <div>
           <h1 className="text-2xl font-bold [overflow-wrap:anywhere]">{batch.name}</h1>
           <p className="text-sm text-zinc-400">
-            {formatDate(batch.placedDate)} · {batch.book || 'no book'} · <span className={MONEY_TEXT[batch.money]}>{formatMoney(batch.stake, batch.money)}</span> per PP · target {formatOdds(batch.targetOdds, 2)}
+            {formatDate(batch.placedDate)} · {batch.book || 'no book'} · min <span className={MONEY_TEXT[batch.money]}>{formatMoney(batch.stake, batch.money)}</span> per PP · target {formatOdds(batch.targetOdds, 2)}
             {batch.notes && <span className="text-zinc-500"> · {batch.notes}</span>}
           </p>
         </div>
@@ -710,7 +712,7 @@ function TicketsView({ batch, editing, save, legFilter, setLegFilter }: { batch:
                     {formatOdds(v.odds, 2)}
                     {v.estimated && <div className="text-[10px] text-zinc-500">estimated</div>}
                   </td>
-                  <td className={`whitespace-nowrap px-2 py-1.5 text-right tabular-nums ${MONEY_TEXT[batch.money] || 'text-zinc-200'}`}>{formatMoney(batch.stake, batch.money)}</td>
+                  <td className={`whitespace-nowrap px-2 py-1.5 text-right tabular-nums ${MONEY_TEXT[batch.money] || 'text-zinc-200'}`}><span data-testid="ticket-stake">{formatMoney(ticketStake(v.ticket, batch), batch.money)}</span></td>
                   <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-zinc-300" data-testid="ticket-potential">
                     {v.result === 'pending' ? formatMoney(v.potential, pm) : <span className={v.profit > 0 ? 'text-emerald-400' : v.profit < 0 ? 'text-red-400' : 'text-zinc-400'}>{formatMoney(v.profit, pm, true)}</span>}
                   </td>
@@ -746,10 +748,14 @@ function TicketEditor({ batch, ticket, onSave, onCancel }: { batch: PPBatch; tic
   const [legIds, setLegIds] = useState<string[]>(ticket?.legIds ?? mmGroups(batch.legs, batch.tiers).map((g) => g[0]!.id));
   const [odds, setOdds] = useState(ticket?.oddsOverride != null ? String(ticket.oddsOverride) : '');
   const [placed, setPlaced] = useState(ticket?.placed ?? true);
+  const [stake, setStake] = useState(ticket ? String(ticketStake(ticket, batch)) : '');
   const [error, setError] = useState('');
   const groups = legsByTier({ ...batch, tickets: [] });
   const estimate = legIds.map((id) => batch.legs.find((l) => l.id === id)!).filter(Boolean).reduce((p, l) => p * l.odds, 1);
   const legOf = (id: string) => batch.legs.find((l) => l.id === id);
+  // empty stake: what pays the same as the batch's other PPs at this price (never under the minimum)
+  const price = (odds.trim() ? oddsFromText(odds) : null) ?? estimate;
+  const suggested = suggestStake(price, { ...batch, tickets: batch.tickets.filter((x) => x.id !== ticket?.id) });
   // picking a leg takes out any other leg from its game: two legs from the same game are never on one PP
   const toggle = (id: string) =>
     setLegIds((ids) => {
@@ -763,8 +769,10 @@ function TicketEditor({ batch, ticket, onSave, onCancel }: { batch: PPBatch; tic
     if (picked.some((a, i) => picked.some((b, j) => j > i && sameGame(a, b)))) return setError('Two legs from the same game cannot be on one PP');
     const ov = odds.trim() ? oddsFromText(odds) : null;
     if (odds.trim() && ov == null) return setError('Odds must be above 1');
+    const st = stake.trim() ? parseNumber(stake) : suggested;
+    if (st == null || st <= 0) return setError('Stake must be above 0');
     const order = batch.legs.map((l) => l.id);
-    const t = { id: ticket?.id ?? ppId('pp'), number: ticket?.number ?? nextNumber(batch.tickets), legIds: [...legIds].sort((a, b) => order.indexOf(a) - order.indexOf(b)), placed, oddsOverride: ov };
+    const t = { id: ticket?.id ?? ppId('pp'), number: ticket?.number ?? nextNumber(batch.tickets), legIds: [...legIds].sort((a, b) => order.indexOf(a) - order.indexOf(b)), placed, oddsOverride: ov, stake: st };
     const same = batch.tickets.find((x) => x.id !== t.id && x.legIds.length === t.legIds.length && x.legIds.every((id) => t.legIds.includes(id)));
     if (same && !window.confirm(`PP ${same.number} has exactly these legs. Save anyway?`)) return;
     onSave(t);
@@ -797,6 +805,9 @@ function TicketEditor({ batch, ticket, onSave, onCancel }: { batch: PPBatch; tic
         </span>
         <L label="Book's odds (optional)">
           <OddsInput value={odds} onChange={setOdds} aria-label="PP odds" className="field w-28" />
+        </L>
+        <L label="Stake">
+          <input className="field w-24" inputMode="decimal" value={stake} placeholder={suggested.toFixed(2)} onChange={(e) => setStake(e.target.value)} aria-label="PP stake" />
         </L>
         <label className="flex items-center gap-1.5 pb-1.5 text-zinc-300">
           <input type="checkbox" checked={placed} onChange={(e) => setPlaced(e.target.checked)} aria-label="Placed" />

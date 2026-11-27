@@ -5,7 +5,7 @@ import { batchesBetween, legBreakdown, lostByOne, tierHitOverTime, tierStats } f
 import { formatPercent } from '@/lib/stats';
 
 const leg = (id: string, over: Partial<PPLeg> = {}): PPLeg => ({ id, sport: 'NBA', game: '', market: 'Points', selection: id, odds: 2, tier: 'major', result: 'pending', actual: '', note: '', ...over });
-const ticket = (number: number, legIds: string[]): PPTicket => ({ id: `t${number}`, number, legIds, placed: true, oddsOverride: null });
+const ticket = (number: number, legIds: string[]): PPTicket => ({ id: `t${number}`, number, legIds, placed: true, oddsOverride: null, stake: null });
 let n = 0;
 const batch = (legs: PPLeg[], tickets: PPTicket[] = [], over: Partial<PPBatch> = {}): PPBatch => ({
   id: `b${++n}`,

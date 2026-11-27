@@ -8,7 +8,7 @@ import { useApp } from '@/components/AppProvider';
 import { BalanceHint } from '@/components/Bankroll';
 import { OddsInput } from '@/components/OddsInput';
 import { formatMoney, formatOdds, oddsFromText, parseNumber, profitMoney } from '@/lib/money';
-import { ppId, ticketView, type BatchInput, type PPBatch } from '@/lib/pp';
+import { ppId, ticketStake, ticketView, type BatchInput, type PPBatch } from '@/lib/pp';
 import { generate, majorLevels, mmGroups, placeLine, preview, propose, roles, shotPlan, startingScheme, typicalShotOdds, type PPScheme } from '@/lib/ppBuilder';
 
 const ROLE_TEXT = { every: 'on every PP', share: 'a share of the PPs', fixed: 'a fixed number of PPs each' } as const;
@@ -55,7 +55,8 @@ export function Builder({ batch, save, editPool, scheme }: { batch: PPBatch; sav
   const commit = () => {
     const settled = batch.legs.some((l) => l.result !== 'pending');
     if (batch.tickets.length && !window.confirm(`Replace the ${batch.tickets.length} PPs of this batch with ${gen.tickets.length} new ones?${settled ? ' Some legs are already settled.' : ''}`)) return;
-    void save({ tickets: gen.tickets.map((t) => ({ ...t, id: ppId('pp') })), scheme: { ...s } as unknown as Record<string, unknown> });
+    // each PP its own stake: the longest gets the minimum, every PP pays about the same
+    void save({ tickets: gen.tickets.map((t, i) => ({ ...t, id: ppId('pp'), stake: pv.stakes[i]! })), scheme: { ...s } as unknown as Record<string, unknown> });
     notify(`${gen.tickets.length} PPs generated: tick them as you place them`);
   };
 
@@ -205,6 +206,10 @@ function Preview({ batch, s, pv }: { batch: PPBatch; s: PPScheme; pv: ReturnType
         <dd className={`tabular-nums ${pv.outside ? 'text-amber-300' : 'text-zinc-200'}`} data-testid="pv-outside">
           {pv.outside} PPs
         </dd>
+        <dt className="text-zinc-500">Stake per PP</dt>
+        <dd className="tabular-nums text-zinc-200" data-testid="pv-stakes">
+          {pv.stakes.length ? `${formatMoney(Math.min(...pv.stakes), batch.money)} – ${formatMoney(Math.max(...pv.stakes), batch.money)}` : '-'} <span className="text-zinc-500">(same payout on every PP)</span>
+        </dd>
         <dt className="text-zinc-500">Total stake</dt>
         <dd className="tabular-nums text-zinc-200" data-testid="pv-stake">
           {formatMoney(pv.totalStake, batch.money)}
@@ -245,7 +250,7 @@ function PlaceList({ batch, save }: { batch: PPBatch; save(p: Partial<BatchInput
   const box = useRef<HTMLDivElement>(null);
   const tickets = [...batch.tickets].sort((a, b) => a.number - b.number);
   const placed = tickets.filter((t) => t.placed).length;
-  const setTicket = (id: string, patch: { placed?: boolean; oddsOverride?: number | null }) => void save({ tickets: batch.tickets.map((t) => (t.id === id ? { ...t, ...patch } : t)) });
+  const setTicket = (id: string, patch: { placed?: boolean; oddsOverride?: number | null; stake?: number | null }) => void save({ tickets: batch.tickets.map((t) => (t.id === id ? { ...t, ...patch } : t)) });
   const onKey = (e: KeyboardEvent) => {
     const t = e.target as HTMLElement;
     if (t.tagName === 'INPUT' && (t as HTMLInputElement).type !== 'checkbox') return;
@@ -296,12 +301,29 @@ function PlaceList({ batch, save }: { batch: PPBatch; save(p: Partial<BatchInput
               >
                 Copy
               </button>
+              <StakeCell key={`${t.id}-s-${t.stake}`} value={ticketStake(t, batch)} money={batch.money} onSave={(x) => setTicket(t.id, { stake: x })} label={`PP ${t.number} stake`} />
               <OddsCell key={`${t.id}-${t.oddsOverride}`} value={t.oddsOverride} onSave={(o) => setTicket(t.id, { oddsOverride: o })} label={`PP ${t.number} book odds`} />
             </div>
           );
         })}
       </div>
     </div>
+  );
+}
+
+/** A PP's stake while placing: shown, and editable when the book takes another amount. */
+function StakeCell({ value, money, onSave, label }: { value: number; money: PPBatch['money']; onSave(x: number): void; label: string }) {
+  const [v, setV] = useState(value.toFixed(2).replace('.', ','));
+  const commit = () => {
+    const x = parseNumber(v);
+    if (x == null || x <= 0) return setV(value.toFixed(2).replace('.', ','));
+    if (x !== value) onSave(x);
+  };
+  return (
+    <span className="flex w-24 shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()} title={`Stake (${money})`}>
+      <span className="text-xs text-zinc-500">R$</span>
+      <input className="field py-0.5 text-right text-xs tabular-nums" inputMode="decimal" value={v} onChange={(e) => setV(e.target.value)} onBlur={commit} onKeyDown={(e) => e.key === 'Enter' && commit()} aria-label={label} />
+    </span>
   );
 }
 

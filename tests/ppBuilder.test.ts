@@ -182,7 +182,10 @@ describe('preview and place line', () => {
     const p = preview(batch, s, g);
     expect(p.legs.min).toBeGreaterThanOrEqual(2);
     expect(p.odds.max).toBeLessThanOrEqual(30 + 1e-9);
-    expect(p.totalStake).toBe(g.tickets.length * 5);
+    // each PP its own stake: the longest gets the batch's 5 (the minimum), all pay the same
+    expect(Math.min(...p.stakes)).toBe(5);
+    expect(p.totalStake).toBeCloseTo(p.stakes.reduce((a, x) => a + x, 0), 6);
+    expect(p.totalStake).toBeGreaterThan(g.tickets.length * 5);
     expect(p.appearances.find((a) => a.leg.id === 'mm')).toMatchObject({ wanted: 20, got: g.tickets.length });
     expect(p.outside).toBe(g.tickets.filter((t) => t.legIds.reduce((x, id) => x * pool.find((l) => l.id === id)!.odds, 1) < 15).length);
   });
@@ -190,7 +193,7 @@ describe('preview and place line', () => {
     const p = preview(batch, scheme({ count: 0 }), { tickets: [], shortfalls: [], dropped: 0 });
     expect(p).toMatchObject({ legs: { min: 0, avg: 0, max: 0 }, odds: { min: 0, avg: 0, max: 0 }, outside: 0, totalStake: 0, totalPotential: 0 });
   });
-  it('copy-friendly line', () => expect(placeLine({ id: 't', number: 3, legIds: ['mm', 'm1'], placed: false, oddsOverride: null }, pool, 3.2)).toBe('PP 3 · mm + m1 · 3.20'));
+  it('copy-friendly line', () => expect(placeLine({ id: 't', number: 3, legIds: ['mm', 'm1'], placed: false, oddsOverride: null, stake: null }, pool, 3.2)).toBe('PP 3 · mm + m1 · 3.20'));
   it('rng is deterministic and in [0, 1)', () => {
     const a = rng(1);
     const xs = [a(), a(), a()];

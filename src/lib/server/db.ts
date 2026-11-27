@@ -127,6 +127,7 @@ const SCHEMA = [
     leg_ids TEXT NOT NULL,
     placed INTEGER NOT NULL DEFAULT 1,
     odds_override REAL,
+    stake REAL,
     PRIMARY KEY (batch_id, id)
   )`,
 ];
@@ -165,6 +166,9 @@ async function migrate(c: Client): Promise<void> {
   if (!cols.has('no_brainer')) await c.execute('ALTER TABLE bets ADD COLUMN no_brainer INTEGER NOT NULL DEFAULT 0');
   const legCols = new Set((await c.execute('PRAGMA table_info(legs)')).rows.map((r) => String(r.name)));
   if (!legCols.has('actual')) await c.execute("ALTER TABLE legs ADD COLUMN actual TEXT NOT NULL DEFAULT ''");
+  // existing PPs have no stake of their own: they keep the batch's
+  const ppCols = new Set((await c.execute('PRAGMA table_info(pp_tickets)')).rows.map((r) => String(r.name)));
+  if (!ppCols.has('stake')) await c.execute('ALTER TABLE pp_tickets ADD COLUMN stake REAL');
   await repairLegsOnce(c);
 }
 
@@ -491,7 +495,7 @@ async function readBatches(c: Client, id?: string): Promise<PPBatch[]> {
   for (const r of t!.rows) {
     const k = s(r.batch_id);
     if (!tickets.has(k)) tickets.set(k, []);
-    tickets.get(k)!.push({ id: s(r.id), number: Number(r.number), legIds: parseJSON<string[]>(r.leg_ids, []), placed: Number(r.placed) === 1, oddsOverride: n(r.odds_override) });
+    tickets.get(k)!.push({ id: s(r.id), number: Number(r.number), legIds: parseJSON<string[]>(r.leg_ids, []), placed: Number(r.placed) === 1, oddsOverride: n(r.odds_override), stake: n(r.stake) });
   }
   return b!.rows.map((r) => ({
     id: s(r.id),
@@ -528,8 +532,8 @@ function batchStatements(b: PPBatch): InStatement[] {
       args: [l.id, b.id, i, l.sport, l.game, l.market, l.selection, l.odds, l.tier, l.result, l.actual, l.note],
     })),
     ...b.tickets.map((t) => ({
-      sql: 'INSERT INTO pp_tickets (id, batch_id, number, leg_ids, placed, odds_override) VALUES (?,?,?,?,?,?)',
-      args: [t.id, b.id, t.number, JSON.stringify(t.legIds), t.placed ? 1 : 0, t.oddsOverride],
+      sql: 'INSERT INTO pp_tickets (id, batch_id, number, leg_ids, placed, odds_override, stake) VALUES (?,?,?,?,?,?,?)',
+      args: [t.id, b.id, t.number, JSON.stringify(t.legIds), t.placed ? 1 : 0, t.oddsOverride, t.stake],
     })),
   ];
 }
