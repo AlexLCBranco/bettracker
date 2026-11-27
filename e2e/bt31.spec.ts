@@ -17,23 +17,24 @@ test('BT-31: pool → scheme → generate → tick placed', async ({ page, reque
   // step 1: the pool by tier
   await expect(builder.getByRole('region', { name: 'Step 1: Pool' })).toContainText('1 Major-major');
   await expect(builder.getByRole('region', { name: 'Step 1: Pool' })).toContainText('4 Major');
-  // step 2: one Major per PP, then the proposal: about one PP shot per PP → 2 × 5 = 10 PPs
+  // step 2: one Major and one PP shot per PP; 10 PPs: the 5 shots on 2 PPs each
   await expect(builder.getByLabel('Major: per PP')).toHaveValue('1');
-  // PPs each is worked out from the pool's shots (Auto); typed here to check the proposal on a typed number
-  await expect(builder.getByTestId('shots-each-auto')).toBeVisible();
-  await builder.getByLabel('PP shot: PPs each').fill('2');
-  await expect(builder.getByTestId('proposal')).toContainText('10 PPs');
-  await builder.getByRole('button', { name: 'Use proposal' }).click();
-  await expect(builder.getByLabel('Number of PPs')).toHaveValue('10');
+  await builder.getByLabel('Minimum odds').fill('8');
+  await builder.getByLabel('PP shots per PP').fill('1');
+  await builder.getByLabel('Number of PPs').fill('10');
+  await expect(builder.getByTestId('proposal')).toContainText('10 PPs, 1 Major per PP, 1 PP shot per PP: the average PP is');
   // live preview
   // each PP its own stake: the longest gets the minimum (2,00), shorter ones more, so all pay the same
   await expect(builder.getByTestId('pv-stakes')).toHaveText(/^R\$\s2,00 – R\$\s\d+,\d\d \(same payout on every PP\)$/);
-  const total10 = await builder.getByTestId('pv-stake').textContent();
-  await expect(builder.getByTestId('pv-appearances')).toContainText(`${tag} MM`);
   await expect(builder.getByTestId('pv-appearances').locator('tr', { hasText: `${tag} MM` })).toContainText('10 (10)');
+  await expect(builder.getByTestId('pv-appearances').locator('tr', { hasText: `${tag} S0` })).toContainText('2 (2)');
+  await expect(builder.getByTestId('pv-under')).toHaveText('0 PPs');
+  // 6 PPs: 5 shots do not split evenly, so Generate waits (every shot the same weight)
   await builder.getByLabel('Number of PPs').fill('6');
-  await expect(builder.getByTestId('pv-stake')).not.toHaveText(total10!);
+  await expect(builder.getByTestId('not-even')).toContainText('do not split evenly');
+  await expect(builder.getByRole('button', { name: /^Generate \d+ PPs$/ })).toBeDisabled();
   await builder.getByLabel('Number of PPs').fill('10');
+  await expect(builder.getByTestId('not-even')).toHaveCount(0);
 
   // step 3: the same seed gives the same PPs; Shuffle changes the seed
   const seed = await builder.getByTestId('seed').textContent();

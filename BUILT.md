@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-27
+- PP: plan the shots you will send; every PP shot on exactly the same number of PPs; the minimum odds is hard (v0.78.0)
+  The planner works out PP shots per PP from the target (never leaving the average under the minimum), checks the shots you plan to send split evenly and offers the nearest numbers of shots or PPs that do; Generate puts every shot on exactly the same number of PPs, lifts each PP to the minimum with its Major, and waits while the pool's shots do not split evenly or a PP would be under the minimum.
 - PP: a PP shot can be a combo (v0.77.0)
   Tick Combo on a PP shot to enter its parts (game, market, selection, odds each); its odds start as the parts multiplied (estimated) until you type the book's price; it goes on PPs and settles as one leg, and no part shares a game with another leg on the same PP.
 - PP: PP shot PPs each worked out automatically (v0.76.0)

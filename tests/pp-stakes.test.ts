@@ -62,7 +62,7 @@ describe('a PP’s own stake', () => {
 
 describe('generation and validation', () => {
   const pool = [leg('mm', 2, 'mm'), ...[1.6, 1.7, 1.8, 1.9, 2.0, 2.1].map((o, i) => leg(`m${i}`, o)), ...[2.5, 3, 3.5, 4, 2.5, 3, 3.5, 4].map((o, i) => leg(`s${i}`, o, 'shot'))];
-  const s: PPScheme = { count: 16, target: 20, bandMin: 15, bandMax: 30, majorsPerPP: [1], shotCount: 2, shotAuto: false, avoidPairs: false, seed: 3 };
+  const s: PPScheme = { count: 16, target: 20, bandMin: 15, bandMax: 30, majorsPerPP: [1], shotsPerPP: 1, shotsPerPPAuto: false, plannedShots: null, shotCount: 2, avoidPairs: false, seed: 3 };
   it('the preview gives each PP its stake: the longest the minimum, all paying the same', () => {
     const b = { legs: pool, tiers: DEFAULT_TIERS, stake: 0.5 };
     const g = generate(b, s);

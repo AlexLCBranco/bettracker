@@ -6,7 +6,7 @@ import { gameKeys, generate, sameGame, type PPScheme } from '@/lib/ppBuilder';
 
 const leg = (id: string, tier: string, odds: number, game: string, parts: PPLegPart[] = []): PPLeg => ({ id, sport: '', game, market: '', selection: id, odds, tier, result: 'pending', actual: '', note: '', parts });
 const part = (selection: string, odds: number, game: string): PPLegPart => ({ game, market: '', selection, odds });
-const scheme = (over: Partial<PPScheme> = {}): PPScheme => ({ count: 12, target: 20, bandMin: 8, bandMax: 60, majorsPerPP: [1], shotCount: 3, shotAuto: false, avoidPairs: false, seed: 1, ...over });
+const scheme = (over: Partial<PPScheme> = {}): PPScheme => ({ count: 12, target: 20, bandMin: 8, bandMax: 60, majorsPerPP: [1], shotsPerPP: 1, shotsPerPPAuto: false, plannedShots: null, shotCount: 3, avoidPairs: false, seed: 1, ...over });
 
 describe('combo legs', () => {
   it('the estimate is the parts multiplied, to the cent', () => {

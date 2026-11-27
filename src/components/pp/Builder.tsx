@@ -9,9 +9,9 @@ import { BalanceHint } from '@/components/Bankroll';
 import { OddsInput } from '@/components/OddsInput';
 import { formatMoney, formatOdds, oddsFromText, parseNumber, profitMoney } from '@/lib/money';
 import { ppId, ticketStake, ticketView, type BatchInput, type PPBatch } from '@/lib/pp';
-import { effectiveScheme, generate, majorLevels, mmGroups, perLevel, placeLine, preview, propose, roles, shotPlan, startingScheme, typicalShotOdds, type PPScheme } from '@/lib/ppBuilder';
+import { effectiveScheme, generate, type Split, majorLevels, mmGroups, perLevel, placeLine, preview, propose, roles, shotPlan, startingScheme, typicalShotOdds, type PPScheme } from '@/lib/ppBuilder';
 
-const ROLE_TEXT = { every: 'on every PP', share: 'a share of the PPs', fixed: 'a fixed number of PPs each' } as const;
+const ROLE_TEXT = { every: 'on every PP', share: 'one per PP, taking turns', fixed: 'each on the same number of PPs' } as const;
 
 export interface BatchScheme {
   s: PPScheme;
@@ -42,17 +42,18 @@ export function useBatchScheme(batch: PPBatch | undefined): BatchScheme | null {
 export function Builder({ batch, save, editPool, scheme }: { batch: PPBatch; save(p: Partial<BatchInput>): unknown; editPool(): void; scheme: BatchScheme }) {
   const { notify } = useApp();
   const { s } = scheme;
-  const setS = (x: PPScheme) => scheme.setS(() => x);
   const set = <K extends keyof PPScheme>(k: K, v: PPScheme[K]) => scheme.setS((x) => ({ ...x, [k]: v }));
   const r = roles(batch.tiers);
   const levelNames = batch.tiers.filter((t) => r.get(t.id)?.role === 'share').map((t) => t.name);
-  // PPs each worked out from the pool's shots when automatic
+  // shots per PP worked out (or typed), PPs each from the pool's shots
   const eff = useMemo(() => effectiveScheme(batch, s), [batch, s]);
   const proposal = useMemo(() => propose(batch, eff), [batch, eff]);
   const gen = useMemo(() => generate(batch, eff), [batch, eff]);
   const pv = useMemo(() => preview(batch, eff, gen), [batch, eff, gen]);
   const legName = new Map(batch.legs.map((l) => [l.id, l.selection]));
   const turns = mmGroups(batch.legs, batch.tiers).filter((g) => g.length > 1);
+  const pool = shotPlan(batch, s, typicalShotOdds(batch));
+  const shot = batch.tiers.at(-1)?.name ?? 'PP shot';
 
   const commit = () => {
     const settled = batch.legs.some((l) => l.result !== 'pending');
@@ -90,12 +91,12 @@ export function Builder({ batch, save, editPool, scheme }: { batch: PPBatch; sav
         <div className="grid grid-cols-2 gap-3 md:grid-cols-6">
           <Num label="Number of PPs" value={s.count} onChange={(v) => set('count', Math.max(0, Math.round(v)))} />
           <Num label="Target odds" value={s.target} onChange={(v) => set('target', v)} />
-          <Num label="Band from" value={s.bandMin} onChange={(v) => set('bandMin', v)} />
-          <Num label="Band to" value={s.bandMax} onChange={(v) => set('bandMax', v)} />
+          <Num label="Minimum odds" value={s.bandMin} onChange={(v) => set('bandMin', v)} />
+          <Num label="Up to (flexible)" value={s.bandMax} onChange={(v) => set('bandMax', v)} />
           {levelNames.map((name, i) => (
             <Num key={name + i} label={`${name}: per PP`} value={s.majorsPerPP[i] ?? 1} onChange={(v) => set('majorsPerPP', s.majorsPerPP.map((x, j) => (j === i ? Math.max(0, Math.round(v)) : x)))} />
           ))}
-          {r.size >= 3 && <ShotsEach batch={batch} scheme={scheme} />}
+          {r.size >= 3 && <ShotsPerPP batch={batch} scheme={scheme} />}
         </div>
         <div className="flex flex-wrap items-center gap-4 text-xs text-zinc-300">
           <label className="flex items-center gap-1.5">
@@ -104,14 +105,9 @@ export function Builder({ batch, save, editPool, scheme }: { batch: PPBatch; sav
           </label>
         </div>
         <div className={`flex flex-wrap items-center gap-2 rounded-md border px-3 py-2 text-sm ${proposal.short ? 'border-amber-500/40 bg-amber-500/10 text-amber-200' : 'border-zinc-800 bg-zinc-900/60 text-zinc-300'}`} data-testid="proposal">
-          <span className="font-semibold">Proposal:</span> <span>{proposal.message}</span>
-          {batch.legs.length > 0 && (
-            <button className="btn ml-auto text-xs" onClick={() => setS(proposal.scheme)}>
-              Use proposal
-            </button>
-          )}
+          <span className="font-semibold">Average PP:</span> <span>{proposal.message}</span>
         </div>
-        <p className="text-[11px] text-zinc-500">One Major per PP and PP shots on 2 PPs each are where it starts; change them here. The last batch&apos;s scheme is where the next one starts.</p>
+        <p className="text-[11px] text-zinc-500">The target is a guide (about it is fine); the minimum is not: no PP goes under it. One Major per PP is where it starts; the last batch&apos;s scheme is where the next one starts.</p>
         <Preview batch={batch} s={s} pv={pv} />
       </Step>
 
@@ -123,11 +119,21 @@ export function Builder({ batch, save, editPool, scheme }: { batch: PPBatch; sav
           <button className="btn text-xs" onClick={() => set('seed', Math.floor(Math.random() * 1e6) + 1)} title="Draw again with a new seed">
             Shuffle
           </button>
-          <button className="btn btn-primary text-sm" disabled={!gen.tickets.length} onClick={commit}>
+          <button className="btn btn-primary text-sm" disabled={!gen.tickets.length || gen.underMin > 0} onClick={commit}>
             Generate {gen.tickets.length} PPs
           </button>
-          {gen.dropped > 0 && <span className="text-xs text-amber-300">{gen.dropped} could not be made different from the others (no two identical PPs).</span>}
+          {gen.dropped > 0 && <span className="text-xs text-amber-300">{gen.dropped} PPs are the same as another (too few legs to make them all different).</span>}
         </div>
+        {gen.notEven && (
+          <p className="text-sm text-red-300" role="alert" data-testid="not-even">
+            Your {pool.have} {shot}s do not split evenly over {s.count} PPs × {eff.shotsPerPP}: every {shot} must be on the same number of PPs. <SplitFix sp={pool.poolSplit} scheme={scheme} pool />
+          </p>
+        )}
+        {gen.underMin > 0 && (
+          <p className="text-sm text-red-300" role="alert" data-testid="under-min">
+            {gen.underMin} PPs would be under the minimum {s.bandMin}: add longer-priced legs, a {shot} more per PP, or lower the minimum.
+          </p>
+        )}
         {gen.shortfalls.length > 0 && (
           <p className="text-xs text-amber-300" data-testid="shortfalls">
             Fell short: {gen.shortfalls.map((x) => `${legName.get(x.legId)} on ${x.got} of ${x.wanted}`).join(' · ')}
@@ -143,7 +149,11 @@ export function Builder({ batch, save, editPool, scheme }: { batch: PPBatch; sav
   );
 }
 
-/** "How many PP shots do I need?" Live from the pool: the average PP before shots, the shots per PP the target needs, and the shot legs to find. */
+/**
+ * The PP-shot planner (owner, 2026-11-27): the average PP before shots, the shots per PP the target needs (never under
+ * the minimum), the shots he plans to send and whether they split evenly (every shot on the same number of PPs), with the
+ * nearest numbers that do; then the pool's shots the same way.
+ */
 export function ShotPlanner({ batch, scheme, inputs = true }: { batch: PPBatch; scheme: BatchScheme; inputs?: boolean }) {
   const { s } = scheme;
   const set = <K extends keyof PPScheme>(k: K, v: PPScheme[K]) => scheme.setS((x) => ({ ...x, [k]: v }));
@@ -151,47 +161,67 @@ export function ShotPlanner({ batch, scheme, inputs = true }: { batch: PPBatch; 
   const p = shotPlan(batch, s, odds);
   if (!p.hasShotTier) return null;
   const shot = batch.tiers.at(-1)!.name;
-  let answer: ReactNode;
-  if (!p.mm && !p.majors) answer = <>Add the Major-majors and Majors first: the {shot}s needed follow from them.</>;
-  else if (p.perPP <= 0) answer = <>That already reaches the target {s.target.toFixed(2)}: no {shot}s needed.</>;
-  else if (p.auto)
-    answer = (
-      <>
-        To reach {s.target.toFixed(2)} a PP needs about <b className="text-zinc-100">{p.perPP.toFixed(1)}</b> {shot}s at {odds.toFixed(2)}: {s.count} PPs × {p.perPP.toFixed(1)} = {p.places.toFixed(1)} places over your {p.have} {shot}s ={' '}
-        <b className="text-zinc-100" data-testid="shots-each">
-          {p.each} PPs each
-        </b>
-        .
-      </>
-    );
-  else if (s.shotCount <= 0) answer = <>Set how many PPs each {shot} is on.</>;
+  const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
+  let need: ReactNode;
+  if (!p.mm && !p.majors) need = <>Add the Major-majors and Majors first: the {shot}s needed follow from them.</>;
+  else if (p.perPP <= 0) need = <>That already reaches about {s.target.toFixed(2)}: no {shot}s needed.</>;
   else
-    answer = (
+    need = (
       <>
-        To reach {s.target.toFixed(2)} a PP needs about <b className="text-zinc-100">{p.perPP.toFixed(1)}</b> {shot}s at {odds.toFixed(2)}: {s.count} PPs × {p.perPP.toFixed(1)} ÷ {s.shotCount} PPs each ={' '}
-        <b className="text-zinc-100" data-testid="shots-needed">
-          {p.needed} {shot}s
-        </b>
-        .{' '}
-        <span className={p.missing ? 'text-amber-300' : 'text-emerald-400'} data-testid="shots-missing">
-          {p.missing ? `You have ${p.have}: find ${p.missing} more.` : `You have ${p.have}: enough.`}
-        </span>
+        To reach about {s.target.toFixed(2)} (never under {s.bandMin}) a PP takes{' '}
+        <b className="text-zinc-100" data-testid="shots-per-pp">
+          {plural(p.perPP, shot)}
+        </b>{' '}
+        at {odds.toFixed(2)}: the average PP is <b className="text-zinc-100">{p.average.toFixed(2)}</b>.
       </>
     );
+  const ps = p.plannedSplit;
   return (
     <section className="space-y-2 rounded-md border border-zinc-800 bg-zinc-900/60 p-2.5" data-testid="shot-planner" aria-label={`${shot}s needed`}>
       {inputs && (
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-6">
           <Num label="Number of PPs" value={s.count} onChange={(v) => set('count', Math.max(0, Math.round(v)))} />
           <Num label="Target odds" value={s.target} onChange={(v) => set('target', v)} />
-          <ShotsEach batch={batch} scheme={scheme} />
+          <Num label="Minimum odds" value={s.bandMin} onChange={(v) => set('bandMin', v)} />
+          <ShotsPerPP batch={batch} scheme={scheme} odds={odds} />
+          <PlannedShots batch={batch} scheme={scheme} odds={odds} />
           <Num label={`${shot} odds (typical)`} value={odds} onChange={(v) => scheme.setShotOdds(v > 1 ? v : null)} />
         </div>
       )}
       <p className="text-sm text-zinc-300" data-testid="shot-plan">
-        {p.mm} Major-major{p.mm === 1 ? '' : 's'} and {p.majors} Major{p.majors === 1 ? '' : 's'}
-        {p.majors ? ` (${s.majorsPerPP.map((_, k) => perLevel(s, k)).join(' / ')} per PP)` : ''}: the average PP is <b className="text-zinc-100">{p.base.toFixed(2)}</b> before any {shot}. {answer}
+        {plural(p.mm, 'Major-major')} and {plural(p.majors, 'Major')}
+        {p.majors ? ` (${s.majorsPerPP.map((_, k) => perLevel(s, k)).join(' / ')} per PP)` : ''}: the average PP is <b className="text-zinc-100">{p.base.toFixed(2)}</b> before any {shot}. {need}
       </p>
+      {p.perPP > 0 && (
+        <p className="text-sm text-zinc-300" data-testid="plan-split">
+          {s.count} PPs × {p.perPP} = {ps.places} {shot} places.{' '}
+          {ps.each != null ? (
+            <span className="text-emerald-400" data-testid="plan-ok">
+              Sending {plural(ps.shots, shot)}: each on {ps.each} PPs, every {shot} the same weight.
+            </span>
+          ) : (
+            <span className="text-amber-300">
+              {plural(ps.shots, shot)} do not split evenly ({ps.places} ÷ {ps.shots} = {(ps.places / Math.max(1, ps.shots)).toFixed(2)}). <SplitFix sp={ps} scheme={scheme} />
+            </span>
+          )}
+        </p>
+      )}
+      {p.perPP > 0 && (
+        <p className="text-sm text-zinc-300" data-testid="pool-split">
+          {p.have === 0 ? (
+            <>No {shot}s in the pool yet: find {ps.shots}.</>
+          ) : p.poolSplit.each != null ? (
+            <span className="text-emerald-400">
+              Your {plural(p.have, shot)}: each on {p.poolSplit.each} PPs, every one the same weight.{p.have !== ps.shots ? ` (You planned ${ps.shots}.)` : ''}
+            </span>
+          ) : (
+            <span className="text-amber-300">
+              Your {plural(p.have, shot)} do not split evenly: Generate waits. {p.have < ps.shots ? `Find ${ps.shots - p.have} more for the ${ps.shots} planned, or: ` : ''}
+              <SplitFix sp={p.poolSplit} scheme={scheme} pool />
+            </span>
+          )}
+        </p>
+      )}
       {inputs && scheme.shotOdds == null && (
         <p className="text-[11px] text-zinc-500">
           {shot} odds: {p.have ? `your ${p.have} at their average` : 'none in the pool yet, so 3.00'}. Type over it to plan with another price.
@@ -201,29 +231,91 @@ export function ShotPlanner({ batch, scheme, inputs = true }: { batch: PPBatch; 
   );
 }
 
-/** "PP shot: PPs each": worked out from the pool's shots (Auto), or typed. Typing turns Auto off; Auto turns it back on. */
-function ShotsEach({ batch, scheme }: { batch: PPBatch; scheme: BatchScheme }) {
+/** The nearest numbers that split evenly: shots (fewer / more) and PPs, as buttons. In the pool, shots are found or taken out, so they are words. */
+function SplitFix({ sp, scheme, pool = false }: { sp: Split; scheme: BatchScheme; pool?: boolean }) {
+  const shots = (n: number, each: number) => `${n} shots (${each} PPs each)`;
+  const setPlanned = (n: number) => scheme.setS((x) => ({ ...x, plannedShots: n }));
+  const setCount = (n: number) => scheme.setS((x) => ({ ...x, count: n }));
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1.5" data-testid="split-fix">
+      {pool ? (
+        <>
+          {sp.fewer && <span>take {sp.shots - sp.fewer.shots} out ({shots(sp.fewer.shots, sp.fewer.each)})</span>}
+          {sp.fewer && sp.more && <span>or</span>}
+          {sp.more && <span>add {sp.more.shots - sp.shots} ({shots(sp.more.shots, sp.more.each)})</span>}
+        </>
+      ) : (
+        <>
+          {sp.fewer && (
+            <button type="button" className="chip" onClick={() => setPlanned(sp.fewer!.shots)}>
+              {shots(sp.fewer.shots, sp.fewer.each)}
+            </button>
+          )}
+          {sp.more && (
+            <button type="button" className="chip" onClick={() => setPlanned(sp.more!.shots)}>
+              {shots(sp.more.shots, sp.more.each)}
+            </button>
+          )}
+        </>
+      )}
+      {(sp.fewerPPs || sp.morePPs) && <span>or keep {sp.shots} with</span>}
+      {sp.fewerPPs && (
+        <button type="button" className="chip" onClick={() => setCount(sp.fewerPPs!.count)}>
+          {sp.fewerPPs.count} PPs ({sp.fewerPPs.each} each)
+        </button>
+      )}
+      {sp.morePPs && (
+        <button type="button" className="chip" onClick={() => setCount(sp.morePPs!.count)}>
+          {sp.morePPs.count} PPs ({sp.morePPs.each} each)
+        </button>
+      )}
+    </span>
+  );
+}
+
+/** "PP shots per PP": worked out from the target (Auto), or typed; Auto puts it back. One input in both modes, so typing keeps the focus. */
+function ShotsPerPP({ batch, scheme, odds }: { batch: PPBatch; scheme: BatchScheme; odds?: number }) {
   const { s } = scheme;
   const shot = batch.tiers.at(-1)!.name;
-  const p = shotPlan(batch, s, typicalShotOdds(batch));
-  const label = `${shot}: PPs each`;
-  // one input in both modes, so typing over the worked-out number keeps the focus
+  const p = shotPlan(batch, s, odds ?? scheme.shotOdds ?? typicalShotOdds(batch));
+  const label = `${shot}s per PP`;
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <span className="text-xs text-zinc-400">{label}</span>
       <div className="flex items-center gap-1.5">
-        <Num bare label={label} value={p.auto ? p.each : s.shotCount} onChange={(v) => scheme.setS((x) => ({ ...x, shotAuto: false, shotCount: Math.max(0, Math.round(v)) }))} />
-        {p.auto ? (
-          <span className="rounded bg-emerald-500/15 px-1.5 text-[10px] font-bold uppercase tracking-wide text-emerald-300" title={`Worked out: PPs × ${shot}s each PP needs ÷ your ${p.have} ${shot}s. Type a number to set it yourself.`} data-testid="shots-each-auto">
+        <Num bare label={label} value={p.perPP} onChange={(v) => scheme.setS((x) => ({ ...x, shotsPerPPAuto: false, shotsPerPP: Math.max(0, Math.round(v)) }))} />
+        {s.shotsPerPPAuto ? (
+          <span className="rounded bg-emerald-500/15 px-1.5 text-[10px] font-bold uppercase tracking-wide text-emerald-300" title="Worked out from the target, never leaving the average PP under the minimum. Type a number to set it yourself." data-testid="per-pp-auto">
             Auto
-          </span>
-        ) : s.shotAuto ? (
-          <span className="whitespace-nowrap text-[10px] text-zinc-500" title={`Until the pool has ${shot}s, this is what the planner counts with`}>
-            until shots are in
           </span>
         ) : (
-          <button type="button" className="chip text-[10px]" onClick={() => scheme.setS((x) => ({ ...x, shotAuto: true }))}>
+          <button type="button" className="chip text-[10px]" onClick={() => scheme.setS((x) => ({ ...x, shotsPerPPAuto: true }))}>
             Auto
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** "PP shots you'll send": his plan, or the suggestion (the number that splits evenly with each shot on about 2 PPs). */
+function PlannedShots({ batch, scheme, odds }: { batch: PPBatch; scheme: BatchScheme; odds: number }) {
+  const { s } = scheme;
+  const shot = batch.tiers.at(-1)!.name;
+  const p = shotPlan(batch, s, odds);
+  const label = `${shot}s you'll send`;
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <span className="text-xs text-zinc-400">{label}</span>
+      <div className="flex items-center gap-1.5">
+        <Num bare label={label} value={p.planned} onChange={(v) => scheme.setS((x) => ({ ...x, plannedShots: Math.max(0, Math.round(v)) }))} />
+        {s.plannedShots == null ? (
+          <span className="rounded bg-sky-500/15 px-1.5 text-[10px] font-bold uppercase tracking-wide text-sky-300" title="Suggested: splits evenly with each shot on about 2 PPs. Type your own number." data-testid="planned-suggested">
+            Suggested
+          </span>
+        ) : (
+          <button type="button" className="chip text-[10px]" onClick={() => scheme.setS((x) => ({ ...x, plannedShots: null }))}>
+            Suggest
           </button>
         )}
       </div>
@@ -244,9 +336,13 @@ function Preview({ batch, s, pv }: { batch: PPBatch; s: PPScheme; pv: ReturnType
         <dd className="tabular-nums text-zinc-200" data-testid="pv-odds">
           {f(pv.odds.min)} / {f(pv.odds.avg)} / {f(pv.odds.max)} <span className="text-zinc-500">(estimated)</span>
         </dd>
-        <dt className="text-zinc-500">Outside {s.bandMin}–{s.bandMax}</dt>
-        <dd className={`tabular-nums ${pv.outside ? 'text-amber-300' : 'text-zinc-200'}`} data-testid="pv-outside">
-          {pv.outside} PPs
+        <dt className="text-zinc-500">Under the minimum {s.bandMin}</dt>
+        <dd className={`tabular-nums ${pv.under ? 'text-red-300' : 'text-zinc-200'}`} data-testid="pv-under">
+          {pv.under} PPs
+        </dd>
+        <dt className="text-zinc-500">Over {s.bandMax}</dt>
+        <dd className={`tabular-nums ${pv.outside - pv.under ? 'text-amber-300' : 'text-zinc-200'}`} data-testid="pv-outside">
+          {pv.outside - pv.under} PPs
         </dd>
         <dt className="text-zinc-500">Stake per PP</dt>
         <dd className="tabular-nums text-zinc-200" data-testid="pv-stakes">
