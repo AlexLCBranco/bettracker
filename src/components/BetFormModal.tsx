@@ -12,6 +12,8 @@ import { quickAddLegs } from '@/lib/quickadd';
 import { newRolloverId } from '@/lib/rollover';
 import { useApp } from './AppProvider';
 import { Autocomplete } from './Autocomplete';
+import { ToneToggle } from './Annotator';
+import { toneOf, type LabelTone } from '@/lib/labelTone';
 import { MoneySelect } from './Money';
 import { OddsInput } from './OddsInput';
 import { WhatIfPreview } from './WhatIf';
@@ -25,7 +27,9 @@ export function BetFormModal() {
 }
 
 function FormBody() {
-  const { form: req, bets, defaults, presets, suggestFor, create, update, closeForm, notify, units } = useApp();
+  const { form: req, bets, defaults, presets, suggestFor, create, update, closeForm, notify, units, labelTones, setLabelTone } = useApp();
+  // the label's tone, once picked here (null: the label's own)
+  const [tonePick, setTonePick] = useState<LabelTone | null>(null);
   const editing: Bet | null = req?.mode === 'edit' ? req.bet : null;
   // BT-29: adding the next bet of a rollover shot: stake and money are fixed (a different stake is not a rollover)
   const rollover = req?.mode === 'new' ? req.rollover : undefined;
@@ -84,6 +88,8 @@ function FormBody() {
         if ((gr != null && !(gr >= 1)) || (goalAmount.trim() && ga == null)) throw new Error('The ladder goal must be a number of rungs or an amount');
         await create({ ...v.value, rolloverId: newRolloverId(), banked: false, ladder: { goalRungs: gr, goalAmount: ga, taken: false } });
       } else await create(v.value);
+      if (tonePick && f.label.trim() && tonePick !== toneOf(labelTones, f.label)) void setLabelTone(f.label, tonePick);
+      setTonePick(null);
       if (!rollover) notify(editing ? 'Bet updated' : 'Bet saved');
       if (another && !editing && !rollover) {
         setF(nextForm(f));
@@ -353,7 +359,12 @@ function FormBody() {
         {/* BT-27: a label chip and what actually happened (a combination's actuals are on its legs) */}
         <div className="grid gap-3 md:grid-cols-2">
           <L label="Label">
-            <Autocomplete value={f.label} onChange={(v) => set('label', v)} getSuggestions={(q) => suggestFor('label', q)} placeholder="lost by one" aria-label="Label" />
+            <span className="flex items-center gap-2">
+              <span className="min-w-0 flex-1">
+                <Autocomplete value={f.label} onChange={(v) => set('label', v)} getSuggestions={(q) => suggestFor('label', q)} placeholder="lost by one" aria-label="Label" />
+              </span>
+              {f.label.trim() && <ToneToggle tone={tonePick ?? toneOf(labelTones, f.label)} onChange={setTonePick} />}
+            </span>
           </L>
           {f.type === 'solo' && (
             <L label="What happened">

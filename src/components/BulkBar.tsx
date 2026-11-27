@@ -146,7 +146,7 @@ export function BulkBar({ rows, clear, fmt }: { rows: BetRow[]; clear(): void; f
           <Btn onClick={() => setMode('label')}>Label…</Btn>
           <Btn onClick={() => setMode('date')}>Game date…</Btn>
           <Btn onClick={() => setMode('book')}>Book…</Btn>
-          <Btn onClick={() => void patchAll(`No brainer on ${bets.length} bets`, (b) => (b.noBrainer ? null : { noBrainer: true }))} cls="text-violet-300 hover:bg-violet-600/30">
+          <Btn onClick={() => void patchAll(`No brainer on ${bets.length} bets`, (b) => (b.noBrainer ? null : { noBrainer: true }))} cls="text-yellow-300 hover:bg-yellow-600/30">
             NB on
           </Btn>
           <Btn onClick={() => void patchAll(`No brainer off on ${bets.length} bets`, (b) => (b.noBrainer ? { noBrainer: false } : null))}>NB off</Btn>

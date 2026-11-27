@@ -10,6 +10,7 @@ import { tidyBet, type NameCasing } from '@/lib/tidy';
 import type { Bet, BetInput, Ladder, Money } from '@/lib/types';
 import { bankroll as computeBankroll, type Bankroll, type EntryInput, type MoneyEntry } from '@/lib/bankroll';
 import { todayISO } from '@/lib/dates';
+import { withTone, type LabelTone, type LabelTones } from '@/lib/labelTone';
 import { ticketMoney, type BatchInput, type PPBatch, type PPLeg } from '@/lib/pp';
 import { revertPatch, UndoHistory, type UndoStep } from '@/lib/undo';
 import { NO_UNITS, type UnitSettings } from '@/lib/units';
@@ -105,6 +106,9 @@ interface AppCtx {
   /** BT-38: the unit size per money type (Bankroll page) and which types were offered "apply to older bets". */
   units: UnitSettings;
   saveUnits(s: UnitSettings): Promise<void>;
+  /** Which labels are positive (green) or neutral (grey); every other label is negative (red). */
+  labelTones: LabelTones;
+  setLabelTone(label: string, tone: LabelTone): Promise<void>;
   /** Gives the older bets of a money type (no unit size) its current unit size; returns how many changed. */
   applyUnits(money: Money): Promise<number>;
   /** BT-42: game page links (Hoops Junkie / Sofascore), by game and game date. */
@@ -160,6 +164,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [batches, setBatches] = useState<PPBatch[]>([]);
   const [units, setUnits] = useState<UnitSettings>({ unitSizes: NO_UNITS, offered: [] });
   const [gameLinks, setGameLinks] = useState<GameLink[]>([]);
+  const [labelTones, setLabelTones] = useState<LabelTones>({});
+  const labelTonesRef = useRef(labelTones);
   const [moneyForm, setMoneyForm] = useState<MoneyFormRequest | null>(null);
   const betsRef = useRef(bets);
   const names = useMemo(() => betNames(bets), [bets]);
@@ -175,8 +181,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [writes] = useState(refreshGate);
   useEffect(() => {
     // the quick-add box works before the bets have loaded: a bet saved meanwhile must not be wiped out by the first load
-    loadWhenQuiet(writes, () => Promise.all([api<Bet[]>('/api/bets'), api<MoneyEntry[]>('/api/money'), api<PPBatch[]>('/api/pp'), api<UnitSettings>('/api/units'), api<GameLink[]>('/api/game-links')]))
-      .then(([b, e, p, u, g]) => {
+    loadWhenQuiet(writes, () => Promise.all([api<Bet[]>('/api/bets'), api<MoneyEntry[]>('/api/money'), api<PPBatch[]>('/api/pp'), api<UnitSettings>('/api/units'), api<GameLink[]>('/api/game-links'), api<LabelTones>('/api/label-tones')]))
+      .then(([b, e, p, u, g, t]) => {
+        labelTonesRef.current = t;
+        setLabelTones(t);
         setGameLinks(g);
         setBets(b);
         setEntries(e);
@@ -521,6 +529,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     },
     [units, write, notify],
   );
+  const setLabelTone = useCallback(
+    async (label: string, tone: LabelTone) => {
+      const before = labelTonesRef.current;
+      const next = withTone(before, label, tone);
+      if (next === before) return;
+      labelTonesRef.current = next;
+      setLabelTones(next);
+      try {
+        await write<LabelTones>('/api/label-tones', { method: 'PUT', body: JSON.stringify(next) });
+      } catch (e) {
+        labelTonesRef.current = before;
+        setLabelTones(before);
+        notify((e as Error).message, 'error');
+      }
+    },
+    [write, notify],
+  );
   const applyUnits = useCallback(
     async (money: Money) => {
       const { updated } = await write<{ updated: number }>('/api/units/apply', { method: 'POST', body: JSON.stringify({ money }) });
@@ -565,6 +590,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     removeGameLink,
     units,
     saveUnits,
+    labelTones,
+    setLabelTone,
     applyUnits,
     bets,
     loaded,

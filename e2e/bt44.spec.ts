@@ -12,6 +12,8 @@ test('no brainer: toggle from the row, tinted cell and chip, kept after a reload
   await row.hover();
   await row.getByRole('button', { name: 'Mark no brainer' }).click();
   await expect(row.getByTestId('no-brainer-chip')).toHaveText('No brainer');
+  await expect(row.getByTestId('no-brainer-chip')).toHaveClass(/text-yellow-/); // owner, 2026-11-27: no brainer is yellow
+  await expect(row.locator('td[data-no-brainer]')).toHaveClass(/bg-yellow-/);
   await expect(row.locator('td[data-no-brainer]')).toHaveCount(1);
   expect((await row.boundingBox())!.height).toBe(heightBefore);
   await saved(page);

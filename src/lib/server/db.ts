@@ -4,6 +4,7 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { MONEY, type Bet, type BetInput, type Leg, type Money } from '../types';
 import { readUnitSizes, type UnitSettings } from '../units';
+import { readLabelTones, type LabelTones } from '../labelTone';
 import type { ImportBet } from '../transfer';
 import type { EntryInput, MoneyEntry } from '../bankroll';
 import type { BatchInput, PPBatch, PPLeg, PPTicket } from '../pp';
@@ -614,6 +615,18 @@ export async function saveUnitSettings(s: UnitSettings): Promise<UnitSettings> {
     ],
     'write',
   );
+  return clean;
+}
+
+// ---- label tones (2026-11-27): which labels are positive (green) or neutral (grey); every other one is red ----
+
+export async function getLabelTones(): Promise<LabelTones> {
+  return readLabelTones(await metaJSON(await db(), 'label-tones'));
+}
+
+export async function saveLabelTones(tones: unknown): Promise<LabelTones> {
+  const clean = readLabelTones(tones);
+  await (await db()).execute({ sql: 'INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)', args: ['label-tones', JSON.stringify(clean)] });
   return clean;
 }
 

@@ -7,15 +7,32 @@ import { useState, type FormEvent, type KeyboardEvent } from 'react';
 import { distinctLegs, knownLegResults, parseSoloLine, planActuals, sharedLabel, soloLine, type LegEdit, type LossEntry } from '@/lib/actuals';
 import { normalize } from '@/lib/autocomplete';
 import type { Bet, Result } from '@/lib/types';
+import { nextTone, TONE_CHIP, TONE_COLOUR, toneOf, type LabelTone } from '@/lib/labelTone';
 import { useApp } from './AppProvider';
 import { Autocomplete } from './Autocomplete';
 
-/** Small uppercase chip on the bet text's line; inline-block, so it wraps whole and never adds height to the line. */
+/** Small uppercase chip on the bet text's line; inline-block, so it wraps whole and never adds height to the line.
+ *  Red for a negative label, green for a positive one, grey for a neutral one; clicking it moves the label (every bet
+ *  with it) to the next tone. */
 export function LabelChip({ label }: { label: string }) {
+  const { labelTones, setLabelTone } = useApp();
+  const tone = toneOf(labelTones, label);
+  const other = nextTone(tone);
   return (
-    <span className="ml-1.5 inline-block whitespace-nowrap rounded bg-amber-400/15 px-1 align-[1px] text-[10px] font-bold uppercase leading-4 tracking-wide text-amber-300" title={`Label: ${label}`} data-testid="label-chip">
+    <button
+      type="button"
+      className={`ml-1.5 inline-block whitespace-nowrap rounded px-1 align-[1px] text-[10px] font-bold uppercase leading-4 tracking-wide hover:brightness-125 ${TONE_CHIP[tone]}`}
+      title={`Label: ${label} (${tone}). Click to make it ${other} (${TONE_COLOUR[other]})`}
+      aria-label={`Label ${label}, ${tone}: make it ${other}`}
+      data-testid="label-chip"
+      data-tone={tone}
+      onClick={(e) => {
+        e.stopPropagation();
+        void setLabelTone(label, other);
+      }}
+    >
       {label}
-    </span>
+    </button>
   );
 }
 
@@ -50,13 +67,17 @@ const NEXT: Partial<Record<Result, Result>> = { pending: 'won', won: 'lost', los
 const MARK: Partial<Record<Result, string>> = { won: '✓', lost: '✗', 'half-won': '½✓', 'half-lost': '½✗', void: '–' };
 
 export function Annotator(props: Props) {
-  const { update, suggestFor, notify, undoGroup } = useApp();
+  const { update, suggestFor, notify, undoGroup, labelTones, setLabelTone } = useApp();
   const group = props.kind === 'dutch' ? props.bets : props.group;
   const soloBet = props.kind === 'bet' && props.bet.type === 'solo' ? props.bet : null;
   const initialLabel = props.kind === 'dutch' ? sharedLabel(props.bets) : props.bet.label;
 
   const [line, setLine] = useState(() => (soloBet ? soloLine(soloBet) : ''));
   const [label, setLabel] = useState(initialLabel);
+  // the label's tone, once picked here (null: the label's own, red unless it was made positive)
+  const [pick, setPick] = useState<LabelTone | null>(null);
+  const currentLabel = soloBet ? parseSoloLine(line).label : label;
+  const tone = pick ?? toneOf(labelTones, currentLabel);
   const [legs, setLegs] = useState<LegField[]>(() => {
     if (soloBet) return [];
     const entries = props.kind === 'dutch' ? distinctLegs(props.bets) : props.bet.legs.map((leg, index) => ({ betId: props.bet.id, index, leg }));
@@ -84,6 +105,7 @@ export function Annotator(props: Props) {
     } else edits = legs.map((l) => ({ betId: l.betId, index: l.index, actual: l.actual, ...(l.touched && l.result ? { result: l.result } : {}) }));
     const labelChanged = newLabel.trim() !== initialLabel.trim();
     const labelFor = props.kind === 'dutch' ? props.bets.map((b) => b.id) : [props.bet.id];
+    if (pick && newLabel.trim() && pick !== toneOf(labelTones, newLabel)) void setLabelTone(newLabel, pick);
     const plan = planActuals(group, { legs: edits, ...(labelChanged ? { label: newLabel, labelFor } : {}) });
     props.onClose();
     if (!plan.length) return;
@@ -164,6 +186,7 @@ export function Annotator(props: Props) {
           </label>
         </>
       )}
+      {currentLabel.trim() && <ToneToggle tone={tone} onChange={setPick} />}
       <span className="flex items-center gap-1">
         <button type="submit" className="btn btn-primary py-0.5 text-xs">
           Save
@@ -173,5 +196,31 @@ export function Annotator(props: Props) {
         </button>
       </span>
     </form>
+  );
+}
+
+/** Positive (green) / negative (red) / neutral (grey) for the label being typed: the tone is the label's, for every bet with it. */
+export function ToneToggle({ tone, onChange }: { tone: LabelTone; onChange(t: LabelTone): void }) {
+  const opt = (t: LabelTone, text: string, on: string) => (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={tone === t}
+      className={`rounded px-1.5 py-0.5 text-xs ${tone === t ? on : 'text-zinc-500 hover:text-white'}`}
+      title={`A ${t} label: ${TONE_COLOUR[t]} on every bet with it`}
+      onClick={(e) => {
+        e.preventDefault();
+        onChange(t);
+      }}
+    >
+      {text}
+    </button>
+  );
+  return (
+    <span role="radiogroup" aria-label="Label tone" className="flex items-center gap-0.5 rounded border border-zinc-700 p-0.5" data-testid="label-tone">
+      {opt('positive', '+ Positive', TONE_CHIP.positive)}
+      {opt('negative', '− Negative', TONE_CHIP.negative)}
+      {opt('neutral', '○ Neutral', TONE_CHIP.neutral)}
+    </span>
   );
 }

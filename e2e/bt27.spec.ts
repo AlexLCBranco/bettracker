@@ -39,6 +39,7 @@ test('BT-27: T on a solo row: "24 pts #label" saves the actual and the label; Es
     .toEqual([label, '24 pts']);
   await expect(row.getByTestId('label-chip')).toHaveText(label);
   await expect(row.getByTestId('label-chip')).toHaveCSS('text-transform', 'uppercase');
+  await expect(row.getByTestId('label-chip')).toHaveClass(/text-red-/); // owner, 2026-11-27: a label is red until made positive
   await expect(row.getByTestId('actual')).toHaveText('→ 24 pts');
 
   // the label is suggested on the next bet (matched anywhere after "#"), picked with ↓ Enter
