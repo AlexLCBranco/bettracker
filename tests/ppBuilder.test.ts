@@ -1,7 +1,7 @@
 // BT-31: the proposal maths and the generator's hard rules, with fixed seeds.
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_TIERS, type PPLeg, type PPTier } from '@/lib/pp';
-import { appearances, gameKey, generate, mmFor, mmGroups, majorLevels, placeholderShares, placeLine, preview, propose, rng, roles, startingScheme, type PPScheme } from '@/lib/ppBuilder';
+import { appearances, gameKey, generate, mmFor, mmGroups, shotPlan, typicalShotOdds, majorLevels, placeholderShares, placeLine, preview, propose, rng, roles, startingScheme, type PPScheme } from '@/lib/ppBuilder';
 
 const leg = (id: string, tier: string, odds: number, game = `${id} game`): PPLeg => ({ id, sport: '', game, market: '', selection: id, odds, tier, result: 'pending', actual: '', note: '' });
 const scheme = (over: Partial<PPScheme> = {}): PPScheme => ({ count: 20, target: 20, bandMin: 15, bandMax: 30, majorShares: [50], shotCount: 2, avoidPairs: false, seed: 7, ...over });
@@ -197,5 +197,36 @@ describe('preview and place line', () => {
     const b = rng(1);
     expect([b(), b(), b()]).toEqual(xs);
     for (const x of xs) expect(x >= 0 && x < 1).toBe(true);
+  });
+});
+
+// owner, 2026-11-27: "with 1 Major-major and 4 Majors, how many PP shots do I need?"
+describe('shot plan', () => {
+  const pool = [leg('mm', 'mm', 2), ...[1, 2, 3, 4].map((i) => leg(`m${i}`, 'major', 1.7))];
+  it('his example: 1 MM at 2.00, 4 Majors at 1.70 on 50%, target 20, 20 PPs, shots at 3.00 on 2 PPs each', () => {
+    const p = shotPlan({ legs: pool, tiers: DEFAULT_TIERS }, scheme({ count: 20, target: 20, majorShares: [50], shotCount: 2 }), 3);
+    expect(p).toMatchObject({ hasShotTier: true, mm: 1, majors: 4, needed: 12, have: 0, missing: 12 });
+    expect(p.base).toBeCloseTo(5.78, 2); // 2 × 1.7^2
+    expect(p.perPP).toBeCloseTo(1.13, 2); // ln(20 / 5.78) / ln 3
+  });
+  it('counts the shots already in the pool', () => {
+    const legs = [...pool, leg('s1', 'shot', 3), leg('s2', 'shot', 3), leg('s3', 'shot', 3)];
+    expect(shotPlan({ legs, tiers: DEFAULT_TIERS }, scheme({ majorShares: [50] }), 3)).toMatchObject({ needed: 12, have: 3, missing: 9 });
+    expect(shotPlan({ legs, tiers: DEFAULT_TIERS }, scheme({ count: 4, majorShares: [50] }), 3)).toMatchObject({ needed: 3, have: 3, missing: 0 });
+  });
+  it('none needed when the MMs and Majors already reach the target; none when shots are on 0 PPs', () => {
+    expect(shotPlan({ legs: pool, tiers: DEFAULT_TIERS }, scheme({ target: 5, majorShares: [50] }), 3)).toMatchObject({ perPP: 0, needed: 0 });
+    expect(shotPlan({ legs: pool, tiers: DEFAULT_TIERS }, scheme({ shotCount: 0, majorShares: [50] }), 3).needed).toBe(0);
+  });
+  it('same-game Major-majors count once, at their average (they take turns)', () => {
+    const turns = [leg('a', 'mm', 2, 'A'), leg('b', 'mm', 8, 'A')];
+    expect(shotPlan({ legs: turns, tiers: DEFAULT_TIERS }, scheme(), 3).base).toBeCloseTo(4, 6);
+  });
+  it('no shot tier with only two tiers', () => {
+    expect(shotPlan({ legs: pool, tiers: DEFAULT_TIERS.slice(0, 2) }, scheme(), 3).hasShotTier).toBe(false);
+  });
+  it('typical shot odds: the pool’s shots at their geometric average, else 3.00', () => {
+    expect(typicalShotOdds({ legs: pool, tiers: DEFAULT_TIERS })).toBe(3);
+    expect(typicalShotOdds({ legs: [leg('s1', 'shot', 2), leg('s2', 'shot', 8)], tiers: DEFAULT_TIERS })).toBe(4);
   });
 });

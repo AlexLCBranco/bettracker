@@ -177,6 +177,50 @@ export function propose(batch: Pick<PPBatch, 'legs' | 'tiers'>, s: PPScheme): Pr
   };
 }
 
+/** A typical PP shot price when the pool has none yet. */
+export const DEFAULT_SHOT_ODDS = 3;
+
+/** The pool's PP shots at their average price (geometric), else DEFAULT_SHOT_ODDS. */
+export function typicalShotOdds(batch: Pick<PPBatch, 'legs' | 'tiers'>): number {
+  const r = roles(batch.tiers);
+  const shots = batch.legs.filter((l) => r.get(l.tier)?.role === 'fixed');
+  return shots.length ? Math.round(Math.exp(shots.reduce((a, l) => a + ln(l.odds), 0) / shots.length) * 100) / 100 : DEFAULT_SHOT_ODDS;
+}
+
+export interface ShotPlan {
+  /** The batch has a PP-shot tier (3+ tiers). */
+  hasShotTier: boolean;
+  mm: number;
+  majors: number;
+  /** The average PP's odds before any shot (geometric): Major-majors (same-game ones at their average) and Majors at their shares. */
+  base: number;
+  /** PP shots each PP needs on average to land on the target; 0 when the base already reaches it. */
+  perPP: number;
+  /** PP-shot legs the pool needs: PPs × shots per PP ÷ PPs each shot is on (rounded up). */
+  needed: number;
+  have: number;
+  /** Still to find (0 when there are enough). */
+  missing: number;
+}
+
+/**
+ * Owner, 2026-11-27: "with 1 Major-major and 4 Majors, how many PP shots do I need?" From the target, the number of PPs
+ * and the PPs each shot is on, at a typical shot price. Plain arithmetic on log odds, as the proposal.
+ */
+export function shotPlan(batch: Pick<PPBatch, 'legs' | 'tiers'>, s: PPScheme, shotOdds: number): ShotPlan {
+  const r = roles(batch.tiers);
+  const of = (role: Role) => batch.legs.filter((l) => r.get(l.tier)?.role === role);
+  const majors = of('share');
+  const L0 = mmGroups(batch.legs, batch.tiers).reduce((a, g) => a + g.reduce((x, l) => x + ln(l.odds), 0) / g.length, 0);
+  const majorLn = majors.reduce((a, l) => a + (Math.min(100, Math.max(0, s.majorShares[r.get(l.tier)!.level] ?? 0)) / 100) * ln(l.odds), 0);
+  const base = Math.exp(L0 + majorLn);
+  const gap = ln(s.target) - L0 - majorLn;
+  const perPP = gap > 1e-9 && shotOdds > 1 ? gap / ln(shotOdds) : 0;
+  const needed = perPP > 0 && s.shotCount > 0 ? Math.ceil((s.count * perPP) / s.shotCount - 1e-9) : 0;
+  const have = of('fixed').length;
+  return { hasShotTier: batch.tiers.length >= 3, mm: of('every').length, majors: majors.length, base, perPP, needed, have, missing: Math.max(0, needed - have) };
+}
+
 /** A small seeded random generator (mulberry32): the same seed gives the same PPs. */
 export function rng(seed: number): () => number {
   let a = seed >>> 0;

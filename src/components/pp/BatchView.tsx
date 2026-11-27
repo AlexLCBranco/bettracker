@@ -14,7 +14,7 @@ import { MoneySelect } from '@/components/Money';
 import { MONEY_TEXT } from '@/components/moneyStyle';
 import { OddsInput } from '@/components/OddsInput';
 import { isTyping, isUndoKey } from '@/components/Shell';
-import { Builder } from './Builder';
+import { Builder, ShotPlanner, useBatchScheme, type BatchScheme } from './Builder';
 import { BatchStats } from './PPStats';
 import { formatDate, parseDateInput } from '@/lib/dates';
 import { formatMoney, formatOdds, oddsFromText, parseNumber, profitMoney } from '@/lib/money';
@@ -97,6 +97,7 @@ export function BatchView({ id, extraTabs = [] }: { id: string; extraTabs?: Extr
   const [annotating, setAnnotating] = useState<string | null>(null);
   const [legFilter, setLegFilter] = useState<string | null>(null);
   const [undo, setUndo] = useState<{ legId: string; before: Pick<PPLeg, 'result' | 'actual' | 'note'> }[]>([]);
+  const scheme = useBatchScheme(batch);
 
   const groups = useMemo(() => (batch ? legsByTier(batch) : []), [batch]);
   const order = useMemo(() => groups.flatMap((g) => g.legs.map((l) => l.id)), [groups]);
@@ -214,13 +215,14 @@ export function BatchView({ id, extraTabs = [] }: { id: string; extraTabs?: Extr
         </span>
       </div>
       {tab === 'legs' && (
-        <LegsView batch={batch} groups={groups} editing={editing} save={save} selected={selected} select={setSelected} settle={settle} annotating={annotating} setAnnotating={setAnnotating} annotate={annotate} showTickets={(legId) => { setLegFilter(legId); setTab('tickets'); }} />
+        <LegsView batch={batch} groups={groups} editing={editing} save={save} selected={selected} select={setSelected} settle={settle} annotating={annotating} setAnnotating={setAnnotating} annotate={annotate} showTickets={(legId) => { setLegFilter(legId); setTab('tickets'); }} scheme={scheme!} />
       )}
       {tab === 'tickets' && <TicketsView batch={batch} editing={editing} save={save} legFilter={legFilter} setLegFilter={setLegFilter} />}
       {tab === 'build' && (
         <Builder
           batch={batch}
           save={save}
+          scheme={scheme!}
           editPool={() => {
             setEditing(true);
             setTab('legs');
@@ -324,9 +326,10 @@ interface LegsProps {
   setAnnotating(id: string | null): void;
   annotate(leg: PPLeg, p: Pick<PPLeg, 'actual' | 'note'>): void;
   showTickets(legId: string): void;
+  scheme: BatchScheme;
 }
 
-function LegsView({ batch, groups, editing, save, selected, select, settle, annotating, setAnnotating, annotate, showTickets }: LegsProps) {
+function LegsView({ batch, groups, editing, save, selected, select, settle, annotating, setAnnotating, annotate, showTickets, scheme }: LegsProps) {
   const use = useMemo(() => legUse(batch), [batch]);
   const [edit, setEdit] = useState<string | null>(null);
   const tierName = new Map(batch.tiers.map((t) => [t.id, t.name]));
@@ -341,6 +344,7 @@ function LegsView({ batch, groups, editing, save, selected, select, settle, anno
   return (
     <div className="space-y-3">
       {editing && <TierEditor batch={batch} save={save} />}
+      {editing && <ShotPlanner batch={batch} scheme={scheme} />}
       {editing && <LegForm batch={batch} onSave={(leg) => void save({ legs: [...batch.legs, leg] })} />}
       {!batch.legs.length && <p className="py-6 text-center text-sm text-zinc-500">No legs yet. {editing ? 'Add the pool above.' : 'Press Edit to add the pool.'}</p>}
       {groups.map(

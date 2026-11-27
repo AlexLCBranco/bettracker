@@ -9,16 +9,41 @@ import { BalanceHint } from '@/components/Bankroll';
 import { OddsInput } from '@/components/OddsInput';
 import { formatMoney, formatOdds, oddsFromText, parseNumber, profitMoney } from '@/lib/money';
 import { ppId, ticketView, type BatchInput, type PPBatch } from '@/lib/pp';
-import { generate, mmGroups, placeLine, preview, propose, roles, startingScheme, type PPScheme } from '@/lib/ppBuilder';
+import { generate, majorLevels, mmGroups, placeLine, preview, propose, roles, shotPlan, startingScheme, typicalShotOdds, type PPScheme } from '@/lib/ppBuilder';
 
 const ROLE_TEXT = { every: 'on every PP', share: 'a share of the PPs', fixed: 'a fixed number of PPs each' } as const;
 
-export function Builder({ batch, save, editPool }: { batch: PPBatch; save(p: Partial<BatchInput>): unknown; editPool(): void }) {
-  const { batches, notify } = useApp();
+export interface BatchScheme {
+  s: PPScheme;
+  setS(f: (x: PPScheme) => PPScheme): void;
+  /** The typical PP-shot price the planner uses; null = the pool's shots at their average (or 3.00). */
+  shotOdds: number | null;
+  setShotOdds(o: number | null): void;
+}
+
+/** The batch's scheme while it is being built, kept by the batch page so the Legs and Build tabs share it. */
+export function useBatchScheme(batch: PPBatch | undefined): BatchScheme | null {
+  const { batches } = useApp();
+  const id = batch?.id;
   // the last batch's scheme is the starting point for this one
-  const previous = useMemo(() => batches.filter((b) => b.id !== batch.id && b.scheme).sort((a, b) => (a.placedDate === b.placedDate ? (a.createdAt < b.createdAt ? 1 : -1) : a.placedDate < b.placedDate ? 1 : -1))[0], [batches, batch.id]);
-  const [s, setS] = useState<PPScheme>(() => startingScheme(batch, previous?.scheme ?? null));
-  const set = <K extends keyof PPScheme>(k: K, v: PPScheme[K]) => setS((x) => ({ ...x, [k]: v }));
+  const previous = useMemo(() => batches.filter((b) => b.id !== id && b.scheme).sort((a, b) => (a.placedDate === b.placedDate ? (a.createdAt < b.createdAt ? 1 : -1) : a.placedDate < b.placedDate ? 1 : -1))[0], [batches, id]);
+  const [own, setOwn] = useState<PPScheme | null>(null);
+  const [shotOdds, setShotOdds] = useState<number | null>(null);
+  if (!batch) return null;
+  // a Major level added or removed since: refit the shares to the levels
+  const s = !own
+    ? startingScheme(batch, previous?.scheme ?? null)
+    : own.majorShares.length !== majorLevels(batch.tiers)
+      ? startingScheme({ tiers: batch.tiers, targetOdds: batch.targetOdds, scheme: own as unknown as Record<string, unknown> }, null)
+      : own;
+  return { s, setS: (f) => setOwn(f(s)), shotOdds, setShotOdds };
+}
+
+export function Builder({ batch, save, editPool, scheme }: { batch: PPBatch; save(p: Partial<BatchInput>): unknown; editPool(): void; scheme: BatchScheme }) {
+  const { notify } = useApp();
+  const { s } = scheme;
+  const setS = (x: PPScheme) => scheme.setS(() => x);
+  const set = <K extends keyof PPScheme>(k: K, v: PPScheme[K]) => scheme.setS((x) => ({ ...x, [k]: v }));
   const r = roles(batch.tiers);
   const levelNames = batch.tiers.filter((t) => r.get(t.id)?.role === 'share').map((t) => t.name);
   const proposal = useMemo(() => propose(batch, s), [batch, s]);
@@ -47,6 +72,7 @@ export function Builder({ batch, save, editPool }: { batch: PPBatch; save(p: Par
             Edit pool
           </button>
         </div>
+        <ShotPlanner batch={batch} scheme={scheme} inputs={false} />
         <p className="text-xs text-zinc-400" data-testid="same-game-rule">
           Two legs from the same game are never on the same PP.
           {turns.map((g) => (
@@ -111,6 +137,54 @@ export function Builder({ batch, save, editPool }: { batch: PPBatch; save(p: Par
         <PlaceList batch={batch} save={save} />
       </Step>
     </div>
+  );
+}
+
+/** "How many PP shots do I need?" Live from the pool: the average PP before shots, the shots per PP the target needs, and the shot legs to find. */
+export function ShotPlanner({ batch, scheme, inputs = true }: { batch: PPBatch; scheme: BatchScheme; inputs?: boolean }) {
+  const { s } = scheme;
+  const set = <K extends keyof PPScheme>(k: K, v: PPScheme[K]) => scheme.setS((x) => ({ ...x, [k]: v }));
+  const odds = scheme.shotOdds ?? typicalShotOdds(batch);
+  const p = shotPlan(batch, s, odds);
+  if (!p.hasShotTier) return null;
+  const shot = batch.tiers.at(-1)!.name;
+  let answer: ReactNode;
+  if (!p.mm && !p.majors) answer = <>Add the Major-majors and Majors first: the {shot}s needed follow from them.</>;
+  else if (p.perPP <= 0) answer = <>That already reaches the target {s.target.toFixed(2)}: no {shot}s needed.</>;
+  else if (s.shotCount <= 0) answer = <>Set how many PPs each {shot} is on.</>;
+  else
+    answer = (
+      <>
+        To reach {s.target.toFixed(2)} a PP needs about <b className="text-zinc-100">{p.perPP.toFixed(1)}</b> {shot}s at {odds.toFixed(2)}: {s.count} PPs × {p.perPP.toFixed(1)} ÷ {s.shotCount} PPs each ={' '}
+        <b className="text-zinc-100" data-testid="shots-needed">
+          {p.needed} {shot}s
+        </b>
+        .{' '}
+        <span className={p.missing ? 'text-amber-300' : 'text-emerald-400'} data-testid="shots-missing">
+          {p.missing ? `You have ${p.have}: find ${p.missing} more.` : `You have ${p.have}: enough.`}
+        </span>
+      </>
+    );
+  return (
+    <section className="space-y-2 rounded-md border border-zinc-800 bg-zinc-900/60 p-2.5" data-testid="shot-planner" aria-label={`${shot}s needed`}>
+      {inputs && (
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+          <Num label="Number of PPs" value={s.count} onChange={(v) => set('count', Math.max(0, Math.round(v)))} />
+          <Num label="Target odds" value={s.target} onChange={(v) => set('target', v)} />
+          <Num label={`${shot}: PPs each`} value={s.shotCount} onChange={(v) => set('shotCount', Math.max(0, Math.round(v)))} />
+          <Num label={`${shot} odds (typical)`} value={odds} onChange={(v) => scheme.setShotOdds(v > 1 ? v : null)} />
+        </div>
+      )}
+      <p className="text-sm text-zinc-300" data-testid="shot-plan">
+        {p.mm} Major-major{p.mm === 1 ? '' : 's'} and {p.majors} Major{p.majors === 1 ? '' : 's'}
+        {p.majors ? ` (on ${s.majorShares.map((x) => `${x}%`).join(' / ')} of PPs)` : ''}: the average PP is <b className="text-zinc-100">{p.base.toFixed(2)}</b> before any {shot}. {answer}
+      </p>
+      {inputs && scheme.shotOdds == null && (
+        <p className="text-[11px] text-zinc-500">
+          {shot} odds: {p.have ? `your ${p.have} at their average` : 'none in the pool yet, so 3.00'}. Type over it to plan with another price.
+        </p>
+      )}
+    </section>
   );
 }
 

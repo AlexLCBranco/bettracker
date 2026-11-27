@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-27
+- PP: how many PP shots you need, live while you fill the pool (v0.73.0)
+  From your Major-majors and Majors, the target, the number of PPs and the PPs each shot is on, it says the average PP before shots, the shots each PP needs and how many shot legs to find (have / still missing), in the Legs tab while editing and in Build.
 - PP: two legs from the same game are never on the same PP (v0.72.0)
   Always on, every tier (the old checkbox is gone): Major-majors from one game take turns, one per PP, and picking a leg on a hand-made PP takes out the other leg from its game.
 - Bets: labels are negative (red), positive (green) or neutral (grey); no brainer in yellow (v0.71.0)
