@@ -66,6 +66,18 @@ export function DescriptionMark({ rowKey, bets, selected, control, byHand = fals
   }, [selected, has]);
   const open = control.isOpen(rowKey, bets, byHand);
   const show = has && (hover || overPop || paused) && !open;
+  // a scroll moves the row out from under a still pointer without a mouseleave: the peek goes (scrolling inside it is fine)
+  useEffect(() => {
+    if (!show) return;
+    const away = (e: Event) => {
+      if (e.target instanceof Element && e.target.closest('[data-testid="desc-peek"]')) return;
+      setHover(false);
+      setOverPop(false);
+      setPaused(false);
+    };
+    window.addEventListener('scroll', away, { capture: true, passive: true });
+    return () => window.removeEventListener('scroll', away, { capture: true });
+  }, [show]);
   const state = SLOTS.map((s) => `${SLOT_LABEL[s]} ${filled.includes(s) ? '✓' : '-'}`).join(' · ');
   return (
     <>

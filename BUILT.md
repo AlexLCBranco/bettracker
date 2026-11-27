@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-27
+- Bets: a note's hover preview goes away when you scroll (v0.86.1)
+  Scrolling the page no longer leaves a bet's note preview stuck on screen, hovered or on the selected row.
 - PP: repeated PP-shot pairs are a last resort, said plainly (v0.86.0)
   When the shots cannot avoid sharing PPs, Generate still works with the fewest repeats, lists every repeated pair with why and how many shots would avoid it, and asks before saving.
 - PP: two PP shots share one PP at most (v0.85.0)
