@@ -3,6 +3,8 @@
 Shipped work only, newest first. Planned work is in `FEATURE_BACKLOG.md`, never here.
 
 ## 2026-11-27
+- Bets: notes open only on click, never on hover (v0.87.0)
+  Hovering the ¶ mark or selecting a row no longer pops up its notes; click the mark (or press D) to see them.
 - Bets: a note's hover preview goes away when you scroll (v0.86.1)
   Scrolling the page no longer leaves a bet's note preview stuck on screen, hovered or on the selected row.
 - PP: repeated PP-shot pairs are a last resort, said plainly (v0.86.0)

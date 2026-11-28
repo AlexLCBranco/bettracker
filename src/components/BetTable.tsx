@@ -539,7 +539,7 @@ function DutchGroup({ bets, dutchId, open, toggle, selected, multi, desc, select
             <span data-testid="type">Dutch ×{bets.length}</span>
             {nb && <NoBrainerChip />}
             {label && <LabelChip label={label} />}
-            <DescriptionMark rowKey={key} bets={bets} selected={isSel} control={desc} />
+            <DescriptionMark rowKey={key} bets={bets} control={desc} />
             {live && <LiveTag bets={bets} />}
           </div>
           <SubLine
@@ -713,7 +713,7 @@ function RolloverGroup({ bets: raw, rolloverId, open, toggle, selected, multi, d
               </>
             )}
             {live && <LiveTag bets={raw} />}
-            <DescriptionMark rowKey={key} bets={raw} selected={isSel} control={desc} />
+            <DescriptionMark rowKey={key} bets={raw} control={desc} />
           </div>
           <SubLine
             parts={[
@@ -1090,7 +1090,7 @@ function BetRow({ b, open, toggle, selected, multi, desc, select, settle, split,
               {b.noBrainer && !nested && <NoBrainerChip />}
               {chip && <LabelChip label={chip} />}
               {/* BT-52: a dutch split or a chain's bet has its own notes, opened by hand (the switch opens its row's) */}
-              <DescriptionMark rowKey={key} bets={[b]} selected={selected === key} control={desc} byHand={nested || !!link} />
+              <DescriptionMark rowKey={key} bets={[b]} control={desc} byHand={nested || !!link} />
               <WouldaChip bet={b} fmt={inUnits} />
               {(link || b.banked) && !b.ladder && <TierChip odds={b.dutchId && (!link || link.index === 0) ? firstFactor(b, allBets) : b.odds} banked={b.banked && (link ? link.index === link.chain.length - 1 : rollover.chainOf(b).length === 1)} />}
             </div>

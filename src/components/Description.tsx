@@ -2,15 +2,13 @@
 
 // BT-47 / BT-52: a bet's notes, Pre / Live / Post (as on calendarkit's Slate), seen from the Bets table. Every bet
 // cell has a small mark: ¶ and three dots, one per slot, lit when it holds text (dim when the row has none yet, to add
-// one). Hovering it (or the keyboard-selected row, after a short pause) peeks at the text in a popover that never covers
-// its row; a click on it, or D on the selected row, opens the notes under the row on its last filled slot (Pre when
-// empty), the three slots one click apart. A note's web addresses are links; a click on its text edits it. A click away
+// one). Notes never show on hover: a click on it, or D on the selected row, opens them under the row on its last filled
+// slot (Pre when empty), the three slots one click apart. A note's web addresses are links; a click on its text edits it. A click away
 // saves, Esc discards. The "Descriptions" switch opens every row that has one.
 
-import { Fragment, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
-import { createPortal } from 'react-dom';
+import { Fragment, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { betLabel } from '@/lib/dutch';
-import { descriptionChanges, descriptionParts, filledSlots, linkParts, nextSlot, notesOf, rowHasDescription, SLOT_FIELD, SLOT_LABEL, SLOTS, startSlot, type Slot, type Texts } from '@/lib/descriptions';
+import { descriptionChanges, filledSlots, linkParts, nextSlot, notesOf, rowHasDescription, SLOT_FIELD, SLOT_LABEL, SLOTS, startSlot, type Slot, type Texts } from '@/lib/descriptions';
 import type { Bet } from '@/lib/types';
 import { useApp } from './AppProvider';
 
@@ -48,41 +46,15 @@ export interface DescriptionControl {
 
 const nameOf = (b: Bet) => b.betText || betLabel(b);
 
-/** The note mark in the bet cell, with its peek popover. On every row: dim when it has no note yet. */
-export function DescriptionMark({ rowKey, bets, selected, control, byHand = false }: { rowKey: string; bets: Bet[]; selected: boolean; control: DescriptionControl; byHand?: boolean }) {
+/** The note mark in the bet cell. On every row: dim when it has no note yet. Nothing shows on hover: a click opens the notes. */
+export function DescriptionMark({ rowKey, bets, control, byHand = false }: { rowKey: string; bets: Bet[]; control: DescriptionControl; byHand?: boolean }) {
   const has = rowHasDescription(bets);
   const filled = filledSlots(bets);
-  const [el, setEl] = useState<HTMLButtonElement | null>(null);
-  const [hover, setHover] = useState(false);
-  const [paused, setPaused] = useState(false);
-  const [overPop, setOverPop] = useState(false);
-  useEffect(() => {
-    if (!selected || !has) return;
-    const t = setTimeout(() => setPaused(true), 700);
-    return () => {
-      clearTimeout(t);
-      setPaused(false);
-    };
-  }, [selected, has]);
   const open = control.isOpen(rowKey, bets, byHand);
-  const show = has && (hover || overPop || paused) && !open;
-  // a scroll moves the row out from under a still pointer without a mouseleave: the peek goes (scrolling inside it is fine)
-  useEffect(() => {
-    if (!show) return;
-    const away = (e: Event) => {
-      if (e.target instanceof Element && e.target.closest('[data-testid="desc-peek"]')) return;
-      setHover(false);
-      setOverPop(false);
-      setPaused(false);
-    };
-    window.addEventListener('scroll', away, { capture: true, passive: true });
-    return () => window.removeEventListener('scroll', away, { capture: true });
-  }, [show]);
   const state = SLOTS.map((s) => `${SLOT_LABEL[s]} ${filled.includes(s) ? '✓' : '-'}`).join(' · ');
   return (
     <>
       <button
-        ref={setEl}
         type="button"
         className={`ml-1.5 inline-flex items-center gap-px rounded px-0.5 align-[1px] text-[11px] leading-4 ${open ? 'bg-sky-500/25 text-sky-200' : has ? 'text-sky-300/80 hover:bg-sky-500/20 hover:text-sky-200' : 'text-zinc-600 hover:bg-zinc-800 hover:text-zinc-300'}`}
         title={open ? `Close the notes (D) · ${state}` : has ? `Open the notes under the row (D) · ${state}` : 'Add a note: Pre, Live or Post (D)'}
@@ -91,11 +63,8 @@ export function DescriptionMark({ rowKey, bets, selected, control, byHand = fals
         data-testid="desc-mark"
         data-desc-mark={rowKey}
         data-filled={filled.join(',') || undefined}
-        onMouseEnter={() => setHover(true)}
-        onMouseLeave={() => setTimeout(() => setHover(false), 120)}
         onClick={(e) => {
           e.stopPropagation();
-          setHover(false);
           control.toggle(rowKey, bets);
         }}
       >
@@ -106,18 +75,8 @@ export function DescriptionMark({ rowKey, bets, selected, control, byHand = fals
           ))}
         </span>
       </button>
-      {show && el && <Peek anchor={el} bets={bets} onHover={setOverPop} />}
     </>
   );
-}
-
-/** Below the row, or above it when there is no room: never over the row it belongs to. */
-function place(anchor: HTMLElement): CSSProperties {
-  const row = anchor.closest('tr')?.getBoundingClientRect() ?? anchor.getBoundingClientRect();
-  const a = anchor.getBoundingClientRect();
-  const left = Math.max(8, Math.min(a.left - 8, window.innerWidth - 408));
-  const below = window.innerHeight - row.bottom;
-  return below >= 180 || below >= row.top ? { top: row.bottom + 4, left, maxHeight: Math.max(120, below - 12) } : { bottom: window.innerHeight - row.top + 4, left, maxHeight: Math.max(120, row.top - 12) };
 }
 
 /** A note's text with its web addresses as links (new tab). */
@@ -134,35 +93,6 @@ function NoteText({ text }: { text: string }) {
         ),
       )}
     </>
-  );
-}
-
-function Peek({ anchor, bets, onHover }: { anchor: HTMLElement; bets: Bet[]; onHover(on: boolean): void }) {
-  const withText = bets.filter((b) => descriptionParts(b).length);
-  return createPortal(
-    <div
-      role="tooltip"
-      className="fixed z-50 w-[400px] overflow-y-auto rounded-md border border-zinc-700 bg-zinc-900 p-3 text-xs shadow-xl"
-      style={place(anchor)}
-      onMouseEnter={() => onHover(true)}
-      onMouseLeave={() => onHover(false)}
-      data-testid="desc-peek"
-    >
-      {withText.map((b) => (
-        <div key={b.id} className="mb-2 last:mb-0">
-          {bets.length > 1 && <div className="mb-1 font-semibold text-zinc-200">{nameOf(b)}</div>}
-          {descriptionParts(b).map((p) => (
-            <div key={p.label} className="mb-1.5 last:mb-0">
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">{p.label}</div>
-              <p className="whitespace-pre-wrap text-zinc-200 [overflow-wrap:anywhere]">
-                <NoteText text={p.text} />
-              </p>
-            </div>
-          ))}
-        </div>
-      ))}
-    </div>,
-    document.body,
   );
 }
 

@@ -1,7 +1,7 @@
 // BT-47: a bet's description seen and edited from the Bets table, on throwaway bets.
 import { betsTagged, createBet, expect, saved, test } from './helpers';
 
-test('descriptions: peek on hover, D opens it under the row, click away saves, Esc discards, the switch opens all with text', async ({ page, request, tag }) => {
+test('descriptions: D opens it under the row, click away saves, Esc discards, the switch opens all with text', async ({ page, request, tag }) => {
   const mk = (n: string, over: Record<string, unknown> = {}) => createBet(request, { betText: `${tag} ${n}`, legs: [{ selection: `${tag} ${n}`, odds: 2 }], ...over });
   const a = await mk('A', { preAnalysis: 'Jokic vs a weak front court', postAnalysis: 'lost by one' });
   const b = await mk('B');
@@ -18,18 +18,6 @@ test('descriptions: peek on hover, D opens it under the row, click away saves, E
   await expect(row(a).getByTestId('desc-mark')).toHaveAttribute('data-filled', 'pre,post');
   await expect(row(c).getByTestId('desc-mark')).toHaveAttribute('data-filled', 'post');
   await expect(row(b).getByTestId('desc-mark')).not.toHaveAttribute('data-filled');
-
-  // peek: both parts, headed
-  await row(a).getByTestId('desc-mark').hover();
-  const peek = page.getByTestId('desc-peek');
-  await expect(peek).toContainText('Pre');
-  await expect(peek).toContainText('Jokic vs a weak front court');
-  await expect(peek).toContainText('lost by one');
-  // it never covers its row
-  const pb = (await peek.boundingBox())!;
-  const rb = (await row(a).boundingBox())!;
-  expect(pb.y >= rb.y + rb.height - 1 || pb.y + pb.height <= rb.y + 1).toBe(true);
-  await page.mouse.move(5, 5);
 
   // D on a row without one opens empty boxes; typing then clicking away saves
   await row(b).locator('td').first().click();
